@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "bun run src/main.tsx",
     "build": "bun build --compile src/main.tsx --outfile dist/wrike-tui",
-    "test": "bun test",
+    "test": "bun test ./test",
+    "e2e": "bun run build && bun test ./e2e",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
