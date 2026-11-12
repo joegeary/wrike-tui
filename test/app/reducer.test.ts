@@ -3,7 +3,7 @@ import { navRows, type NavPath } from "../../src/app/nav"
 import { reduce, start } from "../../src/app/reducer"
 import { currentList, currentView, listCursor, listRows, navCursorRow, navRowsOf, pickerOptions, selectedRow, selectedTask } from "../../src/app/selectors"
 import { initialState, LIST_LIMIT, type State } from "../../src/app/state"
-import { customStatusId, folderId, taskId } from "../../src/domain/ids"
+import { customStatusId, folderId, taskId, userId } from "../../src/domain/ids"
 import { DEFAULT_SPECS, NOBODY } from "../../src/domain/list"
 import type { Workflow } from "../../src/domain/model"
 import type { Favorite } from "../../src/domain/workspace"
@@ -294,6 +294,15 @@ describe("shaping", () => {
     expect(play(typed, "f").state.mode).toEqual({ kind: "filter-input", draft: "LATER" })
     expect(sketch(play(typed, "f", { type: "draft", text: "x" }, "esc").state)).toEqual(["# New 1", "Later task"])
     expect(currentView(play(typed, "f", { type: "draft", text: " " }, "enter").state).spec.filters).toEqual([])
+  })
+
+  test("pickers offer active people, and a deactivated one only while chosen", () => {
+    const former = { id: userId("KUAAAA09"), name: "Former Colleague", email: null, active: false }
+    const base = inFolder([later])
+    const picking = play({ ...base, contacts: new Map([...base.contacts, [former.id, former]]) }, ":", ..."filter by assignee", "enter").state
+    const labels = (state: State) => pickerOptions(state, state.mode as never).map((option) => option.label)
+    expect(labels(picking)).not.toContain("Former Colleague")
+    expect(labels({ ...picking, mode: { ...picking.mode, chosen: [former.id] } as never })).toContain("Former Colleague")
   })
 
   test("a filter picks its values in the picker, and applying nothing removes it", () => {

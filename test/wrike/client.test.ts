@@ -30,9 +30,9 @@ describe("reads", () => {
     expect(await client.me()).toEqual({ userId: userId(ME), name: "Sam Sample", accountId: "IEAAAAAA" })
   })
 
-  test("contacts are active people only", async () => {
-    const names = (await client.contacts()).map((contact) => contact.name)
-    expect(names).toEqual(["Sam Sample", "Pat Example", "Riley Demo", "Jordan Placeholder"])
+  test("contacts are people, and a deactivated one keeps a name for old tasks", async () => {
+    const people = (await client.contacts()).map((contact) => [contact.name, contact.active])
+    expect(people).toEqual([["Sam Sample", true], ["Pat Example", true], ["Riley Demo", true], ["Jordan Placeholder", true], ["Former Colleague", false]])
   })
 
   test("workflows come from the account, space workflows from every space", async () => {

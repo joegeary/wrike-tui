@@ -21,9 +21,9 @@ export const status = (id: string, name: string, group: Workflow["statuses"][num
 })
 export const workflows: Workflow[] = [{ id: "W1", name: "Default", statuses: [status("NEW", "New"), status("WIP", "In Progress"), status("DONE", "Completed", "Completed")] }]
 export const contacts: Contact[] = [
-  { id: ME, name: "Sam Sample", email: "sam@example.test" },
-  { id: PAT, name: "Pat Example", email: "pat@example.test" },
-  { id: RILEY, name: "Riley Demo", email: null },
+  { id: ME, name: "Sam Sample", email: "sam@example.test", active: true },
+  { id: PAT, name: "Pat Example", email: "pat@example.test", active: true },
+  { id: RILEY, name: "Riley Demo", email: null, active: true },
 ]
 
 export function task(id: string, title: string, dates: TaskDates = { type: "Backlog" }, extra: Partial<Task> = {}): Task {

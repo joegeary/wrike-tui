@@ -94,7 +94,7 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
 
     async contacts() {
       const contacts = parseAll(ContactSchema, await transport.request("GET", "/contacts", { types: ["Person"] }), "contacts")
-      return contacts.filter((contact) => contact.type === "Person" && !contact.deleted).map(contactFromWire)
+      return contacts.filter((contact) => contact.type === "Person").map(contactFromWire)
     },
 
     async workflows() {

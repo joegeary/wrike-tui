@@ -179,6 +179,7 @@ export function pickerOptions(state: State, mode: Mode & { kind: "picker" }): Pi
   const matches = (text: string) => text.toLowerCase().includes(mode.query.toLowerCase())
   const people = () =>
     [...state.contacts.values()]
+      .filter((contact) => contact.active || mode.chosen.includes(contact.id))
       .filter((contact) => matches(contact.name) || matches(contact.email ?? ""))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((contact): PickerOption => ({ id: contact.id, label: contact.name, ...(contact.email ? { detail: contact.email } : {}) }))

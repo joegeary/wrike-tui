@@ -56,8 +56,14 @@ test("comment parser keeps the HTML text", () => {
 
 test("contact parser builds a display name and falls back to the email", () => {
   const parsed = parseAll(ContactSchema, contacts.data, "contacts")
-  expect(contactFromWire(parsed[0]!)).toEqual({ id: "KUAAAA01" as never, name: "Sam Sample", email: "sam.sample@example.test" })
+  expect(contactFromWire(parsed[0]!)).toEqual({ id: "KUAAAA01" as never, name: "Sam Sample", email: "sam.sample@example.test", active: true })
   expect(contactFromWire({ ...parsed[0]!, firstName: "", lastName: "" }).name).toBe("sam.sample@example.test")
+  expect(contactFromWire({ ...parsed[0]!, firstName: "Sam ", lastName: " Sample" }).name).toBe("Sam Sample")
+})
+
+test("a deactivated person keeps their name and is marked inactive", () => {
+  const deactivated = parseAll(ContactSchema, contacts.data, "contacts").find((contact) => contact.deleted)!
+  expect(contactFromWire(deactivated)).toMatchObject({ name: expect.stringContaining("Colleague"), active: false })
 })
 
 test("workflow parser maps custom statuses", () => {

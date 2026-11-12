@@ -76,9 +76,9 @@ export const ContactSchema = z.object({
 export type ContactWire = z.infer<typeof ContactSchema>
 
 export function contactFromWire(wire: ContactWire): Contact {
-  const name = `${wire.firstName} ${wire.lastName}`.trim()
+  const name = `${wire.firstName} ${wire.lastName}`.replace(/\s+/g, " ").trim()
   const email = wire.primaryEmail ?? wire.profiles[0]?.email ?? null
-  return { id: userId(wire.id), name: name || email || wire.id, email }
+  return { id: userId(wire.id), name: name || email || wire.id, email, active: !wire.deleted }
 }
 
 export const WorkflowSchema = z

@@ -40,7 +40,8 @@ export type Task = {
 
 export type Comment = { id: string; authorId: UserId; text: string; createdDate: string }
 
-export type Contact = { id: UserId; name: string; email: string | null }
+/** A deactivated person keeps a name, because old tasks still name them. Pickers offer active people only. */
+export type Contact = { id: UserId; name: string; email: string | null; active: boolean }
 
 export type InboxKind = "Mention" | "Assign" | "Comment" | "Status" | "Other"
 export type InboxItemType = "TASK" | "FOLDER" | "PROJECT"
