@@ -1,18 +1,17 @@
-import { marked, Renderer } from "marked"
+import { Marked, Renderer } from "marked"
 import TurndownService from "turndown"
 
 const ROUND_TRIP_TAGS = new Set([
-  "p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "b", "strong", "i", "em", "s", "a", "ul", "ol", "li",
+  "p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "b", "strong", "i", "em", "s", "a", "ul", "ol", "li", "code", "pre",
 ])
 
-function turndown(escape: boolean): TurndownService {
+function turndown(): TurndownService {
   const service = new TurndownService({
     headingStyle: "atx",
     bulletListMarker: "-",
     emDelimiter: "*",
     codeBlockStyle: "fenced",
   })
-  if (!escape) service.escape = (text) => text
   service.addRule("strikethrough", {
     filter: ["s", "del"],
     replacement: (content) => `~~${content}~~`,
@@ -27,6 +26,11 @@ function turndown(escape: boolean): TurndownService {
       const body = content.replace(/^\n+/, "").replace(/\n+$/, "\n").replace(/\n(?=.)/g, `\n${" ".repeat(prefix.length)}`)
       return prefix + body + (node.nextSibling && !body.endsWith("\n") ? "\n" : "")
     },
+  })
+  // Wrike writes a code block as a bare <pre>, which turndown would flatten into a paragraph.
+  service.addRule("preformatted", {
+    filter: "pre",
+    replacement: (_content, node) => `\n\n\`\`\`\n${(node.textContent ?? "").replace(/\n$/, "")}\n\`\`\`\n\n`,
   })
   service.addRule("table", {
     filter: "table",
@@ -45,8 +49,7 @@ function turndown(escape: boolean): TurndownService {
   return service
 }
 
-const markdownService = turndown(true)
-const textService = turndown(false)
+const markdownService = turndown()
 
 // Wrike separates paragraphs with two <br> tags, which turndown renders as two hard breaks.
 const collapseBreaks = (markdown: string) => markdown.replace(/(?: {2}\n){2,}/g, "\n\n").trim()
@@ -55,10 +58,6 @@ export function htmlToMarkdown(html: string): string {
   return collapseBreaks(markdownService.turndown(html))
 }
 
-/** For comments, which are shown as plain text, so markdown punctuation is not escaped. */
-export function htmlToText(html: string): string {
-  return collapseBreaks(textService.turndown(html))
-}
 
 class WrikeRenderer extends Renderer {
   // <p> is not in Wrike's description tag list, so paragraphs become its own <br><br> form.
@@ -68,13 +67,33 @@ class WrikeRenderer extends Renderer {
   override del(token: Parameters<Renderer["del"]>[0]): string {
     return `<s>${this.parser.parseInline(token.tokens)}</s>`
   }
+  override code(token: Parameters<Renderer["code"]>[0]): string {
+    return `<pre>${escapeHtml(token.text)}</pre>`
+  }
+  override br(): string {
+    return "<br />"
+  }
+  // Markdown from htmlToMarkdown never holds markup, so angle brackets are text the user wrote, like `Bearer <token>`.
+  override html(token: Parameters<Renderer["html"]>[0]): string {
+    return escapeHtml(token.text) + (token.block ? "<br /><br />" : "")
+  }
 }
 
+const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+// Only an explicit [text](url) makes a link. A bare URL or <address> stays the text it was in Wrike.
+const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: () => undefined } }).setOptions({
+  gfm: true,
+  renderer: new WrikeRenderer(),
+})
+
 export function markdownToHtml(markdown: string): string {
-  const html = marked.parse(markdown.trim(), { async: false, gfm: true, renderer: new WrikeRenderer() })
+  const html = wrikeMarked.parse(markdown.trim(), { async: false })
   return html
-    .replace(/\n/g, "")
-    .replace(/(?:<br \/>)+(<\/li>|<(?:h[1-6]|ul|ol)>|$)/g, "$1")
+    .split(/(<pre>[\s\S]*?<\/pre>)/)
+    .map((part) => (part.startsWith("<pre>") ? part : part.replace(/\n/g, "")))
+    .join("")
+    .replace(/(?:<br \/>)+(<\/li>|<(?:h[1-6]|ul|ol|pre)>|$)/g, "$1")
 }
 
 export type EditableDescription = { format: "markdown" | "html"; text: string }
@@ -94,6 +113,10 @@ export function descriptionFromEdit(edited: EditableDescription): string {
 }
 
 function survivesMarkdown(html: string): boolean {
+  // Markup inside code would come back as literal text.
+  for (const match of html.matchAll(/<(pre|code)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
+    if (match[2]!.includes("<")) return false
+  }
   for (const match of html.matchAll(/<\/?([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g)) {
     const tag = match[1]!.toLowerCase()
     if (!ROUND_TRIP_TAGS.has(tag)) return false

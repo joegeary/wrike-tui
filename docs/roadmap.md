@@ -122,6 +122,10 @@ Wrike's five-minute window and deleted any time. Field history folds into the
 comment stream by time. Attachments list, open and preview. Comments gain
 @mention completion.
 
+Descriptions with checklists, highlights, underline, images or tables open as
+markdown too, with an extended syntax for each (task lists for checklists).
+Today those open as raw HTML, about one description in five on a real account.
+
 ## Phase 4. Create and reshape work
 
 New tasks and subtasks, filing a task into more folders, dependencies, effort,

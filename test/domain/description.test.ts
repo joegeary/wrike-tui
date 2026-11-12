@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { descriptionFromEdit, editableDescription, htmlToMarkdown, htmlToText, markdownToHtml } from "../../src/domain/description"
+import { descriptionFromEdit, editableDescription, htmlToMarkdown, markdownToHtml } from "../../src/domain/description"
 
 describe("htmlToMarkdown", () => {
   test("renders Wrike's tags", () => {
@@ -21,14 +21,6 @@ describe("htmlToMarkdown", () => {
   })
 })
 
-describe("htmlToText", () => {
-  test("keeps mentions and underscores as typed", () => {
-    expect(htmlToText('<a class="stream-user-id avatar" rel="KUAAAA01">@Sam Sample</a> see snake_case<br>next')).toBe(
-      "@Sam Sample see snake_case  \nnext",
-    )
-  })
-})
-
 describe("markdownToHtml", () => {
   test("writes Wrike's tag set with <br> between paragraphs and no <p>", () => {
     const markdown = ["## Plan", "", "First **bold** and ~~gone~~", "", "Second", "", "- one", "- two", "", "[link](https://example.test)"].join("\n")
@@ -38,6 +30,30 @@ describe("markdownToHtml", () => {
   })
   test("an empty document clears the description", () => {
     expect(markdownToHtml("  \n")).toBe("")
+  })
+})
+
+describe("a description round trip through the editor", () => {
+  const roundTrip = (html: string) => descriptionFromEdit(editableDescription(html))
+
+  test("keeps angle-bracketed text as text", () => {
+    const html = "Headers: Authorization: Bearer &lt;token&gt;<br />Run &lt;script&gt;alert(1)&lt;/script&gt; literally"
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("keeps an address in angle brackets unlinked", () => {
+    expect(roundTrip("Mail comes from Analytics &lt;noreply@example.test&gt; today")).toBe(
+      "Mail comes from Analytics &lt;noreply@example.test&gt; today",
+    )
+  })
+  test("leaves a bare URL as plain text", () => {
+    expect(roundTrip("See https://www.wrike.com/open.htm?id=1 for details")).toBe(
+      "See https://www.wrike.com/open.htm?id=1 for details",
+    )
+  })
+  test("keeps an explicit link", () => {
+    expect(roundTrip('Fixed in <a href="https://example.test/pull/1">PR 1</a>')).toBe(
+      'Fixed in <a href="https://example.test/pull/1">PR 1</a>',
+    )
   })
 })
 
@@ -56,5 +72,23 @@ describe("editableDescription", () => {
   ])("%s opens as raw HTML and saves untouched", (_name, html) => {
     expect(editableDescription(html)).toEqual({ format: "html", text: html })
     expect(descriptionFromEdit({ format: "html", text: `${html}\n` })).toBe(html)
+  })
+})
+
+describe("code in a description", () => {
+  const roundTrip = (html: string) => descriptionFromEdit(editableDescription(html))
+
+  test("inline code opens as markdown and comes back as <code>", () => {
+    const html = "Points at <code>grade_indicators &lt;v2&gt;</code> now"
+    expect(editableDescription(html)).toEqual({ format: "markdown", text: "Points at `grade_indicators <v2>` now" })
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("a <pre> block opens as a fence and keeps its lines", () => {
+    const html = "<h3>Rollback</h3><pre>CREATE INDEX a ON t (x);\n\n-- then\nDROP INDEX b;</pre>Done"
+    expect(editableDescription(html).text).toBe("### Rollback\n\n```\nCREATE INDEX a ON t (x);\n\n-- then\nDROP INDEX b;\n```\n\nDone")
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("markup inside code keeps the description in HTML", () => {
+    expect(editableDescription("<pre>a <b>b</b></pre>").format).toBe("html")
   })
 })
