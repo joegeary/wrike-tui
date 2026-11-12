@@ -17,7 +17,7 @@ export function Palette({ state, mode, screen }: { state: State; mode: Mode & { 
   const cursorLine = lines.findIndex((line) => line.kind === "command" && line.index === mode.cursor)
   // The heading above the first command stays in view with it.
   const first = Math.max(0, Math.min(cursorLine - Math.floor(rows / 2), lines.length - rows))
-  const inner = Math.min(WIDTH, screen.width - 2) - 2
+  const inner = Math.min(WIDTH, screen.width) - 2
   return (
     <Overlay title="Commands" width={WIDTH} height={rows + 4} screen={screen}>
       <text wrapMode="none">

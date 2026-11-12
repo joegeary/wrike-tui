@@ -2,7 +2,7 @@ import type { Fetch } from "../../src/wrike/transport"
 import { ME, seed, type FakeData, type FakeTask } from "./data"
 
 export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
-type Failure = { method?: string; path: string; status: number; times: number }
+type Failure = { method?: string; path: string; status: number; times: number; retryAfter?: string }
 
 export type FakeWrike = {
   data: FakeData
@@ -12,8 +12,10 @@ export type FakeWrike = {
   requests: string[]
   handle(request: Request): Promise<Response>
   fetch: Fetch
-  /** Makes the next `times` requests whose path starts with `path` fail with `status`. */
-  fail(failure: { method?: string; path: string; status: number; times?: number }): void
+  /** Makes the next `times` requests whose path starts with `path` fail with `status`. A 429 can carry a `Retry-After` header. */
+  fail(failure: { method?: string; path: string; status: number; times?: number; retryAfter?: string }): void
+  /** Drops every failure still waiting, so the fake answers normally again. */
+  heal(): void
 }
 
 const OPTIONAL_LIST_FIELDS = [
@@ -263,9 +265,9 @@ export function createFakeWrike(options: { token: string; today: string; now: st
     if (failure) {
       failure.times -= 1
       if (failure.times <= 0) failures.splice(failures.indexOf(failure), 1)
-      return failure.status === 429
-        ? wrikeError(429, "too_many_requests", "Rate limit exceeded, try again later")
-        : wrikeError(failure.status, "server_error", "Injected failure")
+      if (failure.status !== 429) return wrikeError(failure.status, "server_error", "Injected failure")
+      const limited = { error: "too_many_requests", errorDescription: "Rate limit exceeded, try again later" }
+      return Response.json(limited, { status: 429, headers: failure.retryAfter ? { "Retry-After": failure.retryAfter } : {} })
     }
     if (!authorized(request)) return wrikeError(401, "not_authorized", "Access token is unknown or invalid")
     if (url.pathname === "/mcp") return mcp(request)
@@ -280,5 +282,6 @@ export function createFakeWrike(options: { token: string; today: string; now: st
     handle,
     fetch: (input, init) => handle(new Request(input, init)),
     fail: (failure) => void failures.push({ times: 1, ...failure }),
+    heal: () => void failures.splice(0),
   }
 }

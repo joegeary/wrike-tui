@@ -31,7 +31,7 @@ export function Picker({ state, mode, screen }: { state: State; mode: Mode & { k
   const options = pickerOptions(state, mode)
   const rows = Math.max(1, Math.min(MAX_ROWS, options.length, screen.height - 6))
   const first = Math.max(0, Math.min(mode.cursor - Math.floor(rows / 2), options.length - rows))
-  const inner = Math.min(WIDTH, screen.width - 2) - 2
+  const inner = Math.min(WIDTH, screen.width) - 2
   const multi = MULTI_PICKERS.has(mode.field)
   const dotted = mode.field === "status" || mode.field === "filter-status"
   return (

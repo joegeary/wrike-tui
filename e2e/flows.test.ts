@@ -1,67 +1,40 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { chmod, mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
-import { localDay } from "../src/domain/dates"
+import { join } from "node:path"
 import { ME, STATUS, TASK } from "../test/fake/data"
-import { createFakeWrike, type FakeWrike } from "../test/fake/wrike"
-import { TmuxSession } from "./tmux"
+import type { FakeWrike } from "../test/fake/wrike"
+import { BINARY, startE2e, TOKEN, WIDE, type E2e } from "./session"
+import type { TmuxSession } from "./tmux"
 
 /**
  * Drives the compiled binary in a detached tmux session against the fake
- * Wrike, through every Phase 1 flow. Run it with `bun run e2e`, which builds
- * first. Every screen is saved to $WRIKE_TUI_E2E_CAPTURES for a person to read.
- * The tests share one session and run in order.
+ * Wrike, through login and every Phase 1 flow. Run it with `bun run e2e`,
+ * which builds first. Every screen is saved to $WRIKE_TUI_E2E_CAPTURES for a
+ * person to read. The tests share one session and run in order.
  */
-const BINARY = resolve(import.meta.dir, "../dist/wrike-tui")
-const TOKEN = "e2e-secret-token"
 const KEYRING_SERVICE = `wrike-tui-e2e-${process.pid}`
-const WIDE = { width: 160, height: 45 }
-/** The theme's selection color, #313244, as tmux reports a truecolor background. */
-const SELECTION_BG = "48;2;49;50;68"
+/** The terminal theme's selection color, ANSI color 8, as tmux reports an indexed background. */
+const SELECTION_BG = "48;5;8"
 
 setDefaultTimeout(60_000)
 
+let e2e: E2e
 let work: string
 let fake: FakeWrike
-let server: ReturnType<typeof Bun.serve>
+let server: { port: number }
 let tmux: TmuxSession
 let env: Record<string, string>
-
-async function script(name: string, body: string): Promise<string> {
-  const path = join(work, name)
-  await Bun.write(path, `#!/usr/bin/env zsh\n${body}\n`)
-  await chmod(path, 0o755)
-  return path
-}
 
 const lastWrite = () => fake.writes.at(-1)
 
 beforeAll(async () => {
-  work = await mkdtemp(join(tmpdir(), "wrike-tui-e2e-"))
-  const now = new Date()
-  fake = createFakeWrike({ token: TOKEN, today: localDay(now), now: now.toISOString() })
-  server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fake.handle })
-  const origin = `http://127.0.0.1:${server.port}`
-  env = {
-    WRIKE_BASE_URL: `${origin}/api/v4`,
-    WRIKE_MCP_URL: `${origin}/mcp`,
-    WRIKE_TUI_KEYRING_SERVICE: KEYRING_SERVICE,
-    XDG_CONFIG_HOME: join(work, "config"),
-    EDITOR: await script("editor", 'print -r -- "" >> "$1"\nprint -r -- "Edited in the e2e editor." >> "$1"'),
-    BROWSER: await script("browser", `print -r -- "$1" >> "${join(work, "opened-urls")}"`),
-    TERM: "xterm-256color",
-    COLORTERM: "truecolor",
-  }
-  tmux = new TmuxSession(join(work, "tmux.sock"), process.env.WRIKE_TUI_E2E_CAPTURES ?? join(work, "captures"))
-  await tmux.start(WIDE, env)
+  e2e = await startE2e("phase-1", WIDE, { WRIKE_TUI_KEYRING_SERVICE: KEYRING_SERVICE })
+  ;({ work, fake, tmux, env } = e2e)
+  server = { port: Number(new URL(e2e.origin).port) }
 })
 
 afterAll(async () => {
-  await tmux.kill()
-  server.stop(true)
+  await e2e.stop()
   await Bun.secrets.delete({ service: KEYRING_SERVICE, name: "token" })
-  await rm(work, { recursive: true, force: true })
 })
 
 describe("auth", () => {
@@ -108,7 +81,7 @@ describe("the client", () => {
   test("opens on the Inbox with the stored token", async () => {
     await tmux.run("clear")
     await tmux.run(BINARY)
-    const inbox = await tmux.see("inbox", "2 Inbox", "Enable SSO on sandbox", /▸ Inbox\s+6 /, /My to-do\s+6 /, "Sam Sample")
+    const inbox = await tmux.see("inbox", "2 Inbox", "Enable SSO on sandbox", /│ {3}Inbox\s+6 │/, /My to-do\s+6 /, "Sam Sample", "Engineering")
     expect(inbox).toMatch(/● Other\s+Approval requested/)
     expect(inbox).toMatch(/● Mention\s+Enable SSO on sandbox\s+35m/)
     expect(inbox).toContain("Pat Example: @Sam Sample can we run trainings in the")
@@ -303,7 +276,7 @@ describe("the client", () => {
 
   test("a failed load shows the error and r recovers", async () => {
     fake.fail({ path: "/api/v4/tasks", status: 500 })
-    await tmux.keys("t", "r")
+    await tmux.keys("t")
     await tmux.see("list-error", "Wrike failed with 500: Injected failure", "retry.")
     await tmux.keys("r")
     await tmux.see("list-recovered", /^(?![\s\S]*Wrike failed)/, "Today 1")

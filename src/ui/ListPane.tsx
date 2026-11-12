@@ -105,14 +105,14 @@ function EntryRow({ entry, state, width, selected, theme }: { entry: InboxEntry;
 
 type Cell = { text: string; fg: Color }
 
-function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns: ColumnKey[]; width: number; nested: boolean; selected: boolean; theme: Theme }) {
+function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns: ColumnKey[]; width: number; indent: number; nested: boolean; selected: boolean; theme: Theme }) {
   const { row, state, theme, selected } = props
   const { task } = row
   const dim = selected ? theme.selectedDim : theme.dim
   const due = dueDay(task.dates)
   const start = startDay(task.dates)
   const overdue = due !== null && due < state.clock.today && task.statusGroup === "Active"
-  const titleWidth = Math.max(0, props.width - props.columns.reduce((sum, column) => sum + (column === "title" ? 0 : COLUMN_WIDTHS[column]), 0))
+  const titleWidth = Math.max(0, props.width - props.indent - props.columns.reduce((sum, column) => sum + (column === "title" ? 0 : COLUMN_WIDTHS[column]), 0))
   const cell = (column: ColumnKey): Cell => {
     switch (column) {
       case "importance":
@@ -144,6 +144,7 @@ function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns
   }
   return (
     <text wrapMode="none" bg={selected ? theme.selection : undefined}>
+      {" ".repeat(props.indent)}
       {props.columns.map((column) => {
         const { text, fg } = cell(column)
         return <span key={column} fg={fg}>{text}</span>
@@ -178,7 +179,9 @@ export function ListPane(props: { state: State; width: number; height: number; o
   const start = windowStart(heights, Math.max(0, cursor), available, firstRow.current)
   firstRow.current = start
   const visible = rows.slice(start, start + windowCount(heights, start, available))
-  const columns = fittingColumns(currentView(state).spec.columns, inner)
+  // Tasks under a subgroup sit one step in, under their subgroup's label.
+  const indent = rows.some((row) => row.kind === "group" && row.depth === 1) ? 2 : 0
+  const columns = fittingColumns(currentView(state).spec.columns, inner - indent)
   const nested = rows.some((row) => row.kind === "task" && (row.hasChildren || row.depth > 0))
 
   return (
@@ -198,7 +201,7 @@ export function ListPane(props: { state: State; width: number; height: number; o
           case "entry":
             return <EntryRow key={row.id} entry={row.entry} state={state} width={inner} selected={selected} theme={theme} />
           case "task":
-            return <TaskRow key={row.id} row={row} state={state} columns={columns} width={inner} nested={nested} selected={selected} theme={theme} />
+            return <TaskRow key={row.id} row={row} state={state} columns={columns} width={inner} indent={indent} nested={nested} selected={selected} theme={theme} />
           case "more":
             return (
               <text key={row.id} wrapMode="none" bg={selected ? theme.selection : undefined} fg={selected ? theme.selectedDim : theme.dim}>

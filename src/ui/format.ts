@@ -1,7 +1,8 @@
 const ELLIPSIS = "…"
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-function truncate(text: string, width: number): string {
+/** The text cut to at most `width` columns, ending in an ellipsis when it was cut. */
+export function truncate(text: string, width: number): string {
   if (Bun.stringWidth(text) <= width) return text
   if (width <= 0) return ""
   let kept = ""

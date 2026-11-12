@@ -61,7 +61,8 @@ export function Help({ state, screen, bridge }: { state: State; screen: { width:
   const tallest = (gaps: boolean) => Math.max(column(state, local, gaps).length, column(state, ["global"], gaps).length)
   const gaps = tallest(true) + 2 <= screen.height - 1
   const [left, right] = [column(state, local, gaps), column(state, ["global"], gaps)]
-  const columnWidth = Math.min(COLUMN_WIDTH, Math.floor((screen.width - 4) / 2))
+  // On a narrow terminal the legend takes the whole width, so no pane border shows beside its own.
+  const columnWidth = Math.min(COLUMN_WIDTH, Math.floor((screen.width - 2) / 2))
   return (
     <Overlay title="Keys" width={columnWidth * 2 + 2} height={Math.max(left.length, right.length) + 2} screen={screen}>
       <scrollbox ref={scroll} flexGrow={1} flexShrink={1} scrollY>
