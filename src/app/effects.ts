@@ -66,7 +66,7 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return dispatch({ type: "inbox-loaded", request: effect.request, clock: deps.clock(), result })
     }
     case "load-todo": {
-      const result = await attempt(() => client.myTasks(effect.user))
+      const result = await attempt(async () => (await client.tasks({ kind: "mine", user: effect.user }, { completed: false })).tasks)
       return dispatch({ type: "todo-loaded", request: effect.request, clock: deps.clock(), result })
     }
     case "search": {
@@ -74,7 +74,7 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       const result = await attempt(async () => {
         switch (query.kind) {
           case "title":
-            return client.searchTasks(query.text)
+            return (await client.tasks({ kind: "title", text: query.text }, { completed: true })).tasks
           case "permalink": {
             const task = await client.taskByPermalink(query.url)
             return task ? [task] : []

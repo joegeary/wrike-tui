@@ -30,8 +30,11 @@ export type Task = {
   dates: TaskDates
   assigneeIds: UserId[]
   parentIds: string[]
+  subTaskIds: TaskId[]
+  superTaskIds: TaskId[]
   permalink: string
   descriptionHtml: string
+  createdDate: string
   updatedDate: string
 }
 

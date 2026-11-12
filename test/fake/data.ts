@@ -1,4 +1,5 @@
 import { addDays } from "../../src/domain/dates"
+import { buildWorkspace, bulkTasks, FOLDER, SPACE } from "./workspace"
 
 export type FakeTask = {
   id: string
@@ -59,9 +60,12 @@ export const TASK = {
   login: "IEAAAAAAKQAAAA07",
   exportTest: "IEAAAAAAKQAAAA08",
   tls: "IEAAAAAAKQAAAA09",
+  reproduce: "IEAAAAAAKQAAAA10",
+  patch: "IEAAAAAAKQAAAA11",
+  macros: "IEAAAAAAKQAAAA12",
 } as const
 
-const FOLDER = { platform: "IEAAAAAAI4AAAA01", launch: "IEAAAAAAI4AAAA02", support: "IEAAAAAAI4AAAA03" }
+export const bulkTaskId = (n: number) => `IEAAAAAAKQAB${String(n).padStart(4, "0")}`
 
 export const permalink = (legacyId: number) => `https://www.wrike.com/open.htm?id=${legacyId}`
 const LEGACY_BASE = 4598459100
@@ -118,9 +122,9 @@ export function seed(today: string, now: string) {
       ],
     },
   ]
-  const spaces = [{ id: "IEAAAAAAI4AAAS01", title: "Support", avatarUrl: "", accessType: "Public", archived: false }]
+  const { spaces, folders } = buildWorkspace(PAT)
   const spaceWorkflows: Record<string, unknown[]> = {
-    IEAAAAAAI4AAAS01: [
+    [SPACE.support]: [
       {
         id: "IEAAAAAAK4AAAA02",
         name: "Support Workflow",
@@ -135,12 +139,6 @@ export function seed(today: string, now: string) {
     ],
   }
 
-  const folders = [
-    { id: FOLDER.platform, accountId: ACCOUNT, title: "Platform", scope: "WsFolder", childIds: [] },
-    { id: FOLDER.launch, accountId: ACCOUNT, title: "Q4 Launch", scope: "WsFolder", childIds: [], project: { status: "Green" } },
-    { id: FOLDER.support, accountId: ACCOUNT, title: "Support Queue", scope: "WsFolder", childIds: [] },
-  ]
-
   const at = (day: string) => `${day}T17:00:00`
   const planned = (start: number, due: number) => ({
     type: "Planned" as const,
@@ -154,7 +152,10 @@ export function seed(today: string, now: string) {
   const task = (
     id: string,
     title: string,
-    fields: Pick<FakeTask, "status" | "customStatusId" | "importance" | "dates" | "responsibleIds" | "parentIds"> & { description?: string },
+    fields: Pick<FakeTask, "status" | "customStatusId" | "importance" | "dates" | "responsibleIds" | "parentIds"> & {
+      description?: string
+      superTaskIds?: string[]
+    },
   ): FakeTask => {
     count += 1
     const description = fields.description ?? ""
@@ -179,7 +180,7 @@ export function seed(today: string, now: string) {
       hasAttachments: false,
       permalink: permalink(LEGACY_BASE + count),
       priority: `0${count}000000`,
-      superTaskIds: [],
+      superTaskIds: fields.superTaskIds ?? [],
       subTaskIds: [],
       dependencyIds: [],
       metadata: [],
@@ -268,7 +269,55 @@ export function seed(today: string, now: string) {
       responsibleIds: [RILEY],
       parentIds: [FOLDER.platform],
     }),
+    task(TASK.reproduce, "Reproduce the redirect loop on staging", {
+      status: "Active",
+      customStatusId: STATUS.inProgress,
+      importance: "Normal",
+      dates: milestone(1),
+      responsibleIds: [PAT],
+      parentIds: [],
+      superTaskIds: [TASK.login],
+    }),
+    task(TASK.patch, "Patch the callback handler", {
+      status: "Active",
+      customStatusId: STATUS.new,
+      importance: "Normal",
+      dates: { type: "Backlog" },
+      responsibleIds: [RILEY],
+      parentIds: [],
+      superTaskIds: [TASK.login],
+    }),
+    // A subtask filed in a folder of its own, whose parent lives in another space.
+    task(TASK.macros, "List the macros agents use most", {
+      status: "Active",
+      customStatusId: STATUS.new,
+      importance: "Low",
+      dates: milestone(6),
+      responsibleIds: [RILEY],
+      parentIds: [FOLDER.runbooks],
+      superTaskIds: [TASK.onboarding],
+    }),
   ]
+
+  const people = [PAT, RILEY, JORDAN]
+  for (const bulk of bulkTasks(today)) {
+    tasks.push({
+      ...task(bulkTaskId(bulk.n), bulk.title, {
+        status: bulk.status,
+        customStatusId: STATUS[bulk.statusKey],
+        importance: bulk.importance,
+        dates: bulk.due ? milestone(0) : { type: "Backlog" },
+        responsibleIds: bulk.assignee === null ? [] : [people[bulk.assignee]!],
+        parentIds: bulk.superTask === null ? [FOLDER.requests] : [],
+        superTaskIds: bulk.superTask === null ? [] : [bulkTaskId(bulk.superTask)],
+      }),
+      ...(bulk.due ? { dates: { type: "Milestone" as const, due: at(bulk.due) } } : {}),
+      permalink: permalink(LEGACY_BASE + 1000 + bulk.n),
+      updatedDate: `${addDays(today, -(bulk.n % 200))}T12:00:00Z`,
+    })
+  }
+  const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]))
+  for (const child of tasks) for (const parent of child.superTaskIds) byId.get(parent)?.subTaskIds.push(child.id)
 
   const minutesAgo = (minutes: number) => new Date(new Date(now).getTime() - minutes * 60_000).toISOString().replace(/\.\d+Z$/, "Z")
   const comment = (id: string, taskId: string, authorId: string, text: string, minutes: number): FakeComment => ({

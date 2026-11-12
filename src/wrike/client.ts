@@ -1,7 +1,8 @@
-import type { LegacyItemId, TaskId, UserId } from "../domain/ids"
+import type { FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { taskId, userId } from "../domain/ids"
 import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
-import { patchParams, type TaskPatch } from "../domain/patch"
+import { patchParams, type Params, type TaskPatch } from "../domain/patch"
+import type { Space, SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
 import {
   CommentSchema,
@@ -10,6 +11,7 @@ import {
   FolderSchema,
   LegacyIdSchema,
   parseAll,
+  parseSpaceTree,
   SpaceSchema,
   TaskSchema,
   WorkflowSchema,
@@ -24,8 +26,11 @@ export type WrikeClient = {
   workflows(): Promise<Workflow[]>
   /** The workflows of every space, for a status the account workflows do not hold. */
   spaceWorkflows(): Promise<Workflow[]>
-  myTasks(user: UserId): Promise<Task[]>
-  searchTasks(title: string): Promise<Task[]>
+  /** The spaces the token can see that are not archived. */
+  spaces(): Promise<Space[]>
+  spaceTree(id: SpaceId): Promise<SpaceTree>
+  /** One page of a task list. `pageToken` asks for the page after the one that returned it. */
+  tasks(query: TaskQuery, options: { completed: boolean; pageToken?: string }): Promise<TaskPage>
   taskByPermalink(url: string): Promise<Task | null>
   taskIdFromLegacy(id: LegacyItemId): Promise<TaskId | null>
   task(id: TaskId): Promise<Task>
@@ -36,10 +41,34 @@ export type WrikeClient = {
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
 }
 
+export type TaskQuery =
+  | { kind: "mine"; user: UserId }
+  | { kind: "title"; text: string }
+  | { kind: "space"; id: SpaceId }
+  | { kind: "folder"; id: FolderId }
+
+export type TaskPage = { tasks: Task[]; next: string | null }
+
+export const PAGE_SIZE = 200
+
 export type InboxSource = Pick<WrikeClient, "inbox"> & { close(): Promise<void> }
 
 // A task list omits these unless asked, and the app's Task always carries them.
-const LIST_FIELDS = ["responsibleIds", "parentIds", "description"]
+const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds"]
+
+function listCall(query: TaskQuery): { path: string; params: Params } {
+  switch (query.kind) {
+    case "mine":
+      return { path: "/tasks", params: { responsibles: [query.user], subTasks: true, sortField: "DueDate" } }
+    case "title":
+      return { path: "/tasks", params: { title: query.text, sortField: "UpdatedDate", sortOrder: "Desc" } }
+    case "space":
+      // Without `descendants` a space answers with no tasks at all.
+      return { path: `/spaces/${query.id}/tasks`, params: { descendants: true, subTasks: true } }
+    case "folder":
+      return { path: `/folders/${query.id}/tasks`, params: { descendants: true, subTasks: true } }
+  }
+}
 
 export async function fetchMe(transport: Transport): Promise<Me> {
   const [contact] = parseAll(ContactSchema, await transport.request("GET", "/contacts", { me: true }), "contact")
@@ -52,8 +81,7 @@ export async function fetchMe(transport: Transport): Promise<Me> {
 }
 
 export function createWrikeClient(transport: Transport, inboxSource: InboxSource): WrikeClient {
-  const tasks = async (params: Parameters<Transport["request"]>[2]) =>
-    parseAll(TaskSchema, await transport.request("GET", "/tasks", { ...params, fields: LIST_FIELDS }), "tasks")
+  const spaces = async () => parseAll(SpaceSchema, await transport.request("GET", "/spaces"), "spaces")
 
   const one = <T>(items: T[]): T => {
     const [first] = items
@@ -74,9 +102,8 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
     },
 
     async spaceWorkflows() {
-      const spaces = parseAll(SpaceSchema, await transport.request("GET", "/spaces"), "spaces")
       const perSpace = await Promise.all(
-        spaces.map(async (space) =>
+        (await spaces()).map(async (space) =>
           parseAll(WorkflowSchema, await transport.request("GET", `/spaces/${space.id}/workflows`), "workflows"),
         ),
       )
@@ -84,13 +111,30 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
       return [...byId.values()]
     },
 
-    myTasks: (user) =>
-      tasks({ responsibles: [user], status: "Active", subTasks: true, sortField: "DueDate" }),
+    async spaces() {
+      return (await spaces()).filter((space) => !space.archived).map(({ archived: _archived, ...space }) => space)
+    },
 
-    searchTasks: (title) => tasks({ title, sortField: "UpdatedDate", sortOrder: "Desc", pageSize: 100 }),
+    async spaceTree(id) {
+      return parseSpaceTree(await transport.request("GET", `/spaces/${id}/folders`), id)
+    },
+
+    async tasks(query, { completed, pageToken }) {
+      const { path, params } = listCall(query)
+      // A follow-up page must repeat `fields`, or Wrike leaves the optional fields out of it.
+      const page = await transport.requestPage(
+        "GET",
+        path,
+        pageToken
+          ? { nextPageToken: pageToken, fields: LIST_FIELDS }
+          : { ...params, ...(completed ? {} : { status: "Active" }), pageSize: PAGE_SIZE, fields: LIST_FIELDS },
+      )
+      return { tasks: parseAll(TaskSchema, page.data, "tasks"), next: page.next }
+    },
 
     async taskByPermalink(url) {
-      return (await tasks({ permalink: url }))[0] ?? null
+      const found = await transport.request("GET", "/tasks", { permalink: url, fields: LIST_FIELDS })
+      return parseAll(TaskSchema, found, "tasks")[0] ?? null
     },
 
     async taskIdFromLegacy(id) {

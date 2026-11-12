@@ -388,9 +388,8 @@ describe("Failures", () => {
     await app.see("Waiting on customer")
     await app.press("down", "down", "enter")
     await app.see("Status set to Resolved")
-    expect(app.fake.requests.filter((line) => line.startsWith("GET /api/v4/spaces"))).toEqual([
-      "GET /api/v4/spaces",
-      "GET /api/v4/spaces/IEAAAAAAI4AAAS01/workflows",
-    ])
+    // Space workflows load once: one request per space, and never a second round.
+    const workflowLoads = app.fake.requests.filter((line) => /^GET \/api\/v4\/spaces\/[^/]+\/workflows$/.test(line))
+    expect(workflowLoads.sort()).toEqual(app.fake.data.spaces.map((space) => `GET /api/v4/spaces/${space.id}/workflows`).sort())
   })
 })

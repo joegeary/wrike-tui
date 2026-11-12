@@ -34,8 +34,11 @@ function task(id: string, title: string, dates: TaskDates, extra: Partial<Task> 
     dates,
     assigneeIds: [ME],
     parentIds: [],
+    subTaskIds: [],
+    superTaskIds: [],
     permalink: `https://www.wrike.com/open.htm?id=${id.replace(/\D/g, "") || "1"}`,
     descriptionHtml: "",
+    createdDate: "2026-10-01T00:00:00Z",
     updatedDate: "2026-11-10T00:00:00Z",
     ...extra,
   }

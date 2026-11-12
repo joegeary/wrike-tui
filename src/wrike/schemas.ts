@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { customStatusId, legacyItemId, taskId, userId } from "../domain/ids"
+import { customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
 import {
   IMPORTANCES,
   STATUS_GROUPS,
@@ -11,6 +11,7 @@ import {
   type TaskDates,
   type Workflow,
 } from "../domain/model"
+import { SPACE_ACCESS, type FolderNode, type Space, type SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
 
 const day = z.string().transform((value) => value.slice(0, 10))
@@ -33,8 +34,11 @@ export const TaskSchema = z
     dates: Dates,
     responsibleIds: z.array(z.string()).default([]),
     parentIds: z.array(z.string()).default([]),
+    subTaskIds: z.array(z.string()).default([]),
+    superTaskIds: z.array(z.string()).default([]),
     permalink: z.string(),
     description: z.string().default(""),
+    createdDate: z.string(),
     updatedDate: z.string(),
   })
   .transform(
@@ -47,8 +51,11 @@ export const TaskSchema = z
       dates: wire.dates,
       assigneeIds: wire.responsibleIds.map(userId),
       parentIds: wire.parentIds,
+      subTaskIds: wire.subTaskIds.map(taskId),
+      superTaskIds: wire.superTaskIds.map(taskId),
       permalink: wire.permalink,
       descriptionHtml: wire.description,
+      createdDate: wire.createdDate,
       updatedDate: wire.updatedDate,
     }),
   )
@@ -96,7 +103,44 @@ export const WorkflowSchema = z
     }),
   )
 
-export const SpaceSchema = z.object({ id: z.string() })
+export const SpaceSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    // An access type this version does not know is drawn like a private space.
+    accessType: z.enum(SPACE_ACCESS).catch("Private"),
+    archived: z.boolean().default(false),
+  })
+  .transform((wire): Space & { archived: boolean } => ({ id: spaceId(wire.id), title: wire.title, access: wire.accessType, archived: wire.archived }))
+
+const FolderNodeSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  childIds: z.array(z.string()).default([]),
+  scope: z.string().default("WsFolder"),
+  project: z.object({ customStatusId: z.string().optional(), ownerIds: z.array(z.string()).default([]) }).optional(),
+})
+
+/** A space's folders in tree mode. The node with the space's ID is the root. Recycle Bin folders are left out. */
+export function parseSpaceTree(items: unknown[], space: SpaceId): SpaceTree {
+  const tree: SpaceTree = new Map()
+  for (const wire of parseAll(FolderNodeSchema, items, "folders")) {
+    if (wire.scope === "RbFolder") continue
+    const id = folderId(wire.id)
+    const node: FolderNode = {
+      id,
+      title: wire.title,
+      childIds: wire.childIds.map(folderId),
+      kind: wire.id === space ? "space" : wire.project ? "project" : "folder",
+      project: wire.project
+        ? { statusId: wire.project.customStatusId ? customStatusId(wire.project.customStatusId) : null, ownerIds: wire.project.ownerIds.map(userId) }
+        : null,
+    }
+    tree.set(id, node)
+  }
+  if (!tree.has(space as string as FolderId)) throw new WrikeFailure({ kind: "invalid", message: "Unexpected folders from Wrike (the space is not in its own tree)" })
+  return tree
+}
 export const FolderSchema = z.object({ id: z.string(), title: z.string() })
 export const LegacyIdSchema = z.object({ id: z.string(), apiV2Id: z.string() })
 
