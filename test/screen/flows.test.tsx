@@ -361,7 +361,7 @@ describe("Failures", () => {
     await app.see("Enable SSO on sandbox")
     app.fake.fail({ path: "/api/v4/tasks", status: 500 })
     await app.press("t", "r")
-    const failed = await app.see("Wrike failed with 500: Injected failure Press r to retry.")
+    const failed = await app.see("Wrike failed with 500: Injected failure. Press r to retry.")
     expect(failed).toContain("Overdue 1")
     await app.press("r")
     expect(await app.see("Overdue 1")).not.toContain("Wrike failed")

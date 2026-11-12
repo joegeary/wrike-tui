@@ -5,7 +5,7 @@ import { contactName, statusOf } from "../app/selectors"
 import { EDIT_FIELDS, type Details, type EditField, type State } from "../app/state"
 import { htmlToMarkdown, htmlToText } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
-import { describeError } from "../wrike/errors"
+import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
 import { shortDay, stamp } from "./format"
 import { Pane } from "./Pane"
@@ -186,7 +186,7 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
       {details.state === "idle" ? <text fg={theme.dim} wrapMode="word">Select a task and press Enter to open it here.</text> : null}
       {details.state === "loading" && !shownDetails ? <text fg={theme.dim}>Loading...</text> : null}
       {details.state === "error" ? (
-        <text fg={theme.error} wrapMode="word">{`${describeError(details.error)} Press r to retry.`}</text>
+        <text fg={theme.error} wrapMode="word">{retryText(details.error)}</text>
       ) : null}
       {shownDetails ? (
         <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY>

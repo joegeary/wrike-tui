@@ -2,7 +2,7 @@ import { useRef } from "react"
 import { listRows, statusOf, type ListRow } from "../app/selectors"
 import type { Loadable, State, View } from "../app/state"
 import { dueDay, type InboxEntry, type Task } from "../domain/model"
-import { describeError } from "../wrike/errors"
+import { retryText } from "../wrike/errors"
 import { fit, fitRight, humanize, listDay, relativeTime } from "./format"
 import { windowCount, windowStart } from "./layout"
 import { Pane } from "./Pane"
@@ -40,7 +40,7 @@ function Notice({ list, state, width }: { list: Loadable<unknown[]>; state: Stat
   if (list.state === "error") {
     return (
       <text fg={theme.error} wrapMode="word" width={width}>
-        {`${describeError(list.error)} Press r to retry.`}
+        {retryText(list.error)}
       </text>
     )
   }

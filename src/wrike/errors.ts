@@ -35,3 +35,8 @@ export function describeError(error: WrikeError): string {
       return `Wrike failed with ${error.status}: ${error.message}`
   }
 }
+
+/** The error as a full sentence, followed by how to try again. */
+export function retryText(error: WrikeError): string {
+  return `${describeError(error).replace(/\.$/, "")}. Press r to retry.`
+}
