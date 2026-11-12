@@ -10,9 +10,9 @@ Data flows one way. Each layer depends only on the layers under it.
     src/cli/        argv parsing, `auth login|logout|status`, launching the TUI
     src/ui/         React components that render state and dispatch actions,
                     and the terminal handoffs (editor, browser, clipboard)
-    src/app/        the app state machine (reducer), the command registry,
-                    the keymap table, the nav rows, the palette, the session,
-                    effects
+    src/app/        the app state machine (reducer, with its handlers in
+                    reduce/), the command registry, the keymap table, the nav
+                    rows, the palette, the session, effects
     src/persist/    the files on disk: config, session, favorites, cache
     src/auth/       token resolution and storage, data-center probing
     src/wrike/      HTTP transport, REST client, MCP inbox client, zod schemas
@@ -399,6 +399,15 @@ The app is one reducer over one state object. Components never fetch. An
 effect runner turns `Effect` values returned by the reducer into API calls and
 file writes, and dispatches the result back as actions, which is what lets the
 reducer stay pure and lets tests run with a fake Wrike.
+
+`src/app/reducer.ts` holds `start`, `reduce` and the dispatcher that routes each
+action. The handlers live in `src/app/reduce/`, split by what they change.
+`core.ts` has the helpers every handler shares. `load.ts` fetches and settles
+results, and shows a scope. `nav.ts` has the tree and the favorites. `lists.ts`
+has the list pane: the cursor, grouping, filters and the pickers that shape it.
+`task.ts` has the open task and its edits. The modules depend in one direction,
+`core` then `load`, then `nav`, `lists` and `task`, and `nav` calls into `lists`.
+`reducer.ts` imports them all, and nothing in `reduce/` imports `reducer.ts`.
 
 ```ts
 type Pane = "nav" | "list" | "details"
