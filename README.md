@@ -237,6 +237,10 @@ frame, in milliseconds, which is how list latency is measured.
 `bun run e2e` needs `tmux` and `zsh`. Set `WRIKE_TUI_E2E_CAPTURES` to a
 directory to keep the screen captures of every step.
 
+GitHub Actions runs the typecheck, `bun test ./test` and `bun run e2e` on every
+push. When the e2e job fails, its screen captures are attached to the run as
+the `e2e-captures` artifact.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
