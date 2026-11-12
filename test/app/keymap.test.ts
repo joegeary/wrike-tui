@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { activeContexts, KEYMAP, normalizeKey, resolveKey, TASK_COMMANDS, type Context } from "../../src/app/keymap"
+import { activeContexts, KEYMAP, MAX_LABEL, normalizeKey, resolveKey, TASK_COMMANDS, type Context } from "../../src/app/keymap"
 import { COMMANDS } from "../../src/app/reducer"
 import { PANES, VIEWS, type Mode, type State } from "../../src/app/state"
 
@@ -48,6 +48,11 @@ describe("keymap table", () => {
   test("every task command is offered wherever a task can be selected", () => {
     const taskCommands = KEYMAP.task.bindings.map((binding) => binding.command)
     for (const command of TASK_COMMANDS) expect(taskCommands).toContain(command)
+  })
+
+  test("every label fits the legend on an 80-column terminal", () => {
+    const long = contexts.flatMap((context) => KEYMAP[context].bindings.map((binding) => binding.label)).filter((label) => label.length > MAX_LABEL)
+    expect(long).toEqual([])
   })
 
   test("the most specific context wins and unbound keys resolve to nothing", () => {

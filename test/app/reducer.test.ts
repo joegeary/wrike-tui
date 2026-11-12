@@ -384,6 +384,15 @@ describe("workflows", () => {
     expect(second.effects.map((effect) => effect.kind)).toEqual(["load-todo", "load-details"])
   })
 
+  test("a list with such a task loads them too, once the account workflows are known", () => {
+    const [started] = start(initialState(profile, clock))
+    const early = play(started, { type: "todo-loaded", request: 1, clock, result: { ok: true, value: [foreign] } })
+    expect(early.effects).toEqual([])
+    const { state, effects } = play(early.state, { type: "reference-loaded", result: { ok: true, value: { contacts, workflows } } })
+    expect(effects).toEqual([{ kind: "load-space-workflows" }])
+    expect(state.spaceWorkflows).toBe("loading")
+  })
+
   test("the status picker fills in when the space workflows arrive", () => {
     const waiting = play(loaded(), "t", "enter", { type: "details-loaded", request: 1, result: { ok: true, value: detailsOf(foreign) } }, "s")
     expect(pickerOptions(waiting.state, waiting.state.mode as never)).toEqual([])

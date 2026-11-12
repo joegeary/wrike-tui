@@ -108,7 +108,8 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
 
     async comments(id) {
       const comments = parseAll(CommentSchema, await transport.request("GET", `/tasks/${id}/comments`), "comments")
-      return comments.sort((a, b) => a.createdDate.localeCompare(b.createdDate))
+      // Wrike lists newest first with one-second stamps. Reversing before the stable sort keeps two comments from the same second in order.
+      return comments.reverse().sort((a, b) => a.createdDate.localeCompare(b.createdDate))
     },
 
     async addComment(id, text) {

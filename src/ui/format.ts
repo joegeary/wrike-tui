@@ -26,11 +26,23 @@ export function fitRight(text: string, width: number): string {
   return " ".repeat(Math.max(0, width - Bun.stringWidth(cut))) + cut
 }
 
+/** `ApprovalRequested` as `Approval requested`. */
+export function humanize(label: string): string {
+  const words = label.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 /** `2026-11-11` as `Nov 11`, with the year when it is not `today`'s. */
 export function shortDay(day: string, today: string): string {
   const [year, month, date] = day.split("-")
   const label = `${MONTHS[Number(month) - 1] ?? "?"} ${Number(date)}`
   return year === today.slice(0, 4) ? label : `${label} ${year}`
+}
+
+/** The compact form for a list column: `Nov 11`, or `Jan 2027` for another year. */
+export function listDay(day: string, today: string): string {
+  const [year, month] = day.split("-")
+  return year === today.slice(0, 4) ? shortDay(day, today) : `${MONTHS[Number(month) - 1] ?? "?"} ${year}`
 }
 
 export function relativeTime(ts: string, now: string): string {

@@ -77,6 +77,14 @@ describe("reads", () => {
     expect(comments.map((comment) => comment.authorId)).toEqual([userId(RILEY), userId(ME), userId(PAT)])
   })
 
+  test("comments posted in the same second keep the order they were written in", async () => {
+    await client.addComment(taskId(TASK.flags), "first")
+    await client.addComment(taskId(TASK.flags), "second")
+    const [first, second] = fake.data.comments.filter((comment) => comment.taskId === TASK.flags).reverse()
+    second!.createdDate = first!.createdDate
+    expect((await client.comments(taskId(TASK.flags))).map((comment) => comment.text)).toEqual(["first", "second"])
+  })
+
   test("folders returns the titles of a task's parents", async () => {
     const task = await client.task(taskId(TASK.sso))
     expect(await client.folders(task.parentIds)).toEqual(["Platform", "Q4 Launch"])

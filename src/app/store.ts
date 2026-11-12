@@ -10,7 +10,6 @@ export type Store = {
   idle(): Promise<void>
 }
 
-/** Holds the state, applies the reducer and runs the effects it returns. */
 export function createStore(initial: State, deps: EffectDeps): Store {
   let state = initial
   const listeners = new Set<() => void>()

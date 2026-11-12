@@ -3,7 +3,7 @@ import { listRows, statusOf, type ListRow } from "../app/selectors"
 import type { Loadable, State, View } from "../app/state"
 import { dueDay, type InboxEntry, type Task } from "../domain/model"
 import { describeError } from "../wrike/errors"
-import { fit, fitRight, relativeTime, shortDay } from "./format"
+import { fit, fitRight, humanize, listDay, relativeTime } from "./format"
 import { windowCount, windowStart } from "./layout"
 import { Pane } from "./Pane"
 import { statusColor, theme } from "./theme"
@@ -11,7 +11,7 @@ import { TextInput } from "./TextInput"
 
 const TITLES: Record<View, string> = { inbox: "Inbox", todo: "My to-do", search: "Search" }
 const STATUS_WIDTH = 13
-const DUE_WIDTH = 7
+const DUE_WIDTH = 9
 /** Below this inner width a task row drops its status column. */
 const WIDE_ROW = 52
 
@@ -56,11 +56,14 @@ function Notice({ list, state, width }: { list: Loadable<unknown[]>; state: Stat
 
 function EntryRow({ entry, state, width, selected }: { entry: InboxEntry; state: State; width: number; selected: boolean }) {
   const bg = selected ? theme.selection : undefined
-  const kind = fit(entry.kind === "Other" ? entry.label : entry.kind, 9)
+  // A type this version does not know keeps Wrike's own name for it, as the title when there is no item.
+  const other = entry.kind === "Other" ? humanize(entry.label) : null
+  const kind = fit(entry.kind, 8)
   const when = fitRight(relativeTime(entry.ts, state.clock.now), 6)
-  const title = fit(entry.item?.title ?? "No linked item", Math.max(0, width - 2 - 10 - 7))
+  const title = fit(entry.item?.title ?? other ?? "No linked item", Math.max(0, width - 2 - 9 - 7))
   const comment = entry.commentText?.split("\n")[0]
-  const second = `${entry.author?.name ?? "Wrike"}${comment ? `: ${comment}` : ""}`
+  const who = [entry.author?.name ?? "Wrike", ...(other && entry.item ? [other] : [])].join(", ")
+  const second = `${who}${comment ? `: ${comment}` : ""}`
   return (
     <>
       <text wrapMode="none" bg={bg}>
@@ -88,7 +91,7 @@ function TaskRow({ task, state, width, selected }: { task: Task; state: State; w
       <span fg={task.importance === "High" ? theme.error : theme.dim}>{`${marker} `}</span>
       <span fg={task.statusGroup === "Active" ? theme.text : theme.dim}>{fit(task.title, titleWidth)}</span>
       {wide ? <span fg={statusColor(status?.color)}>{` ${fit(status?.name ?? task.statusGroup, STATUS_WIDTH)}`}</span> : null}
-      <span fg={overdue ? theme.error : theme.dim}>{fitRight(due ? shortDay(due, state.clock.today) : "", DUE_WIDTH)}</span>
+      <span fg={overdue ? theme.error : theme.dim}>{fitRight(due ? listDay(due, state.clock.today) : "", DUE_WIDTH)}</span>
     </text>
   )
 }

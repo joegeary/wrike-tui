@@ -41,7 +41,23 @@ export function start(state: State): Update {
   return [withTodo, [{ kind: "load-reference" }, ...inbox, ...todo]]
 }
 
+const BRINGS_TASKS: ReadonlySet<Action["type"]> = new Set(["reference-loaded", "todo-loaded", "search-loaded", "details-loaded", "task-saved"])
+
 export function reduce(state: State, action: Action): Update {
+  const [next, effects] = step(state, action)
+  if (!BRINGS_TASKS.has(action.type) || !hasUnknownStatus(next)) return [next, effects]
+  return [{ ...next, spaceWorkflows: "loading" }, [...effects, { kind: "load-space-workflows" }]]
+}
+
+/** True the first time a task on screen has a status the account workflows do not hold: it belongs to a space workflow. */
+function hasUnknownStatus(state: State): boolean {
+  if (state.spaceWorkflows !== "unloaded" || state.workflows.length === 0) return false
+  const opened = openTask(state)
+  const tasks = [...(shown(state.lists.todo) ?? []), ...(shown(state.lists.search) ?? []), ...(opened ? [opened] : [])]
+  return tasks.some((task) => !findStatus(state.workflows, task.statusId))
+}
+
+function step(state: State, action: Action): Update {
   switch (action.type) {
     case "key":
       return onKey(state, action.key)
@@ -96,15 +112,8 @@ export function reduce(state: State, action: Action): Update {
       }
       const details = action.result.value
       const pending = state.afterOpen
-      let next: State = { ...state, afterOpen: null, openTaskId: details.task.id, details: { state: "ready", value: details } }
-      const effects: Effect[] = []
-      if (!findStatus(next.workflows, details.task.statusId) && next.spaceWorkflows === "unloaded") {
-        next = { ...next, spaceWorkflows: "loading" }
-        effects.push({ kind: "load-space-workflows" })
-      }
-      if (!pending) return [next, effects]
-      const [after, more] = taskCommand(next, pending, details.task, "browse")
-      return [after, [...effects, ...more]]
+      const next: State = { ...state, afterOpen: null, openTaskId: details.task.id, details: { state: "ready", value: details } }
+      return pending ? taskCommand(next, pending, details.task, "browse") : [next, []]
     }
 
     case "task-saved": {

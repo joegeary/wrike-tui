@@ -19,6 +19,9 @@ export type Context =
   | "global" | "nav" | "list" | "inbox" | "details" | "task"
   | "edit" | "picker" | "multi-picker" | "text" | "compose" | "help"
 
+/** A label longer than this is cut off in the legend on an 80-column terminal. */
+export const MAX_LABEL = 28
+
 export type Binding = {
   /** Normalized key names. The first one is shown in the status bar. */
   keys: string[]
@@ -43,11 +46,11 @@ export const KEYMAP: Record<Context, { title: string; bindings: Binding[] }> = {
       bind("1", "focus-nav", "Focus the navigation pane"),
       bind("2", "focus-list", "Focus the list pane"),
       bind("3", "focus-details", "Focus the details pane"),
-      bind(["h", "left"], "pane-left", "Move to the pane on the left"),
-      bind(["l", "right"], "pane-right", "Move to the pane on the right"),
+      bind(["h", "left"], "pane-left", "Go to the pane on the left"),
+      bind(["l", "right"], "pane-right", "Go to the pane on the right"),
       bind("i", "view-inbox", "Show the Inbox"),
       bind("t", "view-todo", "Show My to-do"),
-      bind("/", "search", "Search by title, permalink or ID", "search"),
+      bind("/", "search", "Search, or open a link or ID", "search"),
       bind("r", "refresh", "Refresh"),
       bind("v", "zoom", "Zoom the details pane"),
       bind("?", "help", "Show the keys", "keys"),
@@ -74,7 +77,7 @@ export const KEYMAP: Record<Context, { title: string; bindings: Binding[] }> = {
   },
   inbox: {
     title: "Inbox",
-    bindings: [bind("a", "toggle-read", "Show or hide read notifications", "read")],
+    bindings: [bind("a", "toggle-read", "Toggle read notifications", "read")],
   },
   details: {
     title: "Details",
@@ -94,7 +97,7 @@ export const KEYMAP: Record<Context, { title: string; bindings: Binding[] }> = {
       bind("A", "assignees", "Change the assignees"),
       bind("m", "assign-me", "Assign to me", "mine"),
       bind("c", "comment", "Write a comment", "comment"),
-      bind("E", "description", "Edit the description in $EDITOR"),
+      bind("E", "description", "Description in $EDITOR"),
       bind("o", "browser", "Open in the browser"),
       bind("y", "copy-url", "Copy the URL"),
       bind("Y", "copy-id", "Copy the ID"),

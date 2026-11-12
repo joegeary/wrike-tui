@@ -32,6 +32,22 @@ async function loadDetails(client: WrikeClient, target: OpenTarget): Promise<Det
   return { task, comments, folders }
 }
 
+/** The edited text, null for no change, or undefined after reporting that the editor could not run. */
+async function edit(
+  deps: EffectDeps,
+  dispatch: (action: Action) => void,
+  initial: string,
+  extension: "md" | "html" | "txt",
+): Promise<string | null | undefined> {
+  try {
+    return await deps.editor(initial, extension)
+  } catch (thrown) {
+    const reason = thrown instanceof Error ? thrown.message : String(thrown)
+    dispatch({ type: "flash", flash: { tone: "error", text: `Could not run the editor: ${reason}` } })
+    return undefined
+  }
+}
+
 /** Runs one effect and reports what happened as actions. The reducer never sees a thrown error. */
 export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (action: Action) => void): Promise<void> {
   const { client } = deps
@@ -79,14 +95,17 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return dispatch({ type: "comment-added", taskId: effect.taskId, result: await attempt(() => client.addComment(effect.taskId, effect.text)) })
     case "edit-description": {
       const editable = editableDescription(effect.task.descriptionHtml)
-      const edited = await deps.editor(editable.text, editable.format === "markdown" ? "md" : "html")
+      const edited = await edit(deps, dispatch, editable.text, editable.format === "markdown" ? "md" : "html")
+      if (edited === undefined) return
       if (edited === null) return dispatch({ type: "flash", flash: { tone: "info", text: "Description unchanged" } })
       const html = descriptionFromEdit({ format: editable.format, text: edited })
       const result = await attempt(() => client.updateTask(effect.task.id, { field: "description", html }))
       return dispatch({ type: "task-saved", done: `Description saved from ${editable.format}`, result })
     }
     case "compose-in-editor": {
-      const text = (await deps.editor(effect.draft, "txt"))?.trim()
+      const edited = await edit(deps, dispatch, effect.draft, "txt")
+      if (edited === undefined) return
+      const text = edited?.trim()
       if (!text) return dispatch({ type: "flash", flash: { tone: "info", text: "Comment discarded" } })
       return dispatch({ type: "comment-added", taskId: effect.taskId, result: await attempt(() => client.addComment(effect.taskId, text)) })
     }

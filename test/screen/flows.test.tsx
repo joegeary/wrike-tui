@@ -24,7 +24,7 @@ describe("Inbox", () => {
     expect(inbox).toMatch(/● Mention\s+Enable SSO on sandbox\s+35m/)
     expect(inbox).toContain("Pat Example: @Sam Sample can we run trainings in the sandbox?")
     expect(inbox).toMatch(/● Assign\s+Rotate API keys for the staging cluster\s+2h/)
-    expect(inbox).toMatch(/● Approval…\s+No linked item/)
+    expect(inbox).toMatch(/● Other\s+Approval requested\s+1d/)
     expect(inbox).toMatch(/▸ Inbox\s+6 /)
     expect(inbox).not.toContain("Added the escalation matrix")
 
@@ -244,6 +244,19 @@ describe("Editing a task", () => {
     expect(app.outside.edited).toEqual([{ initial: expect.stringContaining('<span style="color:#d73a49">old prefixes</span>'), extension: "html" }])
     expect(app.fake.writes).toEqual([])
   })
+
+  test("an editor that cannot start is reported and nothing is saved", async () => {
+    app = await openApp(WIDE)
+    app.outside.editor = () => {
+      throw new Error("Executable not found in $PATH: \"nvim\"")
+    }
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("E")
+    await app.see('Could not run the editor: Executable not found in $PATH: "nvim"')
+    expect(app.fake.writes).toEqual([])
+  })
 })
 
 describe("Comments", () => {
@@ -286,13 +299,13 @@ describe("Keys and panes", () => {
     await app.see("Enable SSO on sandbox")
     await app.press("?")
     const legend = await app.see("─ Keys ─")
-    expect(legend).toMatch(/a\s+Show or hide read notifications/)
+    expect(legend).toMatch(/a\s+Toggle read notifications/)
     expect(legend).toMatch(/s\s+Change the status/)
-    expect(legend).toMatch(/\/\s+Search by title, permalink or ID/)
+    expect(legend).toMatch(/\/\s+Search, or open a link or ID/)
     expect(legend).not.toContain("Scroll down")
     await app.press("esc", "l", "?")
     const details = await app.see("─ Keys ─", "Scroll down")
-    expect(details).not.toContain("Show or hide read notifications")
+    expect(details).not.toContain("Toggle read notifications")
     await app.press("q")
     expect(await app.frame()).not.toContain("─ Keys ─")
     expect(app.outside.quit).toBe(false)

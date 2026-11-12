@@ -2,6 +2,7 @@
 import { keyringStore } from "./auth/token"
 import { run } from "./cli/run"
 import { readSecret } from "./cli/secret"
+import { launch } from "./ui/launch"
 
 const code = await run(process.argv.slice(2), {
   env: process.env,
@@ -9,8 +10,6 @@ const code = await run(process.argv.slice(2), {
   out: (line) => console.log(line),
   err: (line) => console.error(line),
   readSecret,
-  launch: async () => {
-    console.error("The client is not built yet.")
-  },
+  launch: (session) => launch(session, process.env),
 })
 process.exit(code)

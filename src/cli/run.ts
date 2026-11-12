@@ -35,7 +35,6 @@ Press ? inside the client for the keys.`
 
 const NOT_LOGGED_IN = "Not logged in. Run `wrike-tui auth login`, or set WRIKE_TOKEN."
 
-/** Returns the process exit code. */
 export async function run(argv: string[], io: Io): Promise<number> {
   const [command, sub, ...rest] = argv
   if (command === undefined) return open(io)
