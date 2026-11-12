@@ -1,6 +1,7 @@
 {
   "name": "wrike-tui",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "A keyboard-first terminal client for Wrike",
   "type": "module",
   "private": true,

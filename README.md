@@ -143,3 +143,7 @@ service name, which keeps test runs away from your real token.
 
 `bun run e2e` needs `tmux` and `zsh`. Set `WRIKE_TUI_E2E_CAPTURES` to a
 directory to keep the screen captures of every step.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
