@@ -24,6 +24,11 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
+      # The tests stand in for $EDITOR and $BROWSER with zsh scripts.
+      - name: Install zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zsh
       - run: bun run typecheck
       - run: bun test ./test
 
