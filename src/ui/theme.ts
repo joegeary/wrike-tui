@@ -34,8 +34,8 @@ const dark: Theme = {
   border: "#45475a",
   accent: "#89b4fa",
   text: "#cdd6f4",
-  dim: "#7f849c",
-  selectedDim: "#7f849c",
+  dim: "#82879e",
+  selectedDim: "#969aae",
   heading: "#f9e2af",
   error: "#f38ba8",
   warning: "#fab387",
@@ -43,7 +43,7 @@ const dark: Theme = {
   link: "#89dceb",
   status: {
     Blue: "#89b4fa", Turquoise: "#94e2d5", DarkCyan: "#74c7ec", Green: "#a6e3a1", DarkGreen: "#a6e3a1", Yellow: "#f9e2af", Orange: "#fab387",
-    Red: "#f38ba8", DarkRed: "#eba0ac", Purple: "#cba6f7", Pink: "#f5c2e7", Brown: "#f2cdcd", Gray: "#7f849c",
+    Red: "#f38ba8", DarkRed: "#eba0ac", Purple: "#cba6f7", Pink: "#f5c2e7", Brown: "#f2cdcd", Gray: "#82879e",
   },
 }
 
@@ -52,18 +52,18 @@ const light: Theme = {
   panel: "#e6e9ef",
   selection: "#ccd0da",
   border: "#9ca0b0",
-  accent: "#1e66f5",
+  accent: "#094cd2",
   text: "#4c4f69",
-  dim: "#7c7f93",
-  selectedDim: "#6c6f85",
-  heading: "#b4690e",
-  error: "#d20f39",
-  warning: "#c9510c",
-  success: "#2f7d20",
-  link: "#04788f",
+  dim: "#65677a",
+  selectedDim: "#555869",
+  heading: "#98580c",
+  error: "#d00f38",
+  warning: "#b1470b",
+  success: "#2d771e",
+  link: "#047288",
   status: {
-    Blue: "#1e66f5", Turquoise: "#179299", DarkCyan: "#04788f", Green: "#2f7d20", DarkGreen: "#2f7d20", Yellow: "#b4690e", Orange: "#c9510c",
-    Red: "#d20f39", DarkRed: "#a80d2e", Purple: "#8839ef", Pink: "#c13aa8", Brown: "#8a5a44", Gray: "#7c7f93",
+    Blue: "#094cd2", Turquoise: "#12747a", DarkCyan: "#047288", Green: "#2d771e", DarkGreen: "#2d771e", Yellow: "#98580c", Orange: "#b1470b",
+    Red: "#d00f38", DarkRed: "#a80d2e", Purple: "#8737ef", Pink: "#af3599", Brown: "#8a5a44", Gray: "#65677a",
   },
 }
 
