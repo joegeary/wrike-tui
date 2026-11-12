@@ -37,6 +37,8 @@ describe("Inbox", () => {
     expect(details).toMatch(/Folders\s+Platform, Q4 Launch/)
     expect(details).toContain("https://www.wrike.com/open.htm?id=4598459101")
     expect(details).toContain("@Sam Sample can we run trainings in the sandbox?")
+    expect(details).toContain("Pilot accounts are created in PR 7")
+    expect(details).not.toContain("](https://example.test/pull/7)")
     expect(app.fake.requests).toContain(`GET /api/v4/ids?ids=%5B%224598459101%22%5D&type=ApiV2Task`)
     expect(app.store.getState().focus).toBe("details")
   })
@@ -269,8 +271,7 @@ describe("Comments", () => {
     await app.see("─ New comment ─", "Write a comment")
     await app.type("Yes, the sandbox is ready for trainings.")
     await app.press("enter")
-    const posted = await app.see("Comment posted", "Comments (4)")
-    expect(posted).toContain("Yes, the sandbox is ready for trainings.")
+    const posted = await app.see("Comment posted", "Comments (4)", "Yes, the sandbox is ready for trainings.")
     expect(posted).not.toContain("─ New comment ─")
     expect(app.fake.writes).toEqual([
       { method: "POST", path: `/tasks/${TASK.sso}/comments`, params: { text: "Yes, the sandbox is ready for trainings.", plainText: "true" } },

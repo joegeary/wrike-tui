@@ -3,7 +3,7 @@ import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { contactName, statusOf } from "../app/selectors"
 import { EDIT_FIELDS, type Details, type EditField, type State } from "../app/state"
-import { htmlToMarkdown, htmlToText } from "../domain/description"
+import { htmlToMarkdown } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
@@ -149,9 +149,7 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
             <span fg={theme.accent}>{contactName(state, comment.authorId)}</span>
             <span fg={theme.dim}>{`  ${stamp(comment.createdDate)}`}</span>
           </text>
-          <text fg={theme.text} wrapMode="word">
-            {htmlToText(comment.text)}
-          </text>
+          <markdown syntaxStyle={style} content={htmlToMarkdown(comment.text)} />
         </box>
       ))}
     </>

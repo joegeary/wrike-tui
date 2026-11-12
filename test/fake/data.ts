@@ -282,7 +282,7 @@ export function seed(today: string, now: string) {
   // Newest first, the order Wrike returns.
   const comments: FakeComment[] = [
     comment("IEAAAAAAIMAAAA03", TASK.sso, PAT, `<a class="stream-user-id avatar" rel="${ME}">@Sam Sample</a> can we run trainings in the sandbox?`, 35),
-    comment("IEAAAAAAIMAAAA02", TASK.sso, ME, "Pilot accounts are created.<br />Waiting on the metadata file.", 60 * 26),
+    comment("IEAAAAAAIMAAAA02", TASK.sso, ME, 'Pilot accounts are created in <a href="https://example.test/pull/7">PR 7</a>.<br />Waiting on the metadata file.', 60 * 26),
     comment("IEAAAAAAIMAAAA01", TASK.sso, RILEY, "The identity provider team needs the entity ID by Friday.", 60 * 50),
     comment("IEAAAAAAIMAAAA04", TASK.login, PAT, "Repro steps attached, it loops after the callback.", 60 * 3),
   ]
