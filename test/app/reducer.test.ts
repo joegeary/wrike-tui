@@ -341,6 +341,14 @@ describe("results of writes", () => {
     expect(selectedTask(moved)?.title).toBe("Later task")
   })
 
+  test("a task I just took joins My to-do", () => {
+    const taken = task("T9", "Taken task", { type: "Milestone", due: "2026-11-12" })
+    const { state } = play(loaded(), "t", { type: "task-saved", done: "Assigned to you", result: { ok: true, value: taken } })
+    expect(listRows(state).map((row) => (row.kind === "heading" ? row.name : row.kind === "task" ? row.task.title : ""))).toEqual([
+      "Overdue", "Overdue task", "Today", "Taken task", "Later", "Later task", "No date", "Undated task",
+    ])
+  })
+
   test("a failed save keeps the task and shows Wrike's message", () => {
     const { state } = play(withOpen(overdue), { type: "task-saved", done: "x", result: { ok: false, error: { kind: "invalid", message: "Parameter 'title' value is invalid" } } })
     expect(state.flash).toEqual({ tone: "error", text: "Parameter 'title' value is invalid" })

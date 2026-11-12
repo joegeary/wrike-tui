@@ -137,11 +137,11 @@ function countIn(state: State, view: View): number {
   return itemCount({ ...state, view })
 }
 
-/** Puts a saved task everywhere it is shown. A task that is done or no longer mine leaves My to-do. */
+/** Puts a saved task everywhere it is shown. My to-do gains a task that became mine and loses one that is done or handed off. */
 function replaceTask(state: State, task: Task): State {
   const swap = (tasks: Task[]) => tasks.map((candidate) => (candidate.id === task.id ? task : candidate))
-  const mine = (tasks: Task[]) =>
-    swap(tasks).filter((candidate) => candidate.statusGroup === "Active" && candidate.assigneeIds.includes(state.profile.userId))
+  const isMine = (candidate: Task) => candidate.statusGroup === "Active" && candidate.assigneeIds.includes(state.profile.userId)
+  const mine = (tasks: Task[]) => (tasks.some((candidate) => candidate.id === task.id) ? swap(tasks) : [...tasks, task]).filter(isMine)
   const mapList = (list: Loadable<Task[]>, change: (tasks: Task[]) => Task[]): Loadable<Task[]> =>
     list.state === "ready" ? { state: "ready", value: change(list.value) } : list
   const details =
@@ -383,7 +383,7 @@ export const COMMANDS: Record<Command, (state: State) => Update> = {
   "pane-right": (state) => focusPane(state, PANES.indexOf(state.focus) + 1),
   "view-inbox": (state) => showView(state, "inbox", "list"),
   "view-todo": (state) => showView(state, "todo", "list"),
-  search: (state) => [{ ...state, view: "search", focus: "list", zoom: false, mode: { kind: "search-input", draft: state.searchQuery } }, []],
+  search: (state) => [{ ...state, view: "search", focus: "list", zoom: false, mode: { kind: "search-input", draft: "" } }, []],
   refresh: (state) => {
     const [listed, effects] = loadList(state, state.view)
     if (!listed.openTaskId) return [listed, effects]
