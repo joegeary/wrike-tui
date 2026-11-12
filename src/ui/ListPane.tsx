@@ -6,9 +6,9 @@ import { dueDay, permalinkId, startDay, type InboxEntry } from "../domain/model"
 import { scopeTitle } from "../domain/scope"
 import type { ListRow } from "../domain/shape"
 import { retryText } from "../wrike/errors"
-import { fit, fitAfter, fitRight, humanize, listDay, relativeTime } from "./format"
+import { fit, fitAfter, fitRight, humanize, listDay, relativeTime, truncate } from "./format"
 import { windowCount, windowStart } from "./layout"
-import { Pane } from "./Pane"
+import { Pane, titleRoom } from "./Pane"
 import { statusColor, useTheme, type Color, type Theme } from "./theme"
 import { TextInput } from "./TextInput"
 
@@ -32,7 +32,8 @@ export function fittingColumns(columns: ColumnKey[], width: number): ColumnKey[]
   return kept
 }
 
-function paneTitle(state: State): string {
+/** The scope, how much is loaded and how it is shaped. A long scope name gives way, so the count and the shaping always show. */
+function paneTitle(state: State, room: number): string {
   const { scope } = state
   if (scope.kind === "inbox") {
     const refreshing = state.inbox.state === "loading" && state.inbox.previous ? " (refreshing)" : ""
@@ -48,7 +49,8 @@ function paneTitle(state: State): string {
   ]
   const count = loaded ? `  ${list.items.length}${list.next === null ? "" : "+"}` : ""
   const refreshing = list?.loading === "first" && list.items.length > 0 ? " (refreshing)" : ""
-  return `${scopeTitle(scope)}${count}${parts.map((part) => ` · ${part}`).join("")}${refreshing}`
+  const shaping = `${count}${parts.map((part) => ` · ${part}`).join("")}${refreshing}`
+  return `${truncate(scopeTitle(scope), Math.max(6, room - Bun.stringWidth(shaping)))}${shaping}`
 }
 
 function emptyText(state: State): string {
@@ -185,7 +187,7 @@ export function ListPane(props: { state: State; width: number; height: number; o
   const nested = rows.some((row) => row.kind === "task" && (row.hasChildren || row.depth > 0))
 
   return (
-    <Pane number={2} title={paneTitle(state)} width={props.width} focused={state.focus === "list" && state.mode.kind === "browse"}>
+    <Pane number={2} title={paneTitle(state, titleRoom(props.width))} width={props.width} focused={state.focus === "list" && state.mode.kind === "browse"}>
       {typing ? (
         <box flexDirection="row" height={1}>
           <text fg={theme.accent}>{typing.kind === "search-input" ? "/ " : "f "}</text>

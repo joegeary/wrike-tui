@@ -290,7 +290,7 @@ describe("a wide terminal", () => {
 
   test("read-only mode refuses every write and says so", async () => {
     await launch(tmux, "WRIKE_TUI_NO_RESTORE=1 WRIKE_TUI_READ_ONLY=1")
-    await tmux.see("read-only-launch", "2 Inbox", "Sam Sample · read-only")
+    await tmux.see("read-only-launch", "2 Inbox", /q quit {2}read-only\s*$/m)
     const writes = e2e.fake.writes.length
     await tmux.keys("Enter")
     await tmux.see("read-only-task", "Comments (3)")
@@ -368,7 +368,7 @@ describe("80 by 24", () => {
     await tmux.keys("f")
     await tmux.type("fix")
     await tmux.keys("Enter")
-    fits(await tmux.see("filtered", "2 Platform  8 · assignee · 1 filt…", "Fix login redirect loop", absent("Enable SSO")))
+    fits(await tmux.see("filtered", "2 Platform  8 · assignee · 1 filter", "Fix login redirect loop", absent("Enable SSO")))
     await palette(tmux, "clear the filters")
     await tmux.keys("1")
     for (let step = 0; step < 6; step++) await tmux.keys("j")

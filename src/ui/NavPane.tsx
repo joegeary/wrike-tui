@@ -74,14 +74,13 @@ export function NavPane({ state, width, height }: { state: State; width: number;
   if (start > 0 && start === cursorIndex && !isSelectable(rows[start - 1]!)) start -= 1
   first.current = start
   const visible = rows.slice(start, start + windowCount(heights, start, available))
-  const who = `${state.profile.name}${state.readOnly ? " · read-only" : ""}`
   return (
     <Pane number={1} title="Wrike" width={width} focused={state.focus === "nav" && state.mode.kind === "browse"}>
       {visible.map((row, offset) => (
         <Row key={"path" in row ? row.path : `${row.kind}-${start + offset}`} row={row} state={state} width={inner} selected={row === cursor} theme={theme} />
       ))}
       <box flexGrow={1} />
-      <text wrapMode="none" fg={state.readOnly ? theme.warning : theme.dim}>{` ${fit(who, inner - 1)}`}</text>
+      <text wrapMode="none" fg={theme.dim}>{` ${fit(state.profile.name, inner - 1)}`}</text>
     </Pane>
   )
 }

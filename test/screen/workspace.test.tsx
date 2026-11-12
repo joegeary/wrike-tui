@@ -539,7 +539,11 @@ describe("Reloading and read-only mode", () => {
   test("read-only mode refuses a save before it is sent and says so", async () => {
     app = await openApp(WIDE, { readOnly: true })
     const frame = await app.see("Enable SSO on sandbox")
-    expect(frame).toContain("Sam Sample · read-only")
+    expect(frame.trimEnd()).toEndWith("q quit  read-only")
+    app.resize(80, 24)
+    expect((await app.see("2 Inbox")).trimEnd()).toEndWith("c comment  read-only")
+    app.resize(WIDE.width, WIDE.height)
+    await app.see("1 Wrike")
     await app.press("enter")
     await app.see("Comments (3)")
     await app.press("p", "down", "enter")

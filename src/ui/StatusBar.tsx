@@ -25,12 +25,15 @@ function message(state: State, theme: Theme): { text: string; color: Color } {
   return { text: "", color: theme.dim }
 }
 
-/** One line: what just happened on the left, the keys that work here on the right. */
+const READ_ONLY = "read-only "
+
+/** One line: what just happened on the left, the keys that work here on the right, and a standing mark while writes are refused. */
 export function StatusBar({ state, width }: { state: State; width: number }) {
   const theme = useTheme()
   const { text, color } = message(state, theme)
   const hintWidth = (hint: Hint) => Bun.stringWidth(hint.key) + 1 + Bun.stringWidth(hint.text) + 2
-  const room = Math.max(0, width - 2 - Math.min(Bun.stringWidth(text), Math.floor(width / 2)) - 2)
+  const mark = state.readOnly ? READ_ONLY : ""
+  const room = Math.max(0, width - 2 - Math.min(Bun.stringWidth(text), Math.floor(width / 2)) - 2 - mark.length)
   const fitting: Hint[] = []
   let used = 0
   for (const hint of hints(state)) {
@@ -40,7 +43,7 @@ export function StatusBar({ state, width }: { state: State; width: number }) {
   }
   return (
     <box height={1} width={width} flexDirection="row" backgroundColor={theme.panel}>
-      <text wrapMode="none" fg={color}>{` ${fit(text, Math.max(0, width - used - 2))}`}</text>
+      <text wrapMode="none" fg={color}>{` ${fit(text, Math.max(0, width - used - mark.length - 2))}`}</text>
       <text wrapMode="none">
         {fitting.map((hint) => (
           <span key={hint.key + hint.text}>
@@ -48,6 +51,7 @@ export function StatusBar({ state, width }: { state: State; width: number }) {
             <span fg={theme.dim}>{` ${hint.text}  `}</span>
           </span>
         ))}
+        <span fg={theme.warning}>{mark}</span>
       </text>
     </box>
   )
