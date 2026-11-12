@@ -1,61 +1,85 @@
 import { useRef } from "react"
-import { listRows, statusOf, type ListRow } from "../app/selectors"
-import type { Loadable, State, View } from "../app/state"
-import { dueDay, type InboxEntry, type Task } from "../domain/model"
+import { contactName, currentList, currentView, folderTitles, listCursor, listRows, statusOf, type PaneRow } from "../app/selectors"
+import type { State } from "../app/state"
+import type { ColumnKey, GroupKey } from "../domain/list"
+import { dueDay, permalinkId, startDay, type InboxEntry } from "../domain/model"
+import { scopeTitle } from "../domain/scope"
+import type { ListRow } from "../domain/shape"
 import { retryText } from "../wrike/errors"
-import { fit, fitRight, humanize, listDay, relativeTime } from "./format"
+import { fit, fitAfter, fitRight, humanize, listDay, relativeTime } from "./format"
 import { windowCount, windowStart } from "./layout"
 import { Pane } from "./Pane"
-import { statusColor, theme } from "./theme"
+import { statusColor, useTheme, type Color, type Theme } from "./theme"
 import { TextInput } from "./TextInput"
 
-const TITLES: Record<View, string> = { inbox: "Inbox", todo: "My to-do", search: "Search" }
-const STATUS_WIDTH = 13
-const DUE_WIDTH = 9
-/** Below this inner width a task row drops its status column. */
-const WIDE_ROW = 52
+/** The columns a row gives each field, its separating space included. The title takes what is left. */
+const COLUMN_WIDTHS: Record<Exclude<ColumnKey, "title">, number> = { importance: 2, status: 14, assignees: 15, due: 9, start: 9, updated: 8, folder: 17, id: 12 }
+/** When the title would get fewer columns than this, columns are dropped, the first of these first. */
+const MIN_TITLE = 24
+const DROP_ORDER: ColumnKey[] = ["id", "folder", "start", "updated", "assignees", "status"]
+const GROUP_LABELS: Record<GroupKey, string> = { status: "status", importance: "importance", assignee: "assignee", due: "due", folder: "folder", none: "" }
 
-const rowHeight = (row: ListRow) => (row.kind === "entry" ? 2 : 1)
+const rowHeight = (row: PaneRow) => (row.kind === "entry" ? 2 : 1)
+
+/** The columns that fit, in the order the spec lists them, always with the title. */
+export function fittingColumns(columns: ColumnKey[], width: number): ColumnKey[] {
+  let kept = columns.includes("title") ? columns : (["title", ...columns] as ColumnKey[])
+  const fixed = (list: ColumnKey[]) => list.reduce((sum, column) => sum + (column === "title" ? 0 : COLUMN_WIDTHS[column]), 0)
+  for (const drop of DROP_ORDER) {
+    if (width - fixed(kept) >= MIN_TITLE) break
+    kept = kept.filter((column) => column !== drop)
+  }
+  return kept
+}
 
 function paneTitle(state: State): string {
-  const list = state.lists[state.view]
-  const suffix = list.state === "loading" && list.previous ? " (refreshing)" : ""
-  if (state.view === "inbox") return `${TITLES.inbox}${state.includeRead ? " (with read)" : ""}${suffix}`
-  if (state.view === "search" && state.searchQuery) return `${TITLES.search}: ${state.searchQuery}${suffix}`
-  return `${TITLES[state.view]}${suffix}`
+  const { scope } = state
+  if (scope.kind === "inbox") {
+    const refreshing = state.inbox.state === "loading" && state.inbox.previous ? " (refreshing)" : ""
+    return `Inbox${state.includeRead ? " (with read)" : ""}${refreshing}`
+  }
+  const list = currentList(state)
+  const { spec } = currentView(state)
+  const loaded = list && (list.items.length > 0 || (list.loading === null && list.error === null))
+  const parts = [
+    ...(spec.group === "none" ? [] : [GROUP_LABELS[spec.group]]),
+    ...(spec.filters.length > 0 ? [`${spec.filters.length} ${spec.filters.length === 1 ? "filter" : "filters"}`] : []),
+    ...(spec.completed && scope.kind !== "search" ? ["all statuses"] : []),
+  ]
+  const count = loaded ? `  ${list.items.length}${list.next === null ? "" : "+"}` : ""
+  const refreshing = list?.loading === "first" && list.items.length > 0 ? " (refreshing)" : ""
+  return `${scopeTitle(scope)}${count}${parts.map((part) => ` · ${part}`).join("")}${refreshing}`
 }
 
 function emptyText(state: State): string {
-  switch (state.view) {
-    case "inbox":
-      return state.includeRead ? "The Inbox is empty." : "No unread notifications. Press a to show read ones."
+  const { scope } = state
+  const { spec } = currentView(state)
+  if (scope.kind === "inbox") return state.includeRead ? "The Inbox is empty." : "No unread notifications. Press a to show read ones."
+  if (spec.filters.length > 0 && (currentList(state)?.items.length ?? 0) > 0) return "No loaded task matches the filters. Press : and clear them."
+  switch (scope.kind) {
     case "todo":
       return "No active task is assigned to you."
     case "search":
-      return `No task matches "${state.searchQuery}".`
+      return `No task matches "${scope.query}".`
+    case "space":
+    case "folder":
+      return spec.completed ? "No tasks here." : "No active task here. Press x to show completed ones."
   }
 }
 
-function Notice({ list, state, width }: { list: Loadable<unknown[]>; state: State; width: number }) {
-  if (list.state === "error") {
-    return (
-      <text fg={theme.error} wrapMode="word" width={width}>
-        {retryText(list.error)}
-      </text>
-    )
-  }
-  if (list.state === "idle") {
-    return <text fg={theme.dim} wrapMode="word" width={width}>Press / to search by title, or paste a permalink or a task ID.</text>
-  }
-  if (list.state === "loading" && !list.previous) return <text fg={theme.dim}>Loading...</text>
-  if (list.state === "ready" && list.value.length === 0) {
-    return <text fg={theme.dim} wrapMode="word" width={width}>{emptyText(state)}</text>
-  }
-  return null
+function Notice({ state, width, theme, empty }: { state: State; width: number; theme: Theme; empty: boolean }) {
+  const list = currentList(state)
+  const error = state.scope.kind === "inbox" ? (state.inbox.state === "error" ? state.inbox.error : null) : (list?.error ?? null)
+  const loading = state.scope.kind === "inbox" ? state.inbox.state === "loading" || state.inbox.state === "idle" : !list || list.loading === "first"
+  if (error) return <text fg={theme.error} wrapMode="word" width={width}>{retryText(error)}</text>
+  if (!empty) return null
+  if (loading) return <text fg={theme.dim}>Loading...</text>
+  return <text fg={theme.dim} wrapMode="word" width={width}>{emptyText(state)}</text>
 }
 
-function EntryRow({ entry, state, width, selected }: { entry: InboxEntry; state: State; width: number; selected: boolean }) {
+function EntryRow({ entry, state, width, selected, theme }: { entry: InboxEntry; state: State; width: number; selected: boolean; theme: Theme }) {
   const bg = selected ? theme.selection : undefined
+  const dim = selected ? theme.selectedDim : theme.dim
   // A type this version does not know keeps Wrike's own name for it, as the title when there is no item.
   const other = entry.kind === "Other" ? humanize(entry.label) : null
   const kind = fit(entry.kind, 8)
@@ -67,81 +91,120 @@ function EntryRow({ entry, state, width, selected }: { entry: InboxEntry; state:
   return (
     <>
       <text wrapMode="none" bg={bg}>
-        <span fg={entry.unread ? theme.accent : theme.dim}>{entry.unread ? "● " : "○ "}</span>
+        <span fg={entry.unread ? theme.accent : dim}>{entry.unread ? "● " : "○ "}</span>
         <span fg={theme.heading}>{`${kind} `}</span>
-        <span fg={entry.item ? theme.text : theme.dim}>{title}</span>
-        <span fg={theme.dim}>{` ${when}`}</span>
+        <span fg={entry.item ? theme.text : dim}>{title}</span>
+        <span fg={dim}>{` ${when}`}</span>
       </text>
-      <text wrapMode="none" bg={bg} fg={theme.dim}>
+      <text wrapMode="none" bg={bg} fg={dim}>
         {`  ${fit(second, width - 2)}`}
       </text>
     </>
   )
 }
 
-function TaskRow({ task, state, width, selected }: { task: Task; state: State; width: number; selected: boolean }) {
-  const status = statusOf(state, task)
+type Cell = { text: string; fg: Color }
+
+function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns: ColumnKey[]; width: number; nested: boolean; selected: boolean; theme: Theme }) {
+  const { row, state, theme, selected } = props
+  const { task } = row
+  const dim = selected ? theme.selectedDim : theme.dim
   const due = dueDay(task.dates)
+  const start = startDay(task.dates)
   const overdue = due !== null && due < state.clock.today && task.statusGroup === "Active"
-  const wide = width >= WIDE_ROW
-  const titleWidth = Math.max(0, width - 2 - (wide ? STATUS_WIDTH + 1 : 0) - DUE_WIDTH)
-  const marker = task.importance === "High" ? "!" : task.importance === "Low" ? "↓" : " "
+  const titleWidth = Math.max(0, props.width - props.columns.reduce((sum, column) => sum + (column === "title" ? 0 : COLUMN_WIDTHS[column]), 0))
+  const cell = (column: ColumnKey): Cell => {
+    switch (column) {
+      case "importance":
+        return { text: task.importance === "High" ? "! " : task.importance === "Low" ? "↓ " : "  ", fg: task.importance === "High" ? theme.error : dim }
+      case "title": {
+        const marker = props.nested ? (row.hasChildren ? (row.expanded ? "▾ " : "▸ ") : "  ") : ""
+        return { text: fitAfter(`${"  ".repeat(row.depth)}${marker}`, task.title, titleWidth), fg: task.statusGroup === "Active" ? theme.text : dim }
+      }
+      case "status": {
+        const status = statusOf(state, task)
+        return { text: ` ${fit(status?.name ?? task.statusGroup, COLUMN_WIDTHS.status - 1)}`, fg: statusColor(theme, status?.color) }
+      }
+      case "assignees":
+        return { text: ` ${fit(task.assigneeIds.map((id) => contactName(state, id).split(" ")[0]).join(", "), COLUMN_WIDTHS.assignees - 1)}`, fg: dim }
+      case "due":
+        return { text: fitRight(due ? listDay(due, state.clock.today) : "", COLUMN_WIDTHS.due), fg: overdue ? theme.error : dim }
+      case "start":
+        return { text: fitRight(start ? listDay(start, state.clock.today) : "", COLUMN_WIDTHS.start), fg: dim }
+      case "updated":
+        return { text: fitRight(relativeTime(task.updatedDate, state.clock.now), COLUMN_WIDTHS.updated), fg: dim }
+      case "folder": {
+        const titles = folderTitles(state.trees)
+        const parent = task.parentIds.find((id) => titles.has(id))
+        return { text: ` ${fit(parent ? titles.get(parent)! : "", COLUMN_WIDTHS.folder - 1)}`, fg: dim }
+      }
+      case "id":
+        return { text: fitRight(permalinkId(task.permalink) ?? "", COLUMN_WIDTHS.id), fg: dim }
+    }
+  }
   return (
     <text wrapMode="none" bg={selected ? theme.selection : undefined}>
-      <span fg={task.importance === "High" ? theme.error : theme.dim}>{`${marker} `}</span>
-      <span fg={task.statusGroup === "Active" ? theme.text : theme.dim}>{fit(task.title, titleWidth)}</span>
-      {wide ? <span fg={statusColor(status?.color)}>{` ${fit(status?.name ?? task.statusGroup, STATUS_WIDTH)}`}</span> : null}
-      <span fg={overdue ? theme.error : theme.dim}>{fitRight(due ? listDay(due, state.clock.today) : "", DUE_WIDTH)}</span>
+      {props.columns.map((column) => {
+        const { text, fg } = cell(column)
+        return <span key={column} fg={fg}>{text}</span>
+      })}
     </text>
   )
 }
 
-function Heading({ row, width }: { row: ListRow & { kind: "heading" }; width: number }) {
-  const label = `── ${row.name} ${row.count} `
+function GroupRow({ row, width, selected, theme }: { row: ListRow & { kind: "group" }; width: number; selected: boolean; theme: Theme }) {
+  const lead = `${"  ".repeat(row.depth)}${row.collapsed ? "▸" : "▾"} `
+  const label = fit(`${row.label} ${row.count}`, Math.min(Bun.stringWidth(`${row.label} ${row.count}`), Math.max(0, width - lead.length - 1)))
   return (
-    <text wrapMode="none" fg={row.name === "Overdue" ? theme.error : theme.heading}>
-      {label + "─".repeat(Math.max(0, width - Bun.stringWidth(label)))}
+    <text wrapMode="none" bg={selected ? theme.selection : undefined} fg={row.label === "Overdue" ? theme.error : theme.heading}>
+      {`${lead}${label} ${"─".repeat(Math.max(0, width - Bun.stringWidth(lead) - Bun.stringWidth(label) - 1))}`}
     </text>
   )
 }
 
 export function ListPane(props: { state: State; width: number; height: number; onDraft: (text: string) => void }) {
   const { state } = props
+  const theme = useTheme()
   const inner = props.width - 2
-  const searching = state.mode.kind === "search-input"
+  const { mode } = state
+  const typing = mode.kind === "search-input" || mode.kind === "filter-input" ? mode : null
   const rows = listRows(state)
   const heights = rows.map(rowHeight)
-  const cursor = state.cursor[state.view]
-  const cursorRow = rows.findIndex((row) => row.kind !== "heading" && row.index === cursor)
-  const list: Loadable<unknown[]> = state.lists[state.view]
-  const notice = <Notice list={list} state={state} width={inner} />
-  const showsNotice = list.state === "error" || rows.length === 0
-  const available = props.height - 2 - (searching ? 1 : 0) - (list.state === "error" ? 2 : 0)
+  const cursor = listCursor(state)
+  const failed = state.scope.kind === "inbox" ? state.inbox.state === "error" : Boolean(currentList(state)?.error)
+  const available = props.height - 2 - (typing ? 1 : 0) - (failed ? 2 : 0)
 
   const firstRow = useRef(0)
-  let start = windowStart(heights, Math.max(0, cursorRow), available, firstRow.current)
-  // Keep a bucket heading on screen with its first task.
-  if (start > 0 && start === cursorRow && rows[start - 1]?.kind === "heading" && heights[start]! < available) start -= 1
+  const start = windowStart(heights, Math.max(0, cursor), available, firstRow.current)
   firstRow.current = start
   const visible = rows.slice(start, start + windowCount(heights, start, available))
+  const columns = fittingColumns(currentView(state).spec.columns, inner)
+  const nested = rows.some((row) => row.kind === "task" && (row.hasChildren || row.depth > 0))
 
   return (
     <Pane number={2} title={paneTitle(state)} width={props.width} focused={state.focus === "list" && state.mode.kind === "browse"}>
-      {state.mode.kind === "search-input" ? (
+      {typing ? (
         <box flexDirection="row" height={1}>
-          <text fg={theme.accent}>/ </text>
-          <TextInput value={state.mode.draft} placeholder="title, permalink or task ID" onInput={props.onDraft} />
+          <text fg={theme.accent}>{typing.kind === "search-input" ? "/ " : "f "}</text>
+          <TextInput value={typing.draft} placeholder={typing.kind === "search-input" ? "title, permalink or task ID" : "title contains"} onInput={props.onDraft} />
         </box>
       ) : null}
-      {showsNotice ? notice : null}
-      {visible.map((row) => {
+      <Notice state={state} width={inner} theme={theme} empty={rows.length === 0} />
+      {visible.map((row, offset) => {
+        const selected = start + offset === cursor
         switch (row.kind) {
-          case "heading":
-            return <Heading key={`heading-${row.name}`} row={row} width={inner} />
+          case "group":
+            return <GroupRow key={row.id} row={row} width={inner} selected={selected} theme={theme} />
           case "entry":
-            return <EntryRow key={row.entry.id} entry={row.entry} state={state} width={inner} selected={row.index === cursor} />
+            return <EntryRow key={row.id} entry={row.entry} state={state} width={inner} selected={selected} theme={theme} />
           case "task":
-            return <TaskRow key={row.task.id} task={row.task} state={state} width={inner} selected={row.index === cursor} />
+            return <TaskRow key={row.id} row={row} state={state} columns={columns} width={inner} nested={nested} selected={selected} theme={theme} />
+          case "more":
+            return (
+              <text key={row.id} wrapMode="none" bg={selected ? theme.selection : undefined} fg={selected ? theme.selectedDim : theme.dim}>
+                {fitAfter("  ", `${row.label}${row.label === "Load more" ? ", press Enter" : ""}`, inner)}
+              </text>
+            )
         }
       })}
     </Pane>

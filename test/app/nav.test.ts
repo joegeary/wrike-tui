@@ -108,14 +108,14 @@ describe("navRows", () => {
 
   test("a tree that failed says so under its space, and a reload keeps the old tree drawn", () => {
     const failed = navRows(input({ trees: new Map([[ENG, { state: "error", error: { kind: "rate_limited" } }]]), expanded: new Set([spacePath(ENG)]) }))
-    expect(sketch(failed).slice(5, 7)).toEqual(["v Engineering", "  (Could not load the folders)"])
+    expect(sketch(failed).slice(5, 7)).toEqual(["v Engineering", "  (Could not load, press r)"])
     const reloading = navRows(input({ trees: new Map([[ENG, { state: "loading", previous: engTree }]]), expanded: new Set([spacePath(ENG)]) }))
     expect(sketch(reloading).slice(5, 8)).toEqual(["v Engineering", "  > Folder A", "  . Folder B"])
   })
 
   test("the spaces list loading, failed and empty", () => {
     expect(sketch(navRows(input({ spaces: { state: "loading" } }))).slice(3)).toEqual(["# Spaces", "(Loading...)"])
-    expect(sketch(navRows(input({ spaces: { state: "error", error: { kind: "unauthorized" } } }))).slice(3)).toEqual(["# Spaces", "(Could not load the spaces)"])
+    expect(sketch(navRows(input({ spaces: { state: "error", error: { kind: "unauthorized" } } }))).slice(3)).toEqual(["# Spaces", "(Could not load, press r)"])
     expect(sketch(navRows(input({ spaces: { state: "ready", value: [] } }))).slice(3)).toEqual(["# Spaces", "(No spaces)"])
     expect(sketch(navRows(input({ spaces: { state: "loading", previous: spaces } }))).slice(3)).toHaveLength(4)
   })

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
-import { theme } from "./theme"
+import { useTheme } from "./theme"
 
 export function Pane(props: { number: number; title: string; width: number; focused: boolean; children: ReactNode }) {
+  const theme = useTheme()
   return (
     <box
       border

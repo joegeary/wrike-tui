@@ -8,14 +8,16 @@ import { Help } from "./Help"
 import { MIN_HEIGHT, MIN_WIDTH, paneWidths } from "./layout"
 import { ListPane } from "./ListPane"
 import { NavPane } from "./NavPane"
+import { Palette } from "./Palette"
 import { Picker } from "./Picker"
 import { StatusBar } from "./StatusBar"
-import { theme } from "./theme"
+import { ThemeProvider, THEMES } from "./theme"
 
 export function App({ store, bridge }: { store: Store; bridge: UiBridge }) {
   const state = useSyncExternalStore(store.subscribe, store.getState)
   const screen = useTerminalDimensions()
   const onDraft = useCallback((text: string) => store.dispatch({ type: "draft", text }), [store])
+  const theme = THEMES[state.settings.theme]
 
   useKeyboard((event) => {
     const key = normalizeKey(event)
@@ -30,18 +32,21 @@ export function App({ store, bridge }: { store: Store; bridge: UiBridge }) {
     )
   }
 
-  const widths = paneWidths(screen.width, state.focus, state.zoom)
+  const widths = paneWidths(screen.width, state.focus, state.zoom, state.settings.navWidth)
   const { mode } = state
   return (
-    <box width="100%" height="100%" flexDirection="column" backgroundColor={theme.background}>
-      <box flexDirection="row" flexGrow={1} flexShrink={1}>
-        {widths.nav > 0 ? <NavPane state={state} width={widths.nav} /> : null}
-        {widths.list > 0 ? <ListPane state={state} width={widths.list} height={screen.height - 1} onDraft={onDraft} /> : null}
-        {widths.details > 0 ? <DetailsPane state={state} width={widths.details} bridge={bridge} onDraft={onDraft} /> : null}
+    <ThemeProvider value={theme}>
+      <box width="100%" height="100%" flexDirection="column" backgroundColor={theme.background}>
+        <box flexDirection="row" flexGrow={1} flexShrink={1}>
+          {widths.nav > 0 ? <NavPane state={state} width={widths.nav} height={screen.height - 1} /> : null}
+          {widths.list > 0 ? <ListPane state={state} width={widths.list} height={screen.height - 1} onDraft={onDraft} /> : null}
+          {widths.details > 0 ? <DetailsPane state={state} width={widths.details} bridge={bridge} onDraft={onDraft} /> : null}
+        </box>
+        <StatusBar state={state} width={screen.width} />
+        {mode.kind === "picker" ? <Picker state={state} mode={mode} screen={screen} /> : null}
+        {mode.kind === "palette" ? <Palette state={state} mode={mode} screen={screen} /> : null}
+        {mode.kind === "help" ? <Help state={state} screen={screen} bridge={bridge} /> : null}
       </box>
-      <StatusBar state={state} width={screen.width} />
-      {mode.kind === "picker" ? <Picker state={state} mode={mode} screen={screen} /> : null}
-      {mode.kind === "help" ? <Help state={state} screen={screen} /> : null}
-    </box>
+    </ThemeProvider>
   )
 }

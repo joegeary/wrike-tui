@@ -25,7 +25,7 @@ describe("Inbox", () => {
     expect(inbox).toContain("Pat Example: @Sam Sample can we run trainings in the sandbox?")
     expect(inbox).toMatch(/● Assign\s+Rotate API keys for the staging cluster\s+2h/)
     expect(inbox).toMatch(/● Other\s+Approval requested\s+1d/)
-    expect(inbox).toMatch(/▸ Inbox\s+6 /)
+    expect(inbox).toMatch(/│ {3}Inbox\s+6 │/)
     expect(inbox).not.toContain("Added the escalation matrix")
 
     await app.press("enter")
@@ -68,16 +68,16 @@ test("My to-do groups my active tasks by due date", async () => {
   await app.press("t")
   const frame = await app.see("2 My to-do", "Overdue 1")
   const expected = [
-    "── Overdue 1",
+    "▾ Overdue 1",
     "! Enable SSO on sandbox",
-    "── Today 1",
+    "▾ Today 1",
     "Rotate API keys for the staging cluster",
-    "── This week 1",
+    "▾ This week 1",
     "Draft the Q4 launch checklist",
-    "── Later 2",
+    "▾ Later 2",
     "↓ Write onboarding guide for new support agents",
     "↓ Archive last year's dashboards",
-    "── No date 1",
+    "▾ No date 1",
     "Clean up stale feature flags",
   ]
   const lines = listPane(frame)
@@ -97,7 +97,7 @@ describe("Search", () => {
     await app.press("enter")
     const frame = await app.see("2 Search: fix", "Fix login redirect loop")
     expect(frame).toMatch(/Fix flaky export test\s+Completed/)
-    expect(frame).toMatch(/Search\s+fix /)
+    expect(frame).toMatch(/│ {3}Search\s+2 │/)
   })
 
   test("a pasted permalink opens that task", async () => {
@@ -361,7 +361,7 @@ describe("Failures", () => {
     app = await openApp(WIDE)
     await app.see("Enable SSO on sandbox")
     app.fake.fail({ path: "/api/v4/tasks", status: 500 })
-    await app.press("t", "r")
+    await app.press("t")
     const failed = await app.see("Wrike failed with 500: Injected failure. Press r to retry.")
     expect(failed).toContain("Overdue 1")
     await app.press("r")
@@ -382,7 +382,7 @@ describe("Failures", () => {
   test("a task whose status belongs to a space workflow still shows and changes status", async () => {
     app = await openApp(WIDE)
     await app.see("Enable SSO on sandbox")
-    await app.press("t", "j", "j", "j", "enter")
+    await app.press("t", "j", "j", "j", "j", "j", "j", "enter")
     await app.see("Cover the queue views", /Status\s+● Triage/)
     await app.press("s")
     await app.see("Waiting on customer")

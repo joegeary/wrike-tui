@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
-import { theme } from "./theme"
+import { useTheme } from "./theme"
 
 export function Overlay(props: { title: string; width: number; height: number; screen: { width: number; height: number }; children: ReactNode }) {
+  const theme = useTheme()
   const width = Math.min(props.width, props.screen.width - 2)
   const height = Math.min(props.height, props.screen.height - 1)
   return (

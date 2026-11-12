@@ -1,7 +1,8 @@
 import { descriptionFromEdit, editableDescription } from "../domain/description"
-import type { WrikeClient } from "../wrike/client"
+import type { Persistence } from "../persist/persistence"
+import type { TaskPage, WrikeClient } from "../wrike/client"
 import { toWrikeError, WrikeFailure } from "../wrike/errors"
-import type { Action, Clock, Details, Effect, OpenTarget, Result } from "./state"
+import type { Action, Clock, Details, Effect, OpenTarget, Result, ScrollTo, TaskSource } from "./state"
 
 export type EffectDeps = {
   client: WrikeClient
@@ -11,7 +12,8 @@ export type EffectDeps = {
   openUrl(url: string): Promise<void>
   /** False when the terminal cannot take a clipboard write. */
   copy(text: string): boolean
-  scrollDetails(to: "up" | "down" | "top" | "bottom"): void
+  scroll(pane: "details" | "help", to: ScrollTo): void
+  persistence: Persistence
   quit(): void
 }
 
@@ -30,6 +32,32 @@ async function loadDetails(client: WrikeClient, target: OpenTarget): Promise<Det
   // Folder titles are decoration, and a parent the token cannot read must not hide the task.
   const folders = await client.folders(task.parentIds).catch(() => [])
   return { task, comments, folders }
+}
+
+/** One page of a paged list, or the single task a permalink or an ID names. */
+async function loadTasks(client: WrikeClient, source: TaskSource, completed: boolean, pageToken: string | null): Promise<TaskPage> {
+  switch (source.kind) {
+    case "permalink": {
+      const task = await client.taskByPermalink(source.url)
+      return { tasks: task ? [task] : [], next: null }
+    }
+    case "legacy-id": {
+      const id = await client.taskIdFromLegacy(source.id)
+      return { tasks: id ? [await client.task(id)] : [], next: null }
+    }
+    default:
+      return client.tasks(source, { completed, ...(pageToken ? { pageToken } : {}) })
+  }
+}
+
+/** A write to disk that failed is reported once and never stops the session. */
+async function persist(dispatch: (action: Action) => void, what: string, write: () => Promise<void>): Promise<void> {
+  try {
+    await write()
+  } catch (thrown) {
+    const reason = thrown instanceof Error ? thrown.message : String(thrown)
+    dispatch({ type: "flash", flash: { tone: "error", text: `Could not save ${what}: ${reason}` } })
+  }
 }
 
 /** The edited text, null for no change, or undefined after reporting that the editor could not run. */
@@ -65,27 +93,24 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       const result = await attempt(() => client.inbox({ includeRead: effect.includeRead }))
       return dispatch({ type: "inbox-loaded", request: effect.request, clock: deps.clock(), result })
     }
-    case "load-todo": {
-      const result = await attempt(async () => (await client.tasks({ kind: "mine", user: effect.user }, { completed: false })).tasks)
-      return dispatch({ type: "todo-loaded", request: effect.request, clock: deps.clock(), result })
+    case "load-tasks": {
+      const result = await attempt(() => loadTasks(client, effect.source, effect.completed, effect.pageToken))
+      const jump = effect.source.kind === "permalink" || effect.source.kind === "legacy-id"
+      return dispatch({ type: "tasks-loaded", key: effect.key, request: effect.request, clock: deps.clock(), more: effect.pageToken !== null, jump, result })
     }
-    case "search": {
-      const { query } = effect
-      const result = await attempt(async () => {
-        switch (query.kind) {
-          case "title":
-            return (await client.tasks({ kind: "title", text: query.text }, { completed: true })).tasks
-          case "permalink": {
-            const task = await client.taskByPermalink(query.url)
-            return task ? [task] : []
-          }
-          case "legacy-id": {
-            const id = await client.taskIdFromLegacy(query.id)
-            return id ? [await client.task(id)] : []
-          }
-        }
-      })
-      return dispatch({ type: "search-loaded", request: effect.request, jump: query.kind !== "title", result })
+    case "load-spaces": {
+      if (effect.cached) {
+        const cached = await deps.persistence.loadSpaces().catch(() => null)
+        if (cached?.value) dispatch({ type: "spaces-loaded", request: effect.request, from: "cache", result: { ok: true, value: cached.value.value } })
+      }
+      return dispatch({ type: "spaces-loaded", request: effect.request, from: "wrike", result: await attempt(() => client.spaces()) })
+    }
+    case "load-tree": {
+      if (effect.cached) {
+        const cached = await deps.persistence.loadTree(effect.space).catch(() => null)
+        if (cached?.value) dispatch({ type: "tree-loaded", space: effect.space, request: effect.request, from: "cache", result: { ok: true, value: cached.value.value } })
+      }
+      return dispatch({ type: "tree-loaded", space: effect.space, request: effect.request, from: "wrike", result: await attempt(() => client.spaceTree(effect.space)) })
     }
     case "load-details":
       return dispatch({ type: "details-loaded", request: effect.request, result: await attempt(() => loadDetails(client, effect.target)) })
@@ -118,8 +143,16 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
         dispatch({ type: "flash", flash: { tone: "error", text: "This terminal does not accept clipboard writes (OSC 52)" } })
       }
       return
-    case "scroll-details":
-      return deps.scrollDetails(effect.to)
+    case "scroll":
+      return deps.scroll(effect.pane, effect.to)
+    case "save-favorites":
+      return persist(dispatch, "the favorites", () => deps.persistence.saveFavorites(effect.favorites))
+    case "save-config":
+      return persist(dispatch, "the config", () => deps.persistence.saveConfig(effect.settings))
+    case "cache-spaces":
+      return deps.persistence.saveSpaces(effect.spaces).catch(() => {})
+    case "cache-tree":
+      return deps.persistence.saveTree(effect.space, effect.tree).catch(() => {})
     case "quit":
       return deps.quit()
   }

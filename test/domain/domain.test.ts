@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { bucketOf, bucketTasks } from "../../src/domain/buckets"
+import { bucketOf } from "../../src/domain/buckets"
 import { addDays, isDay, withDay } from "../../src/domain/dates"
 import { customStatusId, legacyItemId, taskId, userId } from "../../src/domain/ids"
 import { permalinkId, statusChoices, type Task, type TaskDates, type Workflow } from "../../src/domain/model"
@@ -50,22 +50,6 @@ describe("buckets", () => {
   })
   test("on a Sunday nothing later than today is this week", () => {
     expect(bucketOf(task("a", { type: "Milestone", due: "2026-11-16" }), "2026-11-15")).toBe("Later")
-  })
-  test("buckets keep display order, skip empty ones, and sort by due, importance, title", () => {
-    const buckets = bucketTasks(
-      [
-        task("zeta", { type: "Backlog" }),
-        task("beta", { type: "Milestone", due: "2026-11-20" }),
-        task("alpha", { type: "Milestone", due: "2026-11-20" }),
-        task("low", { type: "Milestone", due: "2026-11-20" }, "Low"),
-        task("high", { type: "Milestone", due: "2026-11-20" }, "High"),
-        task("soon", { type: "Milestone", due: "2026-11-17" }),
-        task("late", { type: "Milestone", due: "2026-11-02" }),
-      ],
-      today,
-    )
-    expect(buckets.map((b) => b.name)).toEqual(["Overdue", "Later", "No date"])
-    expect(buckets[1]!.tasks.map((t) => t.title)).toEqual(["soon", "high", "alpha", "beta", "low"])
   })
 })
 

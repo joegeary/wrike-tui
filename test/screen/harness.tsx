@@ -1,10 +1,15 @@
 import { testRender } from "@opentui/react/test-utils"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { EffectDeps } from "../../src/app/effects"
 import { initialState } from "../../src/app/state"
 import { createStore } from "../../src/app/store"
 import { userId } from "../../src/domain/ids"
 import { App } from "../../src/ui/App"
 import { createBridge } from "../../src/ui/bridge"
+import { movedAsideFlash } from "../../src/ui/launch"
+import { createPersistence, persistencePaths } from "../../src/persist/persistence"
 import { createWrikeClient } from "../../src/wrike/client"
 import { createInboxSource } from "../../src/wrike/inbox"
 import { createTransport } from "../../src/wrike/transport"
@@ -18,12 +23,23 @@ const ESC_PAUSE_MS = 120
 
 export type Editor = (initial: string, extension: string) => string | null
 
+export type AppOptions = {
+  /** A directory to keep config, session, favorites and cache in. A second app opened on it starts where the first left off. */
+  home?: string
+  /** A fake Wrike to reuse, so a second app sees what the first one changed. */
+  fake?: ReturnType<typeof createFakeWrike>
+  readOnly?: boolean
+}
+
 /** The whole app in a test renderer, wired to the real client over an in-process fake Wrike. */
-export async function openApp(size: { width: number; height: number } = { width: 160, height: 45 }) {
-  const fake = createFakeWrike({ token: TOKEN, ...CLOCK })
+export async function openApp(size: { width: number; height: number } = { width: 160, height: 45 }, options: AppOptions = {}) {
+  const fake = options.fake ?? createFakeWrike({ token: TOKEN, ...CLOCK })
+  const home = options.home ?? (await mkdtemp(join(tmpdir(), "wrike-tui-screen-")))
+  const paths = persistencePaths({ XDG_CONFIG_HOME: join(home, "config"), XDG_STATE_HOME: join(home, "state"), XDG_CACHE_HOME: join(home, "cache") }, "IEAAAAAA")
+  const persistence = createPersistence(paths)
   const inbox = createInboxSource({ url: "http://fake.test/mcp", token: TOKEN, fetch: fake.fetch })
   const client = createWrikeClient(
-    createTransport({ baseUrl: "http://fake.test/api/v4", token: TOKEN, fetch: fake.fetch, sleep: async () => {} }),
+    createTransport({ baseUrl: "http://fake.test/api/v4", token: TOKEN, fetch: fake.fetch, sleep: async () => {}, readOnly: options.readOnly ?? false }),
     inbox,
   )
   const bridge = createBridge()
@@ -38,11 +54,14 @@ export async function openApp(size: { width: number; height: number } = { width:
     },
     openUrl: async (url) => void outside.opened.push(url),
     copy: (text) => (outside.copied.push(text), true),
-    scrollDetails: (to) => bridge.scrollDetails(to),
+    scroll: (pane, to) => bridge.scrollers[pane]?.(to),
+    persistence,
     quit: () => void (outside.quit = true),
   }
   const profile = { host: "fake.test", accountId: "IEAAAAAA", userId: userId(ME), name: "Sam Sample" }
-  const store = createStore(initialState(profile, CLOCK), deps)
+  const [config, favorites] = await Promise.all([persistence.loadConfig(), persistence.loadFavorites()])
+  const boot = { settings: config.value, favorites: favorites.value, readOnly: options.readOnly ?? false, flash: movedAsideFlash([config.movedAside, favorites.movedAside]) }
+  const store = createStore(initialState(profile, CLOCK, boot), deps)
   const screen = await testRender(<App store={store} bridge={bridge} />, size)
   // The app updates state from timers and promises, outside any act() scope.
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
@@ -71,7 +90,11 @@ export async function openApp(size: { width: number; height: number } = { width:
     up: () => screen.mockInput.pressArrow("up"),
     down: () => screen.mockInput.pressArrow("down"),
     left: () => screen.mockInput.pressArrow("left"),
+    right: () => screen.mockInput.pressArrow("right"),
+    space: () => screen.mockInput.pressKey(" "),
     "ctrl+e": () => screen.mockInput.pressKey("e", { ctrl: true }),
+    "ctrl+n": () => screen.mockInput.pressKey("n", { ctrl: true }),
+    "ctrl+p": () => screen.mockInput.pressKey("p", { ctrl: true }),
     "ctrl+u": () => screen.mockInput.pressKey("u", { ctrl: true }),
   }
 
@@ -94,6 +117,8 @@ export async function openApp(size: { width: number; height: number } = { width:
 
   return {
     fake,
+    home,
+    paths,
     store,
     outside,
     frame,
@@ -101,9 +126,12 @@ export async function openApp(size: { width: number; height: number } = { width:
     press,
     type,
     resize: (width: number, height: number) => screen.resize(width, height),
+    /** Ends the app. The directory is kept when the caller passed one, so a second app can open on it. */
     async close() {
+      await store.idle()
       await screen.dispose()
       await inbox.close()
+      if (!options.home) await rm(home, { recursive: true, force: true })
     },
   }
 }

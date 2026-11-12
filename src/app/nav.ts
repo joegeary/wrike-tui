@@ -1,6 +1,6 @@
 import type { Brand, FolderId, SpaceId } from "../domain/ids"
+import type { Scope } from "../domain/scope"
 import { favoriteKey, sortSpaces, treeRoot, type Favorite, type FolderNode, type Space, type SpaceTree } from "../domain/workspace"
-import type { WrikeError } from "../wrike/errors"
 import type { Loadable } from "./state"
 
 /**
@@ -16,10 +16,13 @@ export type ViewCounts = Record<NavView, number | null>
 
 export type NavRow =
   | { kind: "heading"; label: string }
-  | { kind: "note"; depth: number; text: string; error: WrikeError | null }
+  | { kind: "note"; depth: number; text: string; tone: "info" | "error" }
   | { kind: "view"; path: NavPath; view: NavView; count: number | null }
   | { kind: "node"; path: NavPath; depth: number; node: FolderNode | Space; expandable: boolean; expanded: boolean; loading: boolean }
   | { kind: "favorite"; path: NavPath; favorite: Favorite; depth: 0; missing: boolean }
+
+/** Short enough for the nav pane. The status bar carries the reason. */
+export const LOAD_FAILED = "Could not load, press r"
 
 export type SelectableNavRow = Exclude<NavRow, { kind: "heading" | "note" }>
 
@@ -68,12 +71,12 @@ export function navRows(input: NavInput): NavRow[] {
 
   rows.push({ kind: "heading", label: "Spaces" })
   const spaces = shownValue(input.spaces)
-  if (input.spaces.state === "error") rows.push({ kind: "note", depth: 0, text: "Could not load the spaces", error: input.spaces.error })
+  if (input.spaces.state === "error") rows.push({ kind: "note", depth: 0, text: LOAD_FAILED, tone: "error" })
   if (!spaces) {
-    if (input.spaces.state === "loading") rows.push({ kind: "note", depth: 0, text: "Loading...", error: null })
+    if (input.spaces.state === "loading") rows.push({ kind: "note", depth: 0, text: "Loading...", tone: "info" })
     return rows
   }
-  if (spaces.length === 0) rows.push({ kind: "note", depth: 0, text: "No spaces", error: null })
+  if (spaces.length === 0) rows.push({ kind: "note", depth: 0, text: "No spaces", tone: "info" })
 
   for (const space of sortSpaces(spaces)) {
     const path = spacePath(space.id)
@@ -85,7 +88,7 @@ export function navRows(input: NavInput): NavRow[] {
     const expandable = root ? root.childIds.length > 0 : true
     rows.push({ kind: "node", path, depth: 0, node: space, expandable, expanded: open && expandable, loading: open && !tree && loadable?.state === "loading" })
     if (!open) continue
-    if (loadable?.state === "error") rows.push({ kind: "note", depth: 1, text: "Could not load the folders", error: loadable.error })
+    if (loadable?.state === "error") rows.push({ kind: "note", depth: 1, text: LOAD_FAILED, tone: "error" })
     if (tree && root) for (const child of root.childIds) walk(rows, tree, child, path, 1, new Set([root.id]), input.expanded)
   }
   return rows
@@ -123,4 +126,11 @@ export function stepCursor(rows: NavRow[], path: NavPath, by: number): NavPath {
   if (!current) return path
   const index = selectable.indexOf(current)
   return selectable[Math.max(0, Math.min(index + by, selectable.length - 1))]!.path
+}
+
+/** The scope a space, folder or project row stands for. */
+export function nodeScope(row: NavRow & { kind: "node" }): Scope & { kind: "space" | "folder" } {
+  const { node } = row
+  if ("access" in node) return { kind: "space", id: node.id, title: node.title }
+  return { kind: "folder", id: node.id, title: node.title, project: node.kind === "project" }
 }

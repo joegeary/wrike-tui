@@ -1,7 +1,8 @@
-import { theme } from "./theme"
+import { useTheme } from "./theme"
 
 /** The one focused text field on screen. Its text lives in the reducer as the mode's draft. */
 export function TextInput(props: { value: string; placeholder?: string; onInput: (text: string) => void }) {
+  const theme = useTheme()
   return (
     <input
       focused

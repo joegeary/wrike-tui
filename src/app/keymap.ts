@@ -1,155 +1,115 @@
+import { commandById, isOffered, type Command, type Context } from "./commands"
 import type { State } from "./state"
 
-export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description"] as const
-export type TaskCommand = (typeof TASK_COMMANDS)[number]
-
-export type Command =
-  | TaskCommand
-  | "focus-nav" | "focus-list" | "focus-details" | "pane-left" | "pane-right"
-  | "view-inbox" | "view-todo" | "search" | "refresh" | "zoom" | "help" | "quit"
-  | "nav-down" | "nav-up"
-  | "move-down" | "move-up" | "move-top" | "move-bottom" | "open" | "toggle-read"
-  | "scroll-down" | "scroll-up" | "scroll-top" | "scroll-bottom"
-  | "browser" | "copy-url" | "copy-id"
-  | "field-down" | "field-up" | "field-open"
-  | "picker-down" | "picker-up" | "picker-toggle" | "picker-erase"
-  | "compose-editor" | "submit" | "cancel"
-
-export type Context =
-  | "global" | "nav" | "list" | "inbox" | "details" | "task"
-  | "edit" | "picker" | "multi-picker" | "text" | "compose" | "help"
+export type KeyBinding = { context: Context; key: string; command: string }
 
 /** A label longer than this is cut off in the legend on an 80-column terminal. */
 export const MAX_LABEL = 28
 
-export type Binding = {
-  /** Normalized key names. The first one is shown in the status bar. */
-  keys: string[]
-  command: Command
-  label: string
-  /** A short label. A binding with one is offered in the status bar. */
-  hint?: string
-}
+const bind = (context: Context, command: string, ...keys: string[]): KeyBinding[] => keys.map((key) => ({ context, key, command }))
 
-const bind = (keys: string | string[], command: Command, label: string, hint?: string): Binding => ({
-  keys: Array.isArray(keys) ? keys : [keys],
-  command,
-  label,
-  ...(hint ? { hint } : {}),
-})
+/** The one place a key is given meaning. Each row binds a key, in a context, to a command of the registry. */
+export const KEYMAP: KeyBinding[] = [
+  ...bind("global", "pane.nav", "1"),
+  ...bind("global", "pane.list", "2"),
+  ...bind("global", "pane.details", "3"),
+  ...bind("global", "pane.left", "h", "left"),
+  ...bind("global", "pane.right", "l", "right"),
+  ...bind("global", "view.inbox", "i"),
+  ...bind("global", "view.todo", "t"),
+  ...bind("global", "app.search", "/"),
+  ...bind("global", "app.palette", ":"),
+  ...bind("global", "app.refresh", "r"),
+  ...bind("global", "view.zoom", "v"),
+  ...bind("global", "app.help", "?"),
+  ...bind("global", "app.quit", "q"),
 
-/** The one place a key is given meaning. It drives dispatch, the status bar and the `?` legend. */
-export const KEYMAP: Record<Context, { title: string; bindings: Binding[] }> = {
-  global: {
-    title: "Anywhere",
-    bindings: [
-      bind("1", "focus-nav", "Focus the navigation pane"),
-      bind("2", "focus-list", "Focus the list pane"),
-      bind("3", "focus-details", "Focus the details pane"),
-      bind(["h", "left"], "pane-left", "Go to the pane on the left"),
-      bind(["l", "right"], "pane-right", "Go to the pane on the right"),
-      bind("i", "view-inbox", "Show the Inbox"),
-      bind("t", "view-todo", "Show My to-do"),
-      bind("/", "search", "Search, or open a link or ID", "search"),
-      bind("r", "refresh", "Refresh"),
-      bind("v", "zoom", "Zoom the details pane"),
-      bind("?", "help", "Show the keys", "keys"),
-      bind("q", "quit", "Quit", "quit"),
-    ],
-  },
-  nav: {
-    title: "Navigation",
-    bindings: [
-      bind(["j", "down"], "nav-down", "Next view", "next"),
-      bind(["k", "up"], "nav-up", "Previous view", "previous"),
-      bind("enter", "focus-list", "Go to the list", "list"),
-    ],
-  },
-  list: {
-    title: "List",
-    bindings: [
-      bind(["j", "down"], "move-down", "Move down"),
-      bind(["k", "up"], "move-up", "Move up"),
-      bind("g", "move-top", "Jump to the top"),
-      bind("G", "move-bottom", "Jump to the bottom"),
-      bind("enter", "open", "Open", "open"),
-    ],
-  },
-  inbox: {
-    title: "Inbox",
-    bindings: [bind("a", "toggle-read", "Toggle read notifications", "read")],
-  },
-  details: {
-    title: "Details",
-    bindings: [
-      bind(["j", "down"], "scroll-down", "Scroll down"),
-      bind(["k", "up"], "scroll-up", "Scroll up"),
-      bind("g", "scroll-top", "Scroll to the top"),
-      bind("G", "scroll-bottom", "Scroll to the bottom"),
-    ],
-  },
-  task: {
-    title: "Task",
-    bindings: [
-      bind("e", "edit", "Edit fields", "edit"),
-      bind("s", "status", "Change the status", "status"),
-      bind("p", "importance", "Change the importance"),
-      bind("A", "assignees", "Change the assignees"),
-      bind("m", "assign-me", "Assign to me", "mine"),
-      bind("c", "comment", "Write a comment", "comment"),
-      bind("E", "description", "Description in $EDITOR"),
-      bind("o", "browser", "Open in the browser"),
-      bind("y", "copy-url", "Copy the URL"),
-      bind("Y", "copy-id", "Copy the ID"),
-    ],
-  },
-  edit: {
-    title: "Edit mode",
-    bindings: [
-      bind(["j", "down"], "field-down", "Next field", "next"),
-      bind(["k", "up"], "field-up", "Previous field", "previous"),
-      bind("enter", "field-open", "Edit the field", "edit"),
-      bind("esc", "cancel", "Leave edit mode", "done"),
-    ],
-  },
-  "multi-picker": {
-    title: "Assignees",
-    bindings: [bind("space", "picker-toggle", "Toggle the person", "toggle")],
-  },
-  picker: {
-    title: "Picker",
-    bindings: [
-      bind(["down", "ctrl+n"], "picker-down", "Move down"),
-      bind(["up", "ctrl+p"], "picker-up", "Move up"),
-      bind("backspace", "picker-erase", "Erase the filter"),
-      bind("enter", "submit", "Apply", "apply"),
-      bind("esc", "cancel", "Cancel", "cancel"),
-    ],
-  },
-  text: {
-    title: "Text field",
-    bindings: [bind("enter", "submit", "Save", "save"), bind("esc", "cancel", "Discard", "discard")],
-  },
-  compose: {
-    title: "Comment",
-    bindings: [
-      bind("enter", "submit", "Post the comment", "post"),
-      bind("ctrl+e", "compose-editor", "Write it in $EDITOR", "editor"),
-      bind("esc", "cancel", "Discard", "discard"),
-    ],
-  },
-  help: {
-    title: "Keys",
-    bindings: [bind(["esc", "?", "q"], "cancel", "Close", "close")],
-  },
+  ...bind("nav", "nav.down", "j", "down"),
+  ...bind("nav", "nav.up", "k", "up"),
+  ...bind("nav", "nav.open", "enter"),
+  ...bind("nav", "nav.toggle", "space"),
+  ...bind("nav", "favorite.toggle", "F"),
+  ...bind("nav", "favorite.down", "J"),
+  ...bind("nav", "favorite.up", "K"),
+
+  ...bind("list", "list.down", "j", "down"),
+  ...bind("list", "list.up", "k", "up"),
+  ...bind("list", "list.top", "g"),
+  ...bind("list", "list.bottom", "G"),
+  ...bind("list", "list.open", "enter"),
+  ...bind("list", "list.toggle", "space"),
+  ...bind("list", "list.completed", "x"),
+  ...bind("list", "list.filter.text", "f"),
+  ...bind("list", "inbox.read", "a"),
+
+  ...bind("details", "details.down", "j", "down"),
+  ...bind("details", "details.up", "k", "up"),
+  ...bind("details", "details.top", "g"),
+  ...bind("details", "details.bottom", "G"),
+
+  ...bind("task", "task.edit", "e"),
+  ...bind("task", "task.status", "s"),
+  ...bind("task", "task.importance", "p"),
+  ...bind("task", "task.assignees", "A"),
+  ...bind("task", "task.assign-me", "m"),
+  ...bind("task", "task.comment", "c"),
+  ...bind("task", "task.description", "E"),
+  ...bind("task", "task.browser", "o"),
+  ...bind("task", "task.copy-url", "y"),
+  ...bind("task", "task.copy-id", "Y"),
+  ...bind("task", "favorite.toggle", "F"),
+
+  ...bind("edit", "edit.down", "j", "down"),
+  ...bind("edit", "edit.up", "k", "up"),
+  ...bind("edit", "edit.open", "enter"),
+  ...bind("edit", "edit.leave", "esc"),
+
+  ...bind("picker", "picker.toggle", "space"),
+  ...bind("picker", "picker.down", "down", "ctrl+n"),
+  ...bind("picker", "picker.up", "up", "ctrl+p"),
+  ...bind("picker", "picker.erase", "backspace"),
+  ...bind("picker", "picker.apply", "enter"),
+  ...bind("picker", "picker.cancel", "esc"),
+
+  ...bind("text", "text.save", "enter"),
+  ...bind("text", "text.discard", "esc"),
+
+  ...bind("compose", "compose.post", "enter"),
+  ...bind("compose", "compose.editor", "ctrl+e"),
+  ...bind("compose", "compose.discard", "esc"),
+
+  ...bind("palette", "palette.down", "down", "ctrl+n"),
+  ...bind("palette", "palette.up", "up", "ctrl+p"),
+  ...bind("palette", "palette.erase", "backspace"),
+  ...bind("palette", "palette.run", "enter"),
+  ...bind("palette", "palette.close", "esc"),
+
+  ...bind("help", "help.down", "j", "down"),
+  ...bind("help", "help.up", "k", "up"),
+  ...bind("help", "help.close", "esc", "?", "q"),
+]
+
+export const CONTEXT_TITLES: Record<Context, string> = {
+  global: "Anywhere",
+  nav: "Navigation",
+  list: "List",
+  task: "Task",
+  details: "Details",
+  edit: "Edit mode",
+  picker: "Picker",
+  text: "Text field",
+  compose: "Comment",
+  palette: "Commands",
+  help: "Keys",
 }
 
 /** The contexts whose keys work in this state, most specific first. */
-export function activeContexts(state: Pick<State, "mode" | "focus" | "view">): Context[] {
+export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] {
   switch (state.mode.kind) {
     case "browse":
       return browseContexts(state)
     case "search-input":
+    case "filter-input":
     case "edit-text":
       return ["text"]
     case "compose":
@@ -157,29 +117,54 @@ export function activeContexts(state: Pick<State, "mode" | "focus" | "view">): C
     case "edit":
       return ["edit"]
     case "picker":
-      return state.mode.field === "assignees" ? ["multi-picker", "picker"] : ["picker"]
+      return ["picker"]
+    case "palette":
+      return ["palette"]
     case "help":
       return ["help"]
   }
 }
 
-export function browseContexts(state: Pick<State, "focus" | "view">): Context[] {
+export function browseContexts(state: Pick<State, "focus">): Context[] {
   switch (state.focus) {
     case "nav":
       return ["nav", "global"]
     case "list":
-      return state.view === "inbox" ? ["list", "inbox", "task", "global"] : ["list", "task", "global"]
+      return ["list", "task", "global"]
     case "details":
       return ["details", "task", "global"]
   }
 }
 
-export function resolveKey(state: Pick<State, "mode" | "focus" | "view">, key: string): Command | null {
+/** The command a key runs here, or null. A command whose `when` does not hold leaves its key unbound. */
+export function resolveKey(state: State, key: string): Command | null {
   for (const context of activeContexts(state)) {
-    const binding = KEYMAP[context].bindings.find((candidate) => candidate.keys.includes(key))
-    if (binding) return binding.command
+    for (const binding of KEYMAP) {
+      if (binding.context !== context || binding.key !== key) continue
+      const found = commandById(binding.command)
+      if (isOffered(found, state)) return found
+    }
   }
   return null
+}
+
+export type BoundCommand = { command: Command; keys: string[] }
+
+/** The commands bound in a context, in table order, each with all its keys. */
+export function boundCommands(context: Context): BoundCommand[] {
+  const bound = new Map<string, BoundCommand>()
+  for (const binding of KEYMAP) {
+    if (binding.context !== context) continue
+    const entry = bound.get(binding.command)
+    if (entry) entry.keys.push(binding.key)
+    else bound.set(binding.command, { command: commandById(binding.command), keys: [binding.key] })
+  }
+  return [...bound.values()]
+}
+
+/** The keys that run a command in any of these contexts, the most specific context first. */
+export function keysFor(command: string, contexts: Context[]): string[] {
+  return contexts.flatMap((context) => KEYMAP.filter((binding) => binding.context === context && binding.command === command).map((binding) => binding.key))
 }
 
 const KEY_LABELS: Record<string, string> = {

@@ -1,21 +1,25 @@
-import { activeContexts, keyLabel, KEYMAP } from "../app/keymap"
+import { isOffered } from "../app/commands"
+import { activeContexts, boundCommands, keyLabel } from "../app/keymap"
 import type { State } from "../app/state"
 import { fit } from "./format"
-import { theme } from "./theme"
+import { useTheme, type Color, type Theme } from "./theme"
 
 type Hint = { key: string; text: string }
 
+/** The commands with a hint that a key runs here, read from the keymap and the registry. */
 function hints(state: State): Hint[] {
   return activeContexts(state).flatMap((context) =>
-    KEYMAP[context].bindings.flatMap((binding) => (binding.hint ? [{ key: keyLabel(binding.keys[0]!), text: binding.hint }] : [])),
+    boundCommands(context).flatMap(({ command, keys }) => (command.hint && isOffered(command, state) ? [{ key: keyLabel(keys[0]!), text: command.hint }] : [])),
   )
 }
 
-function message(state: State): { text: string; color: string } {
+function message(state: State, theme: Theme): { text: string; color: Color } {
   const { mode } = state
   if (mode.kind === "edit-text" && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
+  if (mode.kind === "palette") return { text: "Type to find a command", color: theme.dim }
+  if (mode.kind === "filter-input") return { text: "Shows tasks whose title contains this. Empty clears it.", color: theme.dim }
   if (mode.kind === "edit") return { text: "Edit mode", color: theme.heading }
   if (mode.kind === "edit-text" && mode.field !== "title") return { text: "YYYY-MM-DD, empty clears the date", color: theme.dim }
   return { text: "", color: theme.dim }
@@ -23,7 +27,8 @@ function message(state: State): { text: string; color: string } {
 
 /** One line: what just happened on the left, the keys that work here on the right. */
 export function StatusBar({ state, width }: { state: State; width: number }) {
-  const { text, color } = message(state)
+  const theme = useTheme()
+  const { text, color } = message(state, theme)
   const hintWidth = (hint: Hint) => Bun.stringWidth(hint.key) + 1 + Bun.stringWidth(hint.text) + 2
   const room = Math.max(0, width - 2 - Math.min(Bun.stringWidth(text), Math.floor(width / 2)) - 2)
   const fitting: Hint[] = []

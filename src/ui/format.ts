@@ -20,6 +20,11 @@ export function fit(text: string, width: number): string {
   return cut + " ".repeat(Math.max(0, width - Bun.stringWidth(cut)))
 }
 
+/** `lead` kept as it is, then `text` cut or padded so the whole is exactly `width` columns. For indented rows, since `fit` trims. */
+export function fitAfter(lead: string, text: string, width: number): string {
+  return lead + fit(text, Math.max(0, width - Bun.stringWidth(lead)))
+}
+
 /** Exactly `width` columns, padded on the left. */
 export function fitRight(text: string, width: number): string {
   const cut = truncate(oneLine(text), width)

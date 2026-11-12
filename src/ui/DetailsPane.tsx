@@ -1,4 +1,4 @@
-import { RGBA, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
+import { parseColor, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { contactName, statusOf } from "../app/selectors"
@@ -9,16 +9,16 @@ import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
 import { shortDay, stamp } from "./format"
 import { Pane } from "./Pane"
-import { statusColor, theme } from "./theme"
+import { scrollBox } from "./scroll"
+import { statusColor, useTheme, type Theme } from "./theme"
 import { TextInput } from "./TextInput"
 
 const LABEL_WIDTH = 12
-const SCROLL_STEP = 3
 
-function useMarkdownStyle(): SyntaxStyle {
+function useMarkdownStyle(theme: Theme): SyntaxStyle {
   const renderer = useRenderer()
   const style = useMemo(() => {
-    const color = (hex: string) => RGBA.fromHex(hex)
+    const color = parseColor
     return SyntaxStyle.fromStyles(
       {
         default: { fg: color(theme.text) },
@@ -35,13 +35,14 @@ function useMarkdownStyle(): SyntaxStyle {
       },
       renderer.nativeScene!,
     )
-  }, [renderer])
+  }, [renderer, theme])
   useEffect(() => () => style.destroy(), [style])
   return style
 }
 
 /** `active` is undefined outside edit mode, where no row carries a cursor column. */
 function Field(props: { label: string; active?: boolean; children: ReactNode }) {
+  const theme = useTheme()
   const cursor = props.active === undefined ? "" : props.active ? "▸ " : "  "
   return (
     <box flexDirection="row">
@@ -55,13 +56,17 @@ function Field(props: { label: string; active?: boolean; children: ReactNode }) 
   )
 }
 
-const Value = (props: { children: string; fg?: string }) => (
-  <text fg={props.fg ?? theme.text} wrapMode="word" flexShrink={1}>
-    {props.children}
-  </text>
-)
+function Value(props: { children: string; fg?: Theme["text"] }) {
+  const theme = useTheme()
+  return (
+    <text fg={props.fg ?? theme.text} wrapMode="word" flexShrink={1}>
+      {props.children}
+    </text>
+  )
+}
 
 function Section({ title }: { title: string }) {
+  const theme = useTheme()
   return (
     <text fg={theme.heading} marginTop={1} wrapMode="none">
       {title}
@@ -70,7 +75,8 @@ function Section({ title }: { title: string }) {
 }
 
 function Body({ state, details, onDraft }: { state: State; details: Details; onDraft: (text: string) => void }) {
-  const style = useMarkdownStyle()
+  const theme = useTheme()
+  const style = useMarkdownStyle(theme)
   const { task, comments, folders } = details
   const { mode } = state
   // The cursor column shows only inside an edit session, so a picker opened from browse does not shift the fields.
@@ -106,7 +112,7 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
       <box height={1} />
       <Field label="Status" active={active("status")}>
         <text wrapMode="none" flexShrink={1}>
-          <span fg={statusColor(status?.color)}>● </span>
+          <span fg={statusColor(theme, status?.color)}>● </span>
           <span fg={theme.text}>{status?.name ?? task.statusGroup}</span>
         </text>
       </Field>
@@ -158,20 +164,13 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
 
 export function DetailsPane(props: { state: State; width: number; bridge: UiBridge; onDraft: (text: string) => void }) {
   const { state, bridge } = props
+  const theme = useTheme()
   const scroll = useRef<ScrollBoxRenderable>(null)
   const details = state.details
 
   useEffect(() => {
-    bridge.scrollDetails = (to) => {
-      const box = scroll.current
-      if (!box) return
-      if (to === "top") box.scrollTo(0)
-      else if (to === "bottom") box.scrollTo(box.scrollHeight)
-      else box.scrollBy(to === "down" ? SCROLL_STEP : -SCROLL_STEP)
-    }
-    return () => {
-      bridge.scrollDetails = () => {}
-    }
+    bridge.scrollers.details = (to) => scrollBox(scroll.current, to)
+    return () => void delete bridge.scrollers.details
   }, [bridge])
 
   useEffect(() => scroll.current?.scrollTo(0), [state.openTaskId])
