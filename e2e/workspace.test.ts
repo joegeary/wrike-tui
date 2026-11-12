@@ -368,7 +368,7 @@ describe("80 by 24", () => {
     await tmux.keys("f")
     await tmux.type("fix")
     await tmux.keys("Enter")
-    fits(await tmux.see("filtered", "2 Platform  8 · assignee · 1 filter", "Fix login redirect loop", absent("Enable SSO")))
+    fits(await tmux.see("filtered", "2 Platfo…  8 · assignee · 1 filter", "Fix login redirect loop", absent("Enable SSO")))
     await palette(tmux, "clear the filters")
     await tmux.keys("1")
     for (let step = 0; step < 6; step++) await tmux.keys("j")
