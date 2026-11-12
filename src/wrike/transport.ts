@@ -5,9 +5,13 @@ import { WrikeFailure, type WrikeError } from "./errors"
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 export type Method = "GET" | "PUT" | "POST"
 
+export type Page = { data: unknown[]; next: string | null }
+
 export type Transport = {
   /** Resolves to the `data` array of Wrike's response envelope. */
   request(method: Method, path: string, params?: Params): Promise<unknown[]>
+  /** One page of a list, with the token that asks for the page after it. */
+  requestPage(method: Method, path: string, params?: Params): Promise<Page>
 }
 
 export type TransportOptions = {
@@ -16,12 +20,15 @@ export type TransportOptions = {
   token: string
   fetch?: Fetch
   sleep?: (ms: number) => Promise<void>
+  /** Refuses every request that is not a GET, before it reaches the network. */
+  readOnly?: boolean
 }
 
 const MAX_RETRIES = 3
 const BACKOFF_MS = 500
+const MAX_RETRY_AFTER_MS = 60_000
 
-const Envelope = z.object({ data: z.array(z.unknown()) })
+const Envelope = z.object({ data: z.array(z.unknown()), nextPageToken: z.string().optional() })
 const ErrorBody = z.object({ error: z.string().optional(), errorDescription: z.string().optional() })
 
 export function encodeParams(params: Params): URLSearchParams {
@@ -54,23 +61,35 @@ export function createTransport(options: TransportOptions): Transport {
     }
   }
 
-  return {
-    async request(method, path, params = {}) {
-      for (let attempt = 0; ; attempt++) {
-        const response = await send(method, path, params)
-        if (response.status === 429 && attempt < MAX_RETRIES) {
-          await sleep(BACKOFF_MS * 2 ** attempt)
-          continue
-        }
-        if (!response.ok) throw new WrikeFailure(await errorFrom(response))
-        const envelope = Envelope.safeParse(await response.json().catch(() => null))
-        if (!envelope.success) {
-          throw new WrikeFailure({ kind: "invalid", message: `Unexpected response from ${method} ${path}` })
-        }
-        return envelope.data.data
+  async function requestPage(method: Method, path: string, params: Params = {}): Promise<Page> {
+    if (options.readOnly && method !== "GET") throw new WrikeFailure({ kind: "read_only" })
+    for (let attempt = 0; ; attempt++) {
+      const response = await send(method, path, params)
+      if (response.status === 429 && attempt < MAX_RETRIES) {
+        await sleep(retryAfterMs(response.headers.get("retry-after"), Date.now()) ?? BACKOFF_MS * 2 ** attempt)
+        continue
       }
-    },
+      if (!response.ok) throw new WrikeFailure(await errorFrom(response))
+      const envelope = Envelope.safeParse(await response.json().catch(() => null))
+      if (!envelope.success) {
+        throw new WrikeFailure({ kind: "invalid", message: `Unexpected response from ${method} ${path}` })
+      }
+      return { data: envelope.data.data, next: envelope.data.nextPageToken ?? null }
+    }
   }
+
+  return {
+    requestPage,
+    request: async (method, path, params) => (await requestPage(method, path, params)).data,
+  }
+}
+
+/** How long a `Retry-After` header asks to wait: seconds or an HTTP date. Null when it says neither. */
+export function retryAfterMs(header: string | null, now: number): number | null {
+  if (header === null || header.trim() === "") return null
+  const seconds = Number(header)
+  const wait = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - now
+  return Number.isNaN(wait) ? null : Math.max(0, Math.min(wait, MAX_RETRY_AFTER_MS))
 }
 
 async function errorFrom(response: Response): Promise<WrikeError> {

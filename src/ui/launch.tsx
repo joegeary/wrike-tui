@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core"
 import { createRoot } from "@opentui/react"
-import type { Env } from "../auth/config"
+import { isReadOnly, type Env } from "../auth/config"
 import type { Session } from "../auth/session"
 import type { EffectDeps } from "../app/effects"
 import { initialState, type Clock } from "../app/state"
@@ -24,7 +24,7 @@ function systemClock(): Clock {
 export async function launch(session: Session, env: Env): Promise<void> {
   const { token } = session.token
   const inbox = createInboxSource({ url: session.endpoints.mcpUrl, token })
-  const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token }), inbox)
+  const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token, readOnly: isReadOnly(env) }), inbox)
 
   const closed = Promise.withResolvers<void>()
   const renderer = await createCliRenderer({ exitOnCtrlC: true, backgroundColor: theme.background, onDestroy: closed.resolve })

@@ -2,6 +2,7 @@ export type WrikeError =
   | { kind: "unauthorized" }
   | { kind: "not_found" }
   | { kind: "rate_limited" }
+  | { kind: "read_only" }
   | { kind: "invalid"; message: string }
   | { kind: "network"; message: string }
   | { kind: "server"; status: number; message: string }
@@ -27,6 +28,8 @@ export function describeError(error: WrikeError): string {
       return "Wrike could not find that item."
     case "rate_limited":
       return "Wrike is rate limiting requests. Wait a moment and retry."
+    case "read_only":
+      return "read-only mode: not saved"
     case "invalid":
       return error.message
     case "network":

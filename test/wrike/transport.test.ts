@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { WrikeFailure, type WrikeError } from "../../src/wrike/errors"
-import { createTransport, encodeParams, type Fetch } from "../../src/wrike/transport"
+import { describeError, WrikeFailure, type WrikeError } from "../../src/wrike/errors"
+import { createTransport, encodeParams, retryAfterMs, type Fetch } from "../../src/wrike/transport"
 
 type Call = { url: string; init: RequestInit }
 
-function transportWith(responses: (Response | Error)[]) {
+function transportWith(responses: (Response | Error)[], options: { readOnly?: boolean } = {}) {
   const calls: Call[] = []
   const sleeps: number[] = []
   const fetch: Fetch = async (input, init) => {
@@ -19,6 +19,7 @@ function transportWith(responses: (Response | Error)[]) {
     token: "secret",
     fetch,
     sleep: async (ms) => void sleeps.push(ms),
+    ...options,
   })
   return { transport, calls, sleeps }
 }
@@ -103,5 +104,63 @@ describe("request", () => {
   test("a body without a data array is invalid", async () => {
     const { transport } = transportWith([Response.json({ kind: "tasks" })])
     expect(await errorOf(transport.request("GET", "/tasks"))).toEqual({ kind: "invalid", message: "Unexpected response from GET /tasks" })
+  })
+})
+
+describe("requestPage", () => {
+  test("returns the data with the token for the next page", async () => {
+    const { transport } = transportWith([Response.json({ kind: "tasks", nextPageToken: "TOKEN2", responseSize: 3, data: [1, 2] })])
+    expect(await transport.requestPage("GET", "/tasks", { pageSize: 2 })).toEqual({ data: [1, 2], next: "TOKEN2" })
+  })
+
+  test("the last page has no next token", async () => {
+    const { transport } = transportWith([ok([3])])
+    expect(await transport.requestPage("GET", "/tasks", { nextPageToken: "TOKEN2", fields: ["parentIds"] })).toEqual({ data: [3], next: null })
+  })
+
+  test("a follow-up sends the token and the fields in the query", async () => {
+    const { transport, calls } = transportWith([ok([])])
+    await transport.requestPage("GET", "/folders/F1/tasks", { nextPageToken: "TOKEN2", fields: ["parentIds"] })
+    expect(calls[0]!.url).toBe("https://www.wrike.com/api/v4/folders/F1/tasks?nextPageToken=TOKEN2&fields=%5B%22parentIds%22%5D")
+  })
+})
+
+describe("Retry-After", () => {
+  const limited = (retryAfter: string) => Response.json({ error: "too_many_requests" }, { status: 429, headers: { "Retry-After": retryAfter } })
+
+  test("a 429 with Retry-After waits that many seconds instead of the backoff", async () => {
+    const { transport, sleeps } = transportWith([limited("7"), failure(429), ok(["done"])])
+    expect(await transport.request("GET", "/tasks")).toEqual(["done"])
+    expect(sleeps).toEqual([7000, 1000])
+  })
+
+  test("seconds, an HTTP date, a cap and nonsense", () => {
+    const now = Date.parse("2026-11-12T16:00:00Z")
+    expect(retryAfterMs("2", now)).toBe(2000)
+    expect(retryAfterMs("0", now)).toBe(0)
+    expect(retryAfterMs("Thu, 12 Nov 2026 16:00:05 GMT", now)).toBe(5000)
+    expect(retryAfterMs("Thu, 12 Nov 2026 15:00:00 GMT", now)).toBe(0)
+    expect(retryAfterMs("3600", now)).toBe(60_000)
+    expect(retryAfterMs("soon", now)).toBeNull()
+    expect(retryAfterMs("", now)).toBeNull()
+    expect(retryAfterMs(null, now)).toBeNull()
+  })
+})
+
+describe("read-only mode", () => {
+  test.each(["PUT", "POST"] as const)("a %s is refused before any request is sent", async (method) => {
+    const { transport, calls } = transportWith([ok([])], { readOnly: true })
+    expect(await errorOf(transport.request(method, "/tasks/T1", { title: "x" }))).toEqual({ kind: "read_only" })
+    expect(calls).toEqual([])
+  })
+
+  test("a GET still goes out", async () => {
+    const { transport, calls } = transportWith([ok([1])], { readOnly: true })
+    expect(await transport.request("GET", "/tasks")).toEqual([1])
+    expect(calls).toHaveLength(1)
+  })
+
+  test("the error reads as the status bar shows it", () => {
+    expect(describeError({ kind: "read_only" })).toBe("read-only mode: not saved")
   })
 })

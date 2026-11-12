@@ -22,3 +22,6 @@ export function endpointsFor(env: Env, host: string): Endpoints {
     mcpUrl: env.WRIKE_MCP_URL ?? DEFAULT_MCP_URL,
   }
 }
+
+/** `WRIKE_TUI_READ_ONLY=1` makes the client refuse every write. */
+export const isReadOnly = (env: Env) => env.WRIKE_TUI_READ_ONLY === "1"
