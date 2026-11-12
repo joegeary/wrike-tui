@@ -13,6 +13,7 @@ import { createInboxSource } from "../wrike/inbox"
 import { createTransport } from "../wrike/transport"
 import { App } from "./App"
 import { createBridge } from "./bridge"
+import { createFrameLog } from "./frameLog"
 import { copyText, editInEditor, openInBrowser } from "./handoff"
 import { THEMES } from "./theme"
 
@@ -32,7 +33,13 @@ export async function launch(session: Session, env: Env): Promise<void> {
   const boot = await loadBoot(persistence, { readOnly, restore: !skipsRestore(env) })
 
   const closed = Promise.withResolvers<void>()
-  const renderer = await createCliRenderer({ exitOnCtrlC: true, backgroundColor: THEMES[boot.settings.theme].background, onDestroy: closed.resolve })
+  const frameLog = env.WRIKE_TUI_FRAME_LOG ? createFrameLog(env.WRIKE_TUI_FRAME_LOG) : null
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: true,
+    backgroundColor: THEMES[boot.settings.theme].background,
+    onDestroy: closed.resolve,
+    ...(frameLog ? { postProcessFns: [() => frameLog.frame()] } : {}),
+  })
   const bridge = createBridge()
   const deps: EffectDeps = {
     client,
@@ -45,7 +52,10 @@ export async function launch(session: Session, env: Env): Promise<void> {
     quit: () => renderer.destroy(),
   }
   const store = createStore(initialState(session.profile, systemClock(), boot), deps)
-  createRoot(renderer).render(<App store={store} bridge={bridge} />)
+  const timed: typeof store = frameLog
+    ? { ...store, dispatch: (action) => (action.type === "key" && frameLog.key(action.key), store.dispatch(action)) }
+    : store
+  createRoot(renderer).render(<App store={timed} bridge={bridge} />)
 
   // The session is written while it changes and once more at quit, so a crash loses at most half a minute.
   const saveSession = sessionSaver(store.getState, persistence)

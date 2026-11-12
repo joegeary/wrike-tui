@@ -119,6 +119,13 @@ describe("lists", () => {
     expect(selectedRow(play(state, "G", "g", "k").state)).toMatchObject({ kind: "group", label: "Overdue" })
   })
 
+  test("moving the cursor does not shape the list again", () => {
+    const state = inTodo()
+    const rows = listRows(state)
+    expect(listRows(play(state, "j", "j", "G", "k").state)).toBe(rows)
+    expect(listRows(play(state, "j", "space").state)).not.toBe(rows)
+  })
+
   test("showing a list seen before draws it at once and fetches it again behind", () => {
     const { state, effects } = play(loaded(), "t")
     expect(sketch(state)).toHaveLength(6)

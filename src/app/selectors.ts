@@ -56,23 +56,26 @@ export const folderTitles = memo((trees: State["trees"]): ReadonlyMap<string, st
   return titles
 })
 
+// Keyed on the parts of the view that shape the list, so a cursor move never reshapes it.
 const taskRows = memo(
   (
     list: Paged<Task> | undefined,
-    view: ListView,
+    spec: ListSpec,
+    collapsed: ListView["collapsed"],
+    expanded: ListView["expanded"],
     workflows: Workflow[],
     contacts: State["contacts"],
     trees: State["trees"],
     today: string,
   ): PaneRow[] => {
     if (!list) return []
-    return shapeList(list.items, view.spec, {
+    return shapeList(list.items, spec, {
       today,
       statuses: statusIndex(workflows),
       contacts,
       folders: folderTitles(trees),
-      collapsed: view.collapsed,
-      expanded: view.expanded,
+      collapsed,
+      expanded,
       more: list.next === null ? null : list.loading === "more" ? "loading" : "available",
     })
   },
@@ -85,7 +88,8 @@ const entryRows = memo((inbox: Loadable<InboxEntry[]>): PaneRow[] =>
 /** The rows of the list pane for the current scope. */
 export function listRows(state: State): PaneRow[] {
   if (state.scope.kind === "inbox") return entryRows(state.inbox)
-  return taskRows(currentList(state), currentView(state), state.workflows, state.contacts, state.trees, state.clock.today)
+  const view = currentView(state)
+  return taskRows(currentList(state), view.spec, view.collapsed, view.expanded, state.workflows, state.contacts, state.trees, state.clock.today)
 }
 
 /** The index of the cursor's row, or -1 for an empty list. */
