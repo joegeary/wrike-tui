@@ -95,7 +95,7 @@ more:
 | Method | Call |
 | --- | --- |
 | `me()` | `GET /contacts?me=true` |
-| `contacts()` | `GET /contacts?types=["Person"]`, then people who are not deleted |
+| `contacts()` | `GET /contacts?types=["Person"]`. Deactivated people stay, marked inactive, so old tasks show their names; pickers offer active people and anyone already chosen |
 | `workflows()` | `GET /workflows` |
 | `spaceWorkflows()` | `GET /spaces`, then `GET /spaces/{id}/workflows` for each space |
 | `spaces()` | `GET /spaces`, then the spaces that are not archived |
@@ -631,6 +631,11 @@ terminal's own 16 colors and its default foreground and background through
 OpenTUI's indexed colors, so the client follows the terminal's theme. The
 palette's Theme commands switch at once, and "Save as default" writes the
 config.
+
+`test/ui/theme-contrast.test.ts` measures every text color against the
+background, the panels and the cursor row. `dark` and `light` must reach WCAG
+AA (4.5 to 1) and `high-contrast` AAA (7 to 1). `terminal` has no fixed colors
+to measure.
 
 ## Layout
 
