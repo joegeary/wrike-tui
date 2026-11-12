@@ -14,6 +14,7 @@ const INDENT = 2
 /** True for the row that stands for what the list pane shows. */
 function isScope(state: State, row: NavRow): boolean {
   if (row.kind === "view") return row.view === state.scope.kind
+  if (row.kind === "favorite") return "id" in state.scope && row.favorite.kind === state.scope.kind && row.favorite.id === state.scope.id
   return row.kind === "node" && scopeKey(nodeScope(row)) === scopeKey(state.scope)
 }
 
@@ -43,7 +44,7 @@ function Row({ row, state, width, selected, theme }: { row: NavRow; state: State
       return (
         <text wrapMode="none" bg={bg}>
           <span fg={row.missing ? dim : theme.heading}>{" ★ "}</span>
-          <span fg={row.missing ? dim : theme.text}>{fit(`${row.favorite.title}${row.missing ? " (not found)" : ""}`, width - 3)}</span>
+          <span fg={row.missing ? dim : current ? theme.accent : theme.text}>{fit(`${row.favorite.title}${row.missing ? " (not found)" : ""}`, width - 3)}</span>
         </text>
       )
     case "node": {
