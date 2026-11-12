@@ -128,7 +128,6 @@ export function stepCursor(rows: NavRow[], path: NavPath, by: number): NavPath {
   return selectable[Math.max(0, Math.min(index + by, selectable.length - 1))]!.path
 }
 
-/** The scope a space, folder or project row stands for. */
 export function nodeScope(row: NavRow & { kind: "node" }): Scope & { kind: "space" | "folder" } {
   const { node } = row
   if ("access" in node) return { kind: "space", id: node.id, title: node.title }

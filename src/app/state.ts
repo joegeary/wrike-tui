@@ -32,7 +32,6 @@ export type Paged<T> = {
   error: WrikeError | null
 }
 
-/** How one scope's list is shaped and where its cursor is. */
 export type ListView = {
   spec: ListSpec
   cursor: RowCursor | null
@@ -145,7 +144,6 @@ export type Effect =
   | { kind: "cache-tree"; space: SpaceId; tree: SpaceTree }
   | { kind: "quit" }
 
-/** A change to the shaping of the current list. */
 export type SpecChange =
   | { set: "group"; group: ListSpec["group"] }
   | { set: "subgroup"; group: ListSpec["subgroup"] }
@@ -224,7 +222,6 @@ export function shown<T>(loadable: Loadable<T> | undefined): T | undefined {
   }
 }
 
-/** What a launch brings from disk. */
 export type Boot = {
   settings: Settings
   favorites: Favorite[]

@@ -63,7 +63,7 @@ Four gaps shape the design.
 | Configurable columns | Same | none | 2 |
 | Sub-issues with Space to expand | Subtasks | `subTaskIds`, `superTaskIds` | 2 |
 | Session restore and a cached tree at launch | Same | local files | 2 |
-| `config.json` and five themes | Same | none | 2 |
+| `config.json` and five themes | `config.json` and four themes | none | 2 |
 | `:` command palette scoped to the pane | Same | none | 2 |
 | Threaded replies, edit and delete own comments | Replies; edit only within 5 minutes of posting; delete | `/comments/{id}/comments`, `PUT` and `DELETE /comments/{id}` | 3 |
 | Activity merged into the comment stream | Field history merged by time | `GET /tasks/{ids}/tasks_history` | 3 |
@@ -110,10 +110,15 @@ find a task, read it, change it, answer it.
 
 ## Phase 2. Navigate the workspace
 
-The navigation pane grows a tree of spaces, folders and projects, and the list
-pane grows grouping, sorting, filters and columns. A `:` palette lists the
-commands that apply where you are. Sessions restore and the tree paints from a
-cache at launch. A config file holds the theme, columns and defaults.
+Done. The navigation pane is a tree of spaces, folders and projects, and the
+list pane groups, subgroups, sorts, filters and chooses columns. Lists load a
+page at a time and nest subtasks. A `:` palette lists the commands that apply
+where you are. Favorites are local. Sessions restore and the tree paints from
+a cache at launch. A config file holds the theme, the columns and the
+defaults.
+
+Deferred: filtering the tree by name, and showing the total a list will reach
+(Wrike's first page reports it) beside how much is loaded.
 
 ## Phase 3. Conversation and activity
 

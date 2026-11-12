@@ -7,10 +7,8 @@ import type { Favorite, Space, SpaceTree } from "../domain/workspace"
 import { readJson, writeJson, type Loaded } from "./files"
 import { ConfigSchema, FavoritesSchema, SessionSchema, SpacesCacheSchema, TreeCacheSchema, type SessionFile } from "./schemas"
 
-/** A cached value and when it was fetched. */
 export type Cached<T> = { value: T; fetchedAt: string }
 
-/** Everything the client keeps on disk between runs. */
 export type Persistence = {
   loadConfig(): Promise<Loaded<Settings>>
   saveConfig(settings: Settings): Promise<void>

@@ -8,7 +8,6 @@ import type { SpaceTree } from "../domain/workspace"
 import { cursorRow, navRows, type NavRow, type SelectableNavRow } from "./nav"
 import { shown, type ListView, type Loadable, type Mode, type Paged, type PickerField, type State } from "./state"
 
-/** A row of the list pane: a shaped task row, or an Inbox notification. */
 export type PaneRow = ListRow | { kind: "entry"; id: RowId; entry: InboxEntry }
 
 /** Remembers the last result, so a function of unchanged state parts is computed once. */
@@ -25,7 +24,6 @@ const EMPTY_VIEW_SETS = { collapsed: new Set<string>(), expanded: new Set<TaskId
 
 export const currentKey = (state: State): ScopeKey => scopeKey(state.scope)
 
-/** The shaping a scope starts with, from the config defaults. */
 export function freshView(state: Pick<State, "settings">, scope: Scope): ListView {
   const spec: ListSpec = scope.kind === "inbox" ? defaultSpec(state.settings, "todo") : defaultSpec(state.settings, taskScopeKind(scope))
   return { spec, cursor: null, ...EMPTY_VIEW_SETS }
@@ -85,7 +83,6 @@ const entryRows = memo((inbox: Loadable<InboxEntry[]>): PaneRow[] =>
   (shown(inbox) ?? []).map((entry) => ({ kind: "entry", id: `entry:${entry.id}` as RowId, entry })),
 )
 
-/** The rows of the list pane for the current scope. */
 export function listRows(state: State): PaneRow[] {
   if (state.scope.kind === "inbox") return entryRows(state.inbox)
   const view = currentView(state)
