@@ -41,6 +41,16 @@ export type InboxSource = Pick<WrikeClient, "inbox"> & { close(): Promise<void> 
 // A task list omits these unless asked, and the app's Task always carries them.
 const LIST_FIELDS = ["responsibleIds", "parentIds", "description"]
 
+export async function fetchMe(transport: Transport): Promise<Me> {
+  const [contact] = parseAll(ContactSchema, await transport.request("GET", "/contacts", { me: true }), "contact")
+  if (!contact) throw new WrikeFailure({ kind: "not_found" })
+  return {
+    userId: userId(contact.id),
+    name: contactFromWire(contact).name,
+    accountId: contact.profiles[0]?.accountId ?? "",
+  }
+}
+
 export function createWrikeClient(transport: Transport, inboxSource: InboxSource): WrikeClient {
   const tasks = async (params: Parameters<Transport["request"]>[2]) =>
     parseAll(TaskSchema, await transport.request("GET", "/tasks", { ...params, fields: LIST_FIELDS }), "tasks")
@@ -52,14 +62,7 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
   }
 
   return {
-    async me() {
-      const contact = one(parseAll(ContactSchema, await transport.request("GET", "/contacts", { me: true }), "contact"))
-      return {
-        userId: userId(contact.id),
-        name: contactFromWire(contact).name,
-        accountId: contact.profiles[0]?.accountId ?? "",
-      }
-    },
+    me: () => fetchMe(transport),
 
     async contacts() {
       const contacts = parseAll(ContactSchema, await transport.request("GET", "/contacts", { types: ["Person"] }), "contacts")
