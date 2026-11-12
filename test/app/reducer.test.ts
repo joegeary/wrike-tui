@@ -251,6 +251,10 @@ describe("scopes and paging", () => {
 describe("shaping", () => {
   const press = (state: State, ...names: string[]) => names.reduce((next, name) => play(next, ":", ...name, "enter").state, state)
 
+  test("the palette query keeps the spaces typed into it", () => {
+    expect(play(inFolder(), ":", ..."group by").state.mode).toMatchObject({ kind: "palette", query: "group by" })
+  })
+
   test("the palette regroups, and the cursor stays on its task", () => {
     const state = play(inFolder(), "j", "j").state
     const regrouped = press(state, "group by due")

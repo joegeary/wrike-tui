@@ -93,7 +93,8 @@ export const boot = (extra: Partial<Boot> = {}): Boot => ({ settings: DEFAULT_SE
 export function play(state: State, ...actions: (Action | string)[]): { state: State; effects: Effect[] } {
   const effects: Effect[] = []
   for (const action of actions) {
-    const [next, more] = reduce(state, typeof action === "string" ? { type: "key", key: action } : action)
+    // A terminal reports the space bar as "space", so a typed space must reach the reducer the same way.
+    const [next, more] = reduce(state, typeof action === "string" ? { type: "key", key: action === " " ? "space" : action } : action)
     state = next
     effects.push(...more)
   }

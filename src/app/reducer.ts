@@ -483,8 +483,9 @@ function onKey(state: State, key: string): Update {
     return step(cleared, command.run(cleared))
   }
   // Typing in a picker or the palette filters it. Every other text is typed into an input, which reports through "draft".
-  if ((state.mode.kind === "picker" || state.mode.kind === "palette") && [...key].length === 1) {
-    return [{ ...state, mode: { ...state.mode, query: state.mode.query + key, cursor: 0 } }, []]
+  const text = key === "space" ? " " : key
+  if ((state.mode.kind === "picker" || state.mode.kind === "palette") && [...text].length === 1) {
+    return [{ ...state, mode: { ...state.mode, query: state.mode.query + text, cursor: 0 } }, []]
   }
   return [state, []]
 }
