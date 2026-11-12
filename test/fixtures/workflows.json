@@ -1,0 +1,76 @@
+{
+  "kind": "workflows",
+  "data": [
+    {
+      "id": "IEAAAAAAK4AAAA01",
+      "name": "Default Workflow",
+      "standard": true,
+      "hidden": false,
+      "customStatuses": [
+        {
+          "id": "IEAAAAAAJMAAAA01",
+          "name": "New",
+          "standardName": false,
+          "color": "Blue",
+          "standard": false,
+          "group": "Active",
+          "hidden": false
+        },
+        {
+          "id": "IEAAAAAAJMAAAA02",
+          "name": "In Progress",
+          "standardName": false,
+          "color": "Turquoise",
+          "standard": false,
+          "group": "Active",
+          "hidden": false
+        },
+        {
+          "id": "IEAAAAAAJMAAAA03",
+          "name": "In Review",
+          "standardName": false,
+          "color": "Yellow",
+          "standard": false,
+          "group": "Active",
+          "hidden": false
+        },
+        {
+          "id": "IEAAAAAAJMAAAA04",
+          "name": "Completed",
+          "standardName": false,
+          "color": "Green",
+          "standard": false,
+          "group": "Completed",
+          "hidden": false
+        },
+        {
+          "id": "IEAAAAAAJMAAAA05",
+          "name": "On Hold",
+          "standardName": false,
+          "color": "Purple",
+          "standard": false,
+          "group": "Deferred",
+          "hidden": false
+        },
+        {
+          "id": "IEAAAAAAJMAAAA06",
+          "name": "Cancelled",
+          "standardName": false,
+          "color": "Gray",
+          "standard": false,
+          "group": "Cancelled",
+          "hidden": false
+        },
+        {
+          "id": "IEAAAAAAJMAAAA07",
+          "name": "Legacy Review",
+          "standardName": false,
+          "color": "Gray",
+          "standard": false,
+          "group": "Active",
+          "hidden": true
+        }
+      ]
+    }
+  ]
+}

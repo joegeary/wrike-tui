@@ -1,0 +1,225 @@
+{
+  "kind": "tasks",
+  "data": [
+    {
+      "id": "IEAAAAAAKQAAAA01",
+      "accountId": "IEAAAAAA",
+      "title": "Enable SSO on sandbox",
+      "description": "<h2>Goal</h2>Staff sign in to the sandbox with the same identity provider as production.<br /><br /><b>Steps</b><ul><li>Register the sandbox as a service provider</li><li>Map the <i>staff</i> and <i>admin</i> groups</li><li>Test with two pilot accounts</li></ul>See the <a href=\"https://example.test/runbooks/sso\">SSO runbook</a> for the certificate rotation notes.",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01",
+        "IEAAAAAAI4AAAA02"
+      ],
+      "responsibleIds": [
+        "KUAAAA01",
+        "KUAAAA02"
+      ],
+      "status": "Active",
+      "importance": "High",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-11T12:00:00Z",
+      "dates": {
+        "type": "Planned",
+        "start": "2026-11-07T09:00:00",
+        "due": "2026-11-11T17:00:00",
+        "duration": 2400
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA02",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459101",
+      "priority": "01000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA02",
+      "accountId": "IEAAAAAA",
+      "title": "Rotate API keys for the staging cluster",
+      "description": "Rotate before the audit. <u>Do not</u> reuse the <span style=\"color:#d73a49\">old prefixes</span>.<table><tr><td>Service</td><td>Owner</td></tr><tr><td>gateway</td><td>Pat</td></tr><tr><td>worker</td><td>Riley</td></tr></table>",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01"
+      ],
+      "responsibleIds": [
+        "KUAAAA01"
+      ],
+      "status": "Active",
+      "importance": "Normal",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-10T12:00:00Z",
+      "dates": {
+        "type": "Milestone",
+        "due": "2026-11-12T17:00:00"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA01",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459102",
+      "priority": "02000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA03",
+      "accountId": "IEAAAAAA",
+      "title": "Draft the Q4 launch checklist",
+      "description": "One page, owners named per line.",
+      "parentIds": [
+        "IEAAAAAAI4AAAA02"
+      ],
+      "responsibleIds": [
+        "KUAAAA01",
+        "KUAAAA03"
+      ],
+      "status": "Active",
+      "importance": "Normal",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-09T12:00:00Z",
+      "dates": {
+        "type": "Planned",
+        "start": "2026-11-10T09:00:00",
+        "due": "2026-11-13T17:00:00",
+        "duration": 1920
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA03",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459103",
+      "priority": "03000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA04",
+      "accountId": "IEAAAAAA",
+      "title": "Write onboarding guide for new support agents",
+      "description": "Cover the queue views, macros and the escalation path.",
+      "parentIds": [
+        "IEAAAAAAI4AAAA03"
+      ],
+      "responsibleIds": [
+        "KUAAAA01"
+      ],
+      "status": "Active",
+      "importance": "Low",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-08T12:00:00Z",
+      "dates": {
+        "type": "Milestone",
+        "due": "2026-11-22T17:00:00"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAB01",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459104",
+      "priority": "04000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA05",
+      "accountId": "IEAAAAAA",
+      "title": "Clean up stale feature flags",
+      "description": "",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01"
+      ],
+      "responsibleIds": [
+        "KUAAAA01"
+      ],
+      "status": "Active",
+      "importance": "Normal",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-07T12:00:00Z",
+      "dates": {
+        "type": "Backlog"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA01",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459105",
+      "priority": "05000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA06",
+      "accountId": "IEAAAAAA",
+      "title": "Archive last year's dashboards and move the saved reports that still get traffic into the shared analytics space",
+      "description": "Keep anything opened in the last 90 days.",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01"
+      ],
+      "responsibleIds": [
+        "KUAAAA01"
+      ],
+      "status": "Active",
+      "importance": "Low",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-06T12:00:00Z",
+      "dates": {
+        "type": "Milestone",
+        "due": "2026-12-03T17:00:00"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA01",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459106",
+      "priority": "06000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA07",
+      "accountId": "IEAAAAAA",
+      "title": "Fix login redirect loop",
+      "description": "The session cookie is dropped after the identity provider callback.",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01"
+      ],
+      "responsibleIds": [
+        "KUAAAA02"
+      ],
+      "status": "Active",
+      "importance": "High",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-05T12:00:00Z",
+      "dates": {
+        "type": "Milestone",
+        "due": "2026-11-14T17:00:00"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA02",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459107",
+      "priority": "07000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA08",
+      "accountId": "IEAAAAAA",
+      "title": "Fix flaky export test",
+      "description": "",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01"
+      ],
+      "responsibleIds": [],
+      "status": "Completed",
+      "importance": "Normal",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-04T12:00:00Z",
+      "dates": {
+        "type": "Milestone",
+        "due": "2026-11-04T17:00:00"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA04",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459108",
+      "priority": "08000000"
+    },
+    {
+      "id": "IEAAAAAAKQAAAA09",
+      "accountId": "IEAAAAAA",
+      "title": "Renew TLS certificate for the login domain",
+      "description": "",
+      "parentIds": [
+        "IEAAAAAAI4AAAA01"
+      ],
+      "responsibleIds": [
+        "KUAAAA03"
+      ],
+      "status": "Deferred",
+      "importance": "Normal",
+      "createdDate": "2026-10-13T12:00:00Z",
+      "updatedDate": "2026-11-03T12:00:00Z",
+      "dates": {
+        "type": "Milestone",
+        "due": "2026-12-12T17:00:00"
+      },
+      "scope": "WsTask",
+      "customStatusId": "IEAAAAAAJMAAAA05",
+      "permalink": "https://www.wrike.com/open.htm?id=4598459109",
+      "priority": "09000000"
+    }
+  ]
+}

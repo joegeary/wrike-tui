@@ -1,0 +1,156 @@
+{
+  "inbox": [
+    {
+      "notificationId": "w:obj_chng:1057210601",
+      "notificationType": "Mention",
+      "isUnread": true,
+      "ts": "2026-11-12T15:25:00Z",
+      "item": {
+        "id": "w:itm:4598459101",
+        "title": "Enable SSO on sandbox",
+        "itemType": "TASK",
+        "baseType": "TASK",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459101"
+      },
+      "author": {
+        "id": "w:usr:1961702",
+        "type": "user",
+        "name": "Pat Example"
+      },
+      "commentText": "@Sam Sample can we run trainings in the sandbox?",
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210602",
+      "notificationType": "EntitiesAssigned",
+      "isUnread": true,
+      "ts": "2026-11-12T14:00:00Z",
+      "item": {
+        "id": "w:itm:4598459102",
+        "title": "Rotate API keys for the staging cluster",
+        "itemType": "TASK",
+        "baseType": "TASK",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459102"
+      },
+      "author": {
+        "id": "w:usr:1961703",
+        "type": "user",
+        "name": "Riley Demo"
+      },
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210603",
+      "notificationType": "Comment",
+      "isUnread": true,
+      "ts": "2026-11-12T13:00:00Z",
+      "item": {
+        "id": "w:itm:4598459107",
+        "title": "Fix login redirect loop",
+        "itemType": "TASK",
+        "baseType": "TASK",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459107"
+      },
+      "author": {
+        "id": "w:usr:1961702",
+        "type": "user",
+        "name": "Pat Example"
+      },
+      "commentText": "Repro steps attached, it loops after the callback.",
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210604",
+      "notificationType": "Status",
+      "isUnread": true,
+      "ts": "2026-11-12T07:00:00Z",
+      "item": {
+        "id": "w:itm:4598459103",
+        "title": "Draft the Q4 launch checklist",
+        "itemType": "TASK",
+        "baseType": "TASK",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459103"
+      },
+      "author": {
+        "id": "w:usr:1961704",
+        "type": "user",
+        "name": "Jordan Placeholder"
+      },
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210605",
+      "notificationType": "ApprovalRequested",
+      "isUnread": true,
+      "ts": "2026-11-11T13:00:00Z",
+      "author": {
+        "id": "w:usr:1961703",
+        "type": "user",
+        "name": "Riley Demo"
+      },
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210606",
+      "notificationType": "Mention",
+      "isUnread": true,
+      "ts": "2026-11-10T12:00:00Z",
+      "item": {
+        "id": "w:itm:4598459002",
+        "title": "Q4 Launch",
+        "itemType": "PROJECT",
+        "baseType": "PROJECT",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459002"
+      },
+      "author": {
+        "id": "w:usr:1961704",
+        "type": "user",
+        "name": "Jordan Placeholder"
+      },
+      "commentText": "@Sam Sample the launch date moved, see the updated plan.",
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210607",
+      "notificationType": "Comment",
+      "isUnread": false,
+      "ts": "2026-11-08T16:00:00Z",
+      "item": {
+        "id": "w:itm:4598459104",
+        "title": "Write onboarding guide for new support agents",
+        "itemType": "TASK",
+        "baseType": "TASK",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459104"
+      },
+      "author": {
+        "id": "w:usr:1961703",
+        "type": "user",
+        "name": "Riley Demo"
+      },
+      "commentText": "Added the escalation matrix.",
+      "archived": false
+    },
+    {
+      "notificationId": "w:obj_chng:1057210608",
+      "notificationType": "Status",
+      "isUnread": false,
+      "ts": "2026-11-03T16:00:00Z",
+      "item": {
+        "id": "w:itm:4598459109",
+        "title": "Renew TLS certificate for the login domain",
+        "itemType": "TASK",
+        "baseType": "TASK",
+        "permalink": "https://www.wrike.com/open.htm?id=4598459109"
+      },
+      "author": {
+        "id": "w:usr:1961703",
+        "type": "user",
+        "name": "Riley Demo"
+      },
+      "archived": false
+    }
+  ],
+  "returned": 8,
+  "matched": 8,
+  "hasMore": false
+}

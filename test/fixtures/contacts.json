@@ -1,0 +1,134 @@
+{
+  "kind": "contacts",
+  "data": [
+    {
+      "id": "KUAAAA01",
+      "firstName": "Sam",
+      "lastName": "Sample",
+      "type": "Person",
+      "profiles": [
+        {
+          "accountId": "IEAAAAAA",
+          "email": "sam.sample@example.test",
+          "role": "User",
+          "external": false,
+          "admin": false,
+          "owner": false,
+          "active": true
+        }
+      ],
+      "avatarUrl": "https://www.wrike.com/avatars/KUAAAA01.png",
+      "timezone": "America/New_York",
+      "locale": "en",
+      "deleted": false,
+      "title": "",
+      "primaryEmail": "sam.sample@example.test",
+      "me": true
+    },
+    {
+      "id": "KUAAAA02",
+      "firstName": "Pat",
+      "lastName": "Example",
+      "type": "Person",
+      "profiles": [
+        {
+          "accountId": "IEAAAAAA",
+          "email": "pat.example@example.test",
+          "role": "User",
+          "external": false,
+          "admin": false,
+          "owner": false,
+          "active": true
+        }
+      ],
+      "avatarUrl": "https://www.wrike.com/avatars/KUAAAA02.png",
+      "timezone": "America/New_York",
+      "locale": "en",
+      "deleted": false,
+      "title": "",
+      "primaryEmail": "pat.example@example.test"
+    },
+    {
+      "id": "KUAAAA03",
+      "firstName": "Riley",
+      "lastName": "Demo",
+      "type": "Person",
+      "profiles": [
+        {
+          "accountId": "IEAAAAAA",
+          "email": "riley.demo@example.test",
+          "role": "User",
+          "external": false,
+          "admin": false,
+          "owner": false,
+          "active": true
+        }
+      ],
+      "avatarUrl": "https://www.wrike.com/avatars/KUAAAA03.png",
+      "timezone": "America/New_York",
+      "locale": "en",
+      "deleted": false,
+      "title": "",
+      "primaryEmail": "riley.demo@example.test"
+    },
+    {
+      "id": "KUAAAA04",
+      "firstName": "Jordan",
+      "lastName": "Placeholder",
+      "type": "Person",
+      "profiles": [
+        {
+          "accountId": "IEAAAAAA",
+          "email": "jordan.placeholder@example.test",
+          "role": "User",
+          "external": false,
+          "admin": false,
+          "owner": false,
+          "active": true
+        }
+      ],
+      "avatarUrl": "https://www.wrike.com/avatars/KUAAAA04.png",
+      "timezone": "America/New_York",
+      "locale": "en",
+      "deleted": false,
+      "title": "",
+      "primaryEmail": "jordan.placeholder@example.test"
+    },
+    {
+      "id": "KUAAAA09",
+      "firstName": "Former",
+      "lastName": "Colleague",
+      "type": "Person",
+      "profiles": [
+        {
+          "accountId": "IEAAAAAA",
+          "email": "former.colleague@example.test",
+          "role": "User",
+          "external": false,
+          "admin": false,
+          "owner": false,
+          "active": true
+        }
+      ],
+      "avatarUrl": "https://www.wrike.com/avatars/KUAAAA09.png",
+      "timezone": "America/New_York",
+      "locale": "en",
+      "deleted": true,
+      "title": "",
+      "primaryEmail": "former.colleague@example.test"
+    },
+    {
+      "id": "KUAAAG01",
+      "firstName": "Platform Team",
+      "lastName": "",
+      "type": "Group",
+      "profiles": [],
+      "avatarUrl": "",
+      "deleted": false,
+      "memberIds": [
+        "KUAAAA01",
+        "KUAAAA02"
+      ]
+    }
+  ]
+}

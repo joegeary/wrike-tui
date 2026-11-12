@@ -1,0 +1,219 @@
+import type { Fetch } from "../../src/wrike/transport"
+import { ME, seed, type FakeData, type FakeTask } from "./data"
+
+export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
+type Failure = { method?: string; path: string; status: number; times: number }
+
+export type FakeWrike = {
+  data: FakeData
+  /** Every REST write, in order, with its form parameters as sent. */
+  writes: RecordedWrite[]
+  /** Every request line, in order. */
+  requests: string[]
+  handle(request: Request): Promise<Response>
+  fetch: Fetch
+  /** Makes the next `times` requests whose path starts with `path` fail with `status`. */
+  fail(failure: { method?: string; path: string; status: number; times?: number }): void
+}
+
+const OPTIONAL_LIST_FIELDS = [
+  "description", "briefDescription", "parentIds", "superParentIds", "sharedIds", "responsibleIds", "authorIds",
+  "hasAttachments", "superTaskIds", "subTaskIds", "dependencyIds", "metadata", "customFields",
+] as const
+
+const json = (body: unknown, status = 200) => Response.json(body, { status })
+const wrikeError = (status: number, error: string, errorDescription: string) => json({ error, errorDescription }, status)
+const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+export function createFakeWrike(options: { token: string; today: string; now: string }): FakeWrike {
+  const data = seed(options.today, options.now)
+  const writes: RecordedWrite[] = []
+  const requests: string[] = []
+  const failures: Failure[] = []
+  let sequence = 0
+
+  const authorized = (request: Request) =>
+    request.headers.get("authorization")?.toLowerCase() === `bearer ${options.token}`.toLowerCase()
+
+  const allStatuses = () =>
+    [...data.workflows, ...Object.values(data.spaceWorkflows).flat()].flatMap(
+      (workflow) => (workflow as { customStatuses: { id: string; group: FakeTask["status"] }[] }).customStatuses,
+    )
+
+  function listTasks(query: URLSearchParams): Response {
+    const array = (name: string): string[] | null => (query.has(name) ? (JSON.parse(query.get(name)!) as string[]) : null)
+    const responsibles = array("responsibles")
+    const title = query.get("title")?.toLowerCase()
+    let found = data.tasks.filter(
+      (task) =>
+        (!responsibles || task.responsibleIds.some((id) => responsibles.includes(id))) &&
+        (!query.has("status") || task.status === query.get("status")) &&
+        (title === undefined || task.title.toLowerCase().includes(title)) &&
+        (!query.has("permalink") || task.permalink === query.get("permalink")),
+    )
+    const descending = query.get("sortOrder") === "Desc" ? -1 : 1
+    if (query.get("sortField") === "DueDate") {
+      found = found.toSorted((a, b) => (a.dates.due ?? "9999").localeCompare(b.dates.due ?? "9999") * descending)
+    } else if (query.get("sortField") === "UpdatedDate") {
+      found = found.toSorted((a, b) => a.updatedDate.localeCompare(b.updatedDate) * descending)
+    }
+    const fields = array("fields") ?? []
+    const page = found.slice(0, Number(query.get("pageSize") ?? 1000)).map((task) => {
+      const row: Record<string, unknown> = { ...task }
+      for (const field of OPTIONAL_LIST_FIELDS) if (!fields.includes(field)) delete row[field]
+      return row
+    })
+    return json({ kind: "tasks", data: page })
+  }
+
+  function updateTask(task: FakeTask, form: URLSearchParams): Response {
+    const invalid = (name: string) => wrikeError(400, "invalid_parameter", `Parameter '${name}' value is invalid`)
+    if (form.has("title")) {
+      if (form.get("title")!.trim() === "") return invalid("title")
+      task.title = form.get("title")!
+    }
+    if (form.has("description")) task.description = form.get("description")!
+    if (form.has("importance")) {
+      const importance = form.get("importance")!
+      if (importance !== "High" && importance !== "Normal" && importance !== "Low") return invalid("importance")
+      task.importance = importance
+    }
+    if (form.has("customStatus")) {
+      const status = allStatuses().find((candidate) => candidate.id === form.get("customStatus"))
+      if (!status) return invalid("customStatus")
+      task.customStatusId = status.id
+      task.status = status.group
+    }
+    if (form.has("dates")) {
+      const dates = JSON.parse(form.get("dates")!) as FakeTask["dates"]
+      task.dates = {
+        type: dates.type,
+        ...(dates.start ? { start: `${dates.start.slice(0, 10)}T09:00:00` } : {}),
+        ...(dates.due ? { due: `${dates.due.slice(0, 10)}T17:00:00` } : {}),
+      }
+    }
+    const added = form.has("addResponsibles") ? (JSON.parse(form.get("addResponsibles")!) as string[]) : []
+    const removed = form.has("removeResponsibles") ? (JSON.parse(form.get("removeResponsibles")!) as string[]) : []
+    task.responsibleIds = [...new Set([...task.responsibleIds, ...added])].filter((id) => !removed.includes(id))
+    task.updatedDate = new Date().toISOString().replace(/\.\d+Z$/, "Z")
+    return json({ kind: "tasks", data: [task] })
+  }
+
+  async function rest(request: Request, path: string, query: URLSearchParams): Promise<Response> {
+    const method = request.method
+    const form = method === "GET" ? new URLSearchParams() : new URLSearchParams(await request.text())
+    if (method !== "GET") writes.push({ method, path, params: Object.fromEntries(form) })
+
+    if (method === "GET" && path === "/contacts") {
+      const contacts = query.get("me") === "true" ? data.contacts.filter((contact) => contact.id === ME) : data.contacts
+      return json({ kind: "contacts", data: contacts })
+    }
+    if (method === "GET" && path === "/workflows") return json({ kind: "workflows", data: data.workflows })
+    if (method === "GET" && path === "/spaces") return json({ kind: "spaces", data: data.spaces })
+    const spaceWorkflows = /^\/spaces\/([^/]+)\/workflows$/.exec(path)
+    if (method === "GET" && spaceWorkflows) return json({ kind: "workflows", data: data.spaceWorkflows[spaceWorkflows[1]!] ?? [] })
+    if (method === "GET" && path === "/tasks") return listTasks(query)
+    if (method === "GET" && path === "/ids") {
+      const ids = JSON.parse(query.get("ids") ?? "[]") as string[]
+      const found = ids.flatMap((apiV2Id) => {
+        const task = data.tasks.find((candidate) => candidate.permalink.endsWith(`=${apiV2Id}`))
+        return task ? [{ id: task.id, apiV2Id }] : []
+      })
+      return json({ kind: "ids", data: found })
+    }
+    const folders = /^\/folders\/([^/]+)$/.exec(path)
+    if (method === "GET" && folders) {
+      const ids = folders[1]!.split(",")
+      return json({ kind: "folders", data: data.folders.filter((folder) => ids.includes(folder.id)) })
+    }
+
+    const taskPath = /^\/tasks\/([^/]+)(\/comments)?$/.exec(path)
+    if (taskPath) {
+      const task = data.tasks.find((candidate) => candidate.id === taskPath[1])
+      if (!task) return wrikeError(404, "resource_not_found", "Task not found")
+      if (!taskPath[2]) {
+        if (method === "GET") return json({ kind: "tasks", data: [task] })
+        if (method === "PUT") return updateTask(task, form)
+      } else {
+        if (method === "GET") return json({ kind: "comments", data: data.comments.filter((comment) => comment.taskId === task.id) })
+        if (method === "POST") {
+          const text = form.get("text") ?? ""
+          if (text.trim() === "") return wrikeError(400, "invalid_parameter", "Parameter 'text' value is invalid")
+          sequence += 1
+          const stamp = new Date().toISOString().replace(/\.\d+Z$/, "Z")
+          const comment = {
+            id: `IEAAAAAAIMAAAN${String(sequence).padStart(2, "0")}`,
+            authorId: ME,
+            text: form.get("plainText") === "true" ? escapeHtml(text).replace(/\n/g, "<br />") : text,
+            createdDate: stamp,
+            updatedDate: stamp,
+            taskId: task.id,
+          }
+          data.comments.unshift(comment)
+          return json({ kind: "comments", data: [comment] })
+        }
+      }
+    }
+    return wrikeError(404, "method_not_found", `No fake route for ${method} ${path}`)
+  }
+
+  async function mcp(request: Request): Promise<Response> {
+    if (request.method === "GET") return new Response(null, { status: 405 })
+    if (request.method === "DELETE") return new Response(null, { status: 200 })
+    const message = (await request.json()) as { id?: number | string; method: string; params?: Record<string, any> }
+    if (message.id === undefined) return new Response(null, { status: 202 })
+    const result = (value: unknown) => json({ jsonrpc: "2.0", id: message.id, result: value })
+    switch (message.method) {
+      case "initialize":
+        return result({
+          protocolVersion: message.params?.protocolVersion ?? "2025-06-18",
+          capabilities: { tools: {} },
+          serverInfo: { name: "fake-wrike-mcp", version: "0.0.0" },
+        })
+      case "ping":
+        return result({})
+      case "tools/list":
+        return result({ tools: [{ name: "get_my_inbox", description: "Inbox notifications", inputSchema: { type: "object" } }] })
+      case "tools/call": {
+        if (message.params?.name !== "get_my_inbox") {
+          return result({ isError: true, content: [{ type: "text", text: `Unknown tool ${message.params?.name}` }] })
+        }
+        const args = (message.params.arguments ?? {}) as { includeRead?: boolean; limit?: number }
+        const matched = data.inbox.filter((entry) => args.includeRead || entry.isUnread)
+        const inbox = matched.slice(0, args.limit ?? 50)
+        const body = { inbox, returned: inbox.length, matched: matched.length, hasMore: inbox.length < matched.length }
+        return result({ content: [{ type: "text", text: JSON.stringify(body) }] })
+      }
+      default:
+        return json({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `Method not found: ${message.method}` } })
+    }
+  }
+
+  async function handle(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    requests.push(`${request.method} ${url.pathname}${url.search}`)
+    const failure = failures.find(
+      (candidate) => url.pathname.startsWith(candidate.path) && (!candidate.method || candidate.method === request.method),
+    )
+    if (failure) {
+      failure.times -= 1
+      if (failure.times <= 0) failures.splice(failures.indexOf(failure), 1)
+      return failure.status === 429
+        ? wrikeError(429, "too_many_requests", "Rate limit exceeded, try again later")
+        : wrikeError(failure.status, "server_error", "Injected failure")
+    }
+    if (!authorized(request)) return wrikeError(401, "not_authorized", "Access token is unknown or invalid")
+    if (url.pathname === "/mcp") return mcp(request)
+    if (url.pathname.startsWith("/api/v4/")) return rest(request, url.pathname.slice("/api/v4".length), url.searchParams)
+    return wrikeError(404, "method_not_found", `No fake route for ${url.pathname}`)
+  }
+
+  return {
+    data,
+    writes,
+    requests,
+    handle,
+    fetch: (input, init) => handle(new Request(input, init)),
+    fail: (failure) => void failures.push({ times: 1, ...failure }),
+  }
+}
