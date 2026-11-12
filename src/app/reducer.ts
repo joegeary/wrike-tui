@@ -84,7 +84,7 @@ export function start(state: State): Update {
   let update: Update = [state, [{ kind: "load-reference" }]]
   update = then(update, loadInbox)
   update = then(update, (next) => loadTasks(next, { kind: "todo" }, "first"))
-  update = then(update, (next) => loadSpaces(next, true))
+  update = then(update, (next) => loadSpaces(next, shown(next.spaces) === undefined))
   for (const path of state.nav.expanded) {
     const space = pathSpace(path)
     if (space && path === spacePath(space)) update = then(update, (next) => loadTree(next, space))

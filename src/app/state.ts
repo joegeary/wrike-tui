@@ -7,9 +7,11 @@ import type { Scope, ScopeKey } from "../domain/scope"
 import type { Settings, ThemeName } from "../domain/settings"
 import type { RowCursor } from "../domain/shape"
 import type { Favorite, Space, SpaceTree } from "../domain/workspace"
+import type { SessionFile } from "../persist/schemas"
 import type { TaskPage, TaskQuery } from "../wrike/client"
 import type { WrikeError } from "../wrike/errors"
 import { viewPath, type NavPath } from "./nav"
+import { restoreSession } from "./session"
 
 export const PANES = ["nav", "list", "details"] as const
 export type Pane = (typeof PANES)[number]
@@ -223,10 +225,20 @@ export function shown<T>(loadable: Loadable<T> | undefined): T | undefined {
 }
 
 /** What a launch brings from disk. */
-export type Boot = { settings: Settings; favorites: Favorite[]; readOnly: boolean; flash: Flash | null }
+export type Boot = {
+  settings: Settings
+  favorites: Favorite[]
+  readOnly: boolean
+  flash: Flash | null
+  /** The session to come back to, or null to start on the Inbox. */
+  session: SessionFile | null
+  /** The cached spaces list and the cached trees of the spaces the session has open. */
+  spaces: Space[] | null
+  trees: ReadonlyMap<SpaceId, SpaceTree>
+}
 
 export function initialState(profile: Profile, clock: Clock, boot: Boot): State {
-  return {
+  const fresh: State = {
     profile,
     readOnly: boot.readOnly,
     clock,
@@ -239,8 +251,9 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     lists: new Map(),
     views: new Map(),
     lastSearch: "",
-    spaces: { state: "idle" },
-    trees: new Map(),
+    // A cached value is drawn as the last good one while the fetch that follows runs.
+    spaces: boot.spaces ? { state: "loading", previous: boot.spaces } : { state: "idle" },
+    trees: new Map([...boot.trees].map(([space, tree]) => [space, { state: "loading", previous: tree }])),
     nav: { cursor: viewPath("inbox"), expanded: new Set() },
     favorites: boot.favorites,
     missing: new Set(),
@@ -254,4 +267,5 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     afterOpen: null,
     requests: new Map(),
   }
+  return boot.session ? restoreSession(fresh, boot.session) : fresh
 }

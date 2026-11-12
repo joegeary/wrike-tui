@@ -388,7 +388,7 @@ describe("Favorites", () => {
     })
     await app.close()
 
-    app = await openApp(WIDE, { home })
+    app = await openApp(WIDE, { home, restore: false })
     const again = await app.see("Enable SSO on sandbox", "★ Platform")
     expect(nav(again).slice(3, 7)).toEqual([" Favorites", " ★ Platform", " ★ Operations", " ★ Enable SSO on sandbox"])
     await app.press("1", "j", "j", "j", "enter")
@@ -410,7 +410,7 @@ describe("Favorites", () => {
     await app.see("Added Q4 Launch to the favorites")
     await app.close()
 
-    app = await openApp(WIDE, { home })
+    app = await openApp(WIDE, { home, restore: false })
     await app.see("★ Q4 Launch")
     app.fake.data.folders.find((folder) => folder.id === FOLDER.launch)!.title = "Q4 Launch (moved to January)"
     const { folders } = app.fake.data
@@ -448,6 +448,39 @@ describe("Files on disk", () => {
     expect(nav(cached)).toContain("   ▸ Platform")
   })
 
+  test("a new session comes back to the scope, the tree, the shaping, the cursor and the open task", async () => {
+    home = await mkdtemp(join(tmpdir(), "wrike-tui-session-"))
+    await inPlatform({ home })
+    await palette("group by assignee")
+    await app.press("G", "enter")
+    await app.see("3 Details", "Comments (0)", /Keep anything opened in the last 90 days/)
+    await app.press("h")
+    const left = await app.frame()
+    await app.close()
+    expect(((await Bun.file(app.paths.session).json()) as { scope: unknown }).scope).toEqual({ kind: "folder", id: FOLDER.platform, title: "Platform", project: false })
+
+    app = await openApp(WIDE, { home })
+    const first = await app.frame()
+    expect(nav(first).slice(5, 9)).toEqual([" ▾ Engineering", "   ▾ Platform", "       Runbooks", "       Incidents"])
+    const back = await app.see("2 Platform  8 · assignee", "Comments (0)", /Keep anything opened in the last 90 days/)
+    expect(list(back)).toEqual(list(left))
+    expect(nav(back)).toEqual(nav(left))
+    expect(app.store.getState()).toMatchObject({ focus: "list", scope: { kind: "folder", id: FOLDER.platform } })
+    await app.press("enter")
+    await app.see("3 Details", /Keep anything opened in the last 90 days/)
+    expect(app.store.getState().focus).toBe("details")
+  })
+
+  test("a launch told not to restore starts on the Inbox with the tree closed", async () => {
+    home = await mkdtemp(join(tmpdir(), "wrike-tui-session-"))
+    await inPlatform({ home })
+    await app.close()
+    app = await openApp(WIDE, { home, restore: false })
+    const frame = await app.see("2 Inbox", "Enable SSO on sandbox", "Engineering")
+    expect(nav(frame)).toContain(" ▸ Engineering")
+    expect(frame).toContain("Select a task and press Enter to open it here.")
+  })
+
   test("a config file sets the theme, the nav width and a list default", async () => {
     home = await mkdtemp(join(tmpdir(), "wrike-tui-config-"))
     await put(join(home, "config", "wrike-tui", "config.json"), JSON.stringify({ theme: "light", navWidth: 40, lists: { todo: { group: "importance", columns: ["title", "due"] } } }))
@@ -483,7 +516,7 @@ describe("Files on disk", () => {
     expect(written.lists.folder.group).toBe("due")
     await app.close()
 
-    app = await openApp(WIDE, { home })
+    app = await openApp(WIDE, { home, restore: false })
     await app.see("Enable SSO on sandbox", "Engineering")
     expect(app.store.getState().settings.theme).toBe("high-contrast")
     await app.press("1", "j", "j", "j", "j", "space", "j", "j", "j", "enter")

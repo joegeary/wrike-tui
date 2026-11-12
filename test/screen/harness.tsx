@@ -8,7 +8,7 @@ import { createStore } from "../../src/app/store"
 import { userId } from "../../src/domain/ids"
 import { App } from "../../src/ui/App"
 import { createBridge } from "../../src/ui/bridge"
-import { movedAsideFlash } from "../../src/ui/launch"
+import { loadBoot, sessionSaver } from "../../src/app/session"
 import { createPersistence, persistencePaths } from "../../src/persist/persistence"
 import { createWrikeClient } from "../../src/wrike/client"
 import { createInboxSource } from "../../src/wrike/inbox"
@@ -29,6 +29,8 @@ export type AppOptions = {
   /** A fake Wrike to reuse, so a second app sees what the first one changed. */
   fake?: ReturnType<typeof createFakeWrike>
   readOnly?: boolean
+  /** False starts the way `WRIKE_TUI_NO_RESTORE=1` does. */
+  restore?: boolean
 }
 
 /** The whole app in a test renderer, wired to the real client over an in-process fake Wrike. */
@@ -59,9 +61,9 @@ export async function openApp(size: { width: number; height: number } = { width:
     quit: () => void (outside.quit = true),
   }
   const profile = { host: "fake.test", accountId: "IEAAAAAA", userId: userId(ME), name: "Sam Sample" }
-  const [config, favorites] = await Promise.all([persistence.loadConfig(), persistence.loadFavorites()])
-  const boot = { settings: config.value, favorites: favorites.value, readOnly: options.readOnly ?? false, flash: movedAsideFlash([config.movedAside, favorites.movedAside]) }
+  const boot = await loadBoot(persistence, { readOnly: options.readOnly ?? false, restore: options.restore ?? true })
   const store = createStore(initialState(profile, CLOCK, boot), deps)
+  const saveSession = sessionSaver(store.getState, persistence)
   const screen = await testRender(<App store={store} bridge={bridge} />, size)
   // The app updates state from timers and promises, outside any act() scope.
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
@@ -126,9 +128,10 @@ export async function openApp(size: { width: number; height: number } = { width:
     press,
     type,
     resize: (width: number, height: number) => screen.resize(width, height),
-    /** Ends the app. The directory is kept when the caller passed one, so a second app can open on it. */
+    /** Ends the app the way quitting does, session written. The directory is kept when the caller passed one, so a second app can open on it. */
     async close() {
       await store.idle()
+      await saveSession()
       await screen.dispose()
       await inbox.close()
       if (!options.home) await rm(home, { recursive: true, force: true })
