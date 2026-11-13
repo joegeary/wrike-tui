@@ -36,6 +36,13 @@ projects, and shapes any list of tasks the way you want to read it.
   duration and custom fields show among the comments by time, one line each.
   `H` hides them or shows them again. A task opens with its newest 50
   changes, and "Load older changes" in the `:` palette brings the next 50.
+- **New tasks and subtasks.** `n` creates a task in the folder you are in, or
+  in a folder you pick from My to-do, Search or the Inbox. `N` creates a
+  subtask of the open task. The new task opens at once, ready for `e`.
+- **Folders, cancel and delete.** `L` files a task in another folder or
+  project, and "Take out of a folder" in the `:` palette removes one, never the
+  last. "Cancel the task" moves it to its workflow's Cancelled status. `D`
+  sends it to the Recycle Bin after you confirm with `y`.
 - **Attachments.** A task's files are listed above the comments with their
   kind, size, author and date. `Enter` on a selected file opens it in the
   browser. A selected image shows a thumbnail.
@@ -134,6 +141,10 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `y` | Copy the URL |
 | | `Y` | Copy the ID |
 | | `F` | Add the task to the favorites, or remove it |
+| | `n` | New task, in the folder the list shows or in one you pick |
+| | `N` | New subtask of the task |
+| | `L` | File the task in another folder or project |
+| | `D` | Delete the task to the Recycle Bin. Only `y` confirms. |
 | Edit mode | `j` `k` | Next or previous field |
 | | `Enter` | Edit the field |
 | | `Esc` | Leave edit mode |
@@ -146,7 +157,7 @@ Press `?` in the client to see the keys for the pane you are in.
 | | the down and up arrows, or `Ctrl+N` `Ctrl+P` | Move |
 | | `Enter` | Run the command |
 | | `Esc` | Close |
-| Text field | `Enter` | Save |
+| Text field | `Enter` | Save, or create the new task |
 | | `Esc` | Discard |
 | Comment | `Enter` | Post, or save an edit |
 | | `Alt+Enter` or `Ctrl+J` | Start a new line |
@@ -157,7 +168,8 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `Tab` or `Enter` | Write the person's name as a mention |
 | | `Esc` | Close the list and keep writing |
 
-Dates are typed as `YYYY-MM-DD`. An empty date clears it.
+Dates are typed as `YYYY-MM-DD`. An empty date clears it. "Cancel the task"
+and "Take out of a folder" have no key. Run them from the `:` palette.
 
 ## Shape a list
 

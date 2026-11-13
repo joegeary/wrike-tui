@@ -109,11 +109,13 @@ more:
 | `taskIdFromLegacy(n)` | `GET /ids?ids=[n]&type=ApiV2Task` |
 | `task(id)` | `GET /tasks/{id}` |
 | `updateTask(id, patch)` | `PUT /tasks/{id}` |
+| `createTask(task)` | `POST /folders/{id}/tasks` with `title`, and `responsibles` and `superTasks` when set. The ID may be a space's |
+| `deleteTask(id)` | `DELETE /tasks/{id}`. Wrike's 400 for a task already in the Recycle Bin comes back as `"already-deleted"`, not as an error |
 | `comments(id)` | `GET /tasks/{id}/comments`, sorted oldest first |
 | `addComment(id, body)` | `POST /tasks/{id}/comments`, with `plainText=true` unless the comment holds a mention |
 | `updateComment(id, body)` | `PUT /comments/{id}`, the same parameters |
 | `deleteComment(id)` | `DELETE /comments/{id}` |
-| `folders(ids)` | `GET /folders/{ids}` for the titles of a task's parents |
+| `folders(ids)` | `GET /folders/{ids}` for the IDs and titles of a task's parents, in the order of `ids` |
 | `attachments(id)` | `GET /tasks/{id}/attachments`, sorted oldest first |
 | `attachmentPreview(id)` | `GET /attachments/{id}/preview`, a small PNG of an image, through `bytes()` |
 | `attachmentUrl(id)` | `GET /attachments/{id}/url`, a temporary signed link that opens without the token |
@@ -168,6 +170,24 @@ These facts about comments come from probes against a production account.
   rel="KUAB6OAK">&#64;Joe Geary</a>`: the REST contact ID and `&#64;` with the
   full name. HTML posted without `plainText` is stored as sent, so a comment
   with a mention must go as HTML.
+
+These facts about creating and reshaping tasks come from probes against a
+production account.
+
+- `POST /folders/{id}/tasks` with `title` creates a task in that folder,
+  project or space. A subtask is the same call with `superTasks=["<parent>"]`
+  and lands in the folder named in the path. `POST /tasks/{id}/tasks` answers
+  `method_not_found`.
+- `PUT /tasks/{id}` with `addParents` or `removeParents` files a task in
+  folders or takes it out. Removing every parent answers 200 and moves the
+  task to the account root, `IEAA5UTEI7777777`, so the client never removes
+  a task's last folder.
+- `DELETE /tasks/{id}` moves the task to the Recycle Bin, where its `scope`
+  is `RbTask`. Its subtasks are detached and stay active as top-level tasks.
+  Deleting it again answers 400 `invalid_request`, "Operation is not allowed
+  on deleted Folder/Task".
+- Cancelling is a status change to a status in the Cancelled group of the
+  task's workflow.
 
 `spaceWorkflows()` runs at most once per session. The reducer asks for it the
 first time a task in a list or in the details has a status that the account
@@ -303,7 +323,18 @@ type TaskPatch =
   | { field: "assignees"; add: UserId[]; remove: UserId[] }
   | { field: "dates"; dates: TaskDates }
   | { field: "description"; html: string }
+  | { field: "parents"; add: FolderId[]; remove: FolderId[] }   // addParents, removeParents
 ```
+
+A new task is its own shape, because Wrike creates it with another call:
+
+```ts
+type FolderRef = { id: FolderId; title: string }   // a folder, project or space as a task names it
+type NewTask = { title: string; folder: FolderId; parent: TaskId | null; assignees: UserId[] }
+```
+
+`cancelStatuses(workflows, status)` gives the visible statuses in the
+Cancelled group of the workflow that holds the task's status.
 
 **Dates.** Start and due are typed as `YYYY-MM-DD`. `withDay` applies one
 typed day and derives the date type from which days are set: both make a
@@ -571,10 +602,10 @@ action. The handlers live in `src/app/reduce/`, split by what they change.
 results, and shows a scope. `nav.ts` has the tree and the favorites. `lists.ts`
 has the list pane: the cursor, grouping, filters and the pickers that shape it.
 `task.ts` has the open task and its edits. `comments.ts` has the selection in
-the details pane, the comment box, and the edits and deletes of comments. The
-modules depend in one direction, `core` then `load`, then `nav`, `lists`,
-`comments` and `task`, and `nav` calls into `lists` and `task` into
-`comments`.
+the details pane, the comment box, and the edits and deletes of comments.
+`work.ts` creates, files, cancels and deletes tasks. The modules depend in one
+direction, `core` then `load`, then `nav`, `lists`, `comments`, `work` and
+`task`, and `nav` calls into `lists` and `task` into `comments` and `work`.
 `reducer.ts` imports them all, and nothing in `reduce/` imports `reducer.ts`.
 
 ```ts
@@ -596,7 +627,8 @@ type Mode =
   | { kind: "edit-text"; field: "title" | "start" | "due"; draft: string; error?: string; origin: Origin }
   | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
   | Compose
-  | { kind: "confirm-delete"; id: CommentId }   // only `y` deletes
+  | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
+  | { kind: "confirm-delete"; target: DeleteTarget }   // only `y` deletes
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
 
@@ -608,6 +640,10 @@ type Compose = {
   pick: number                   // the highlighted person while a mention is typed
   dismissed: number | null       // the `@` whose list Esc closed
 }
+
+// Where a new task goes and who gets it. Only the title is still to come.
+type TaskPlan = { folder: FolderRef; parent: { id: TaskId; title: string } | null; assignees: UserId[] }
+type DeleteTarget = { kind: "comment"; id: CommentId } | { kind: "task"; id: TaskId; title: string; subtasks: number }
 
 // What `]` and `[` step through, in the order the details pane draws it: the attachments, then the comments.
 type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "comment"; id: CommentId }
@@ -631,7 +667,7 @@ type State = {
   favorites: Favorite[]
   missing: Set<string>                        // favorites Wrike answered 404 for
   openTaskId: TaskId | null
-  details: Loadable<{ task: Task; attachments: Attachment[]; attachmentsError?: WrikeError; comments: Comment[]; folders: string[] }>
+  details: Loadable<{ task: Task; attachments: Attachment[]; attachmentsError?: WrikeError; comments: Comment[]; folders: FolderRef[] }>
   selected: DetailsItem | null                // kept by identity, cleared when another task opens
   histories: Map<TaskId, Paged<HistoryEntry>> // field history per task, kept for the session
   previews: Map<AttachmentId, Loadable<Uint8Array>>   // up to 20 thumbnails, in memory only
@@ -640,6 +676,7 @@ type State = {
   spaceWorkflows: "unloaded" | "loading" | "loaded"
   mode: Mode
   flash: { tone: "info" | "error"; text: string } | null
+  lastFolder: FolderRef | null                // where the last task of the session was created
   afterOpen: TaskCommand | null
   requests: Map<string, number>
 }
@@ -666,6 +703,37 @@ Four fields carry what the reducer needs to stay pure and correct.
 A saved task replaces its copy in the details and in every list that holds it.
 A list of active tasks loses a task that was closed. My to-do also gains a
 task that became mine and loses one that was handed off, with no refetch.
+
+**New tasks.** `n` in a space, folder or project creates the task there. In
+My to-do, Search and the Inbox it first opens a picker of folders: the folder
+the last task of the session went to, the favorite folders and projects, and
+every folder, project and space of the loaded trees, each with its space's
+name. `N` creates a subtask of the open task, in the parent's first folder,
+else the scoped folder, else a picked one. The title is typed in the list
+pane. An empty title is refused. In My to-do the new task is assigned to the
+user, so it shows there. Elsewhere nobody gets it. The created task joins the
+list it was created from, the held lists of its folders and My to-do when it
+is mine. A parent gains it in `subTaskIds` and opens in that list. The task
+is selected and opened, and the flash says that `e` edits its fields.
+
+**Filing.** `L` picks one more folder or project for the open task from the
+loaded trees and the favorites, leaving out spaces and the folders it is in.
+The palette's "Take out of a folder" picks one of its folders. A task in one
+folder is refused with "A task stays in at least one folder", because Wrike
+would move it to the account root. After either save the effect names the
+task's folders again, so the Folders line follows. The list the task left
+keeps it until the next refresh.
+
+**Cancel and delete.** The palette's "Cancel the task" sets the one Cancelled
+status of the task's workflow, or opens a picker when the workflow has
+several. `D` asks in the status bar, like a comment delete, and says how many
+subtasks stay behind as top-level tasks. Only `y` deletes. A deleted task
+leaves every list and the details pane, its subtasks lose it as a parent, its
+parent stops counting it, and a favorite of it is marked "not found". Wrike's
+answer that it was already deleted ends the same way, with a neutral flash.
+
+In read-only mode `n`, `N`, `D`, `L`, cancel and take out are refused before a
+picker, a prompt or a question opens.
 
 The rows of the list pane and of the nav pane are selectors that remember
 their last result, keyed on the state parts they read. A cursor move changes
@@ -788,8 +856,8 @@ With nothing typed they come under their group headings. A query ranks them
 flat by a fuzzy match on the title, and on the keywords at a small discount.
 Each line shows the keys that run the command there. Grouping, subgrouping,
 sorting, the filters, the columns, expand all, collapse all, the themes and
-"Save as default" live only in the palette. A filter command opens the picker
-for its values.
+"Save as default", "Cancel the task" and "Take out of a folder" live only in
+the palette. A filter command opens the picker for its values.
 
 | Where | Keys |
 | --- | --- |
@@ -797,14 +865,14 @@ for its values.
 | The navigation pane | `j` `k` move, `Enter` show the row in the list, `Space` open or close the row, `F` favorite, `J` `K` move a favorite |
 | A list | `j` `k` move, `g` `G` top and bottom, `Enter` open, `Space` open or close subtasks or a group, `x` completed on or off, `f` filter by title, `a` read notifications on or off (Inbox) |
 | The details pane | `j` `k` scroll, `g` `G` top and bottom, `]` `[` select an attachment or a comment, `Enter` open the selected file or edit the selected comment, `d` delete the selected comment, `Esc` clear |
-| A task (list or details) | `e` edit fields, `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite |
+| A task (list or details) | `e` edit fields, `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite, `n` new task, `N` new subtask, `D` delete, `L` file in another folder |
 | Edit mode | `j` `k` walk fields, `Enter` open the field, `Esc` leave |
 | Picker | arrows or `Ctrl+N` `Ctrl+P` move, typing filters, `Backspace` erases, `Space` toggles (assignees, filters, columns), `Enter` applies, `Esc` cancels |
 | Palette | typing filters, arrows or `Ctrl+N` `Ctrl+P` move, `Backspace` erases, `Enter` runs, `Esc` closes |
-| Text field | `Enter` saves, `Esc` discards |
+| Text field | `Enter` saves, or creates the new task, `Esc` discards |
 | Comment | `Enter` posts or saves the edit, `Alt+Enter` and `Ctrl+J` start a new line, `Ctrl+E` moves the draft to the editor, `Esc` discards |
 | Mention list | arrows or `Ctrl+N` `Ctrl+P` move, `Tab` or `Enter` writes the name, `Esc` closes the list |
-| Delete confirm | `y` deletes, any other key keeps the comment |
+| Delete confirm | `y` deletes, any other key keeps the comment or the task |
 | Legend | `j` `k` scroll, `Esc`, `?` or `q` closes |
 
 In a picker and in the palette every letter filters, so `j` and `k` do not
@@ -971,7 +1039,12 @@ not include the terminal's own drawing.
   `GET /tasks/{id}/attachments`, the preview route answers with a real PNG,
   and the link route with a signed URL. It edits and
   deletes comments with Wrike's answers, a 404 included, and stores mention
-  HTML as sent. A test can set the clock that stamps new comments. Its
+  HTML as sent. A test can set the clock that stamps new comments. It creates
+tasks and subtasks in a folder or space, files and unfiles them with the
+account root after the last folder, and deletes them to the Recycle Bin with
+Wrike's 400 on a second delete. A deleted task leaves every list, and a
+subtask filed nowhere of its own stays in its deleted parent's folders. Its
+support workflow has two Cancelled statuses. Its
   workspace has the shape measured on a real account: a space of 3,548
   folders, six levels deep, 18 of them under two parents, and a folder of
   1,040 active tasks that pages the way Wrike does, down to a follow-up page
@@ -987,7 +1060,8 @@ not include the terminal's own drawing.
   detached tmux session on a private socket against the fake Wrike on a port:
   login, every Phase 1 flow, every Phase 2 flow at 160 by 45 and at 80 by 24,
   the comment flows of Phase 3 on the real clock, field history and
-  attachments (`e2e/activity.test.ts`), restarts, logout. It saves
+  attachments (`e2e/activity.test.ts`), creating, filing, cancelling and
+  deleting tasks (`e2e/work.test.ts`), restarts, logout. It saves
   every screen to `$WRIKE_TUI_E2E_CAPTURES`. The binary runs in the time zone
   of the test process, because `bun test` runs in UTC and the fake lays its
   dates out there.

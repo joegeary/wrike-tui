@@ -149,6 +149,13 @@ New tasks and subtasks, filing a task into more folders, dependencies, effort,
 milestones, custom fields and custom item types. Bulk edit across a selection.
 Cancel and delete. Launch a blueprint or submit a request form.
 
+Done: new tasks with `n`, in the scoped folder or a picked one, and subtasks
+with `N` in the parent's first folder. Filing a task in another folder with
+`L` and taking it out of one from the palette, never the last, because Wrike
+moves a task with no folder to the account root. Cancel from the palette,
+picking among several Cancelled statuses. Delete with `D` to the Recycle Bin,
+where Wrike's 400 for a task already there counts as deleted.
+
 ## Phase 5. Wrike's own power features
 
 Time logs and a timesheet view. Approvals that wait on you. More than one
