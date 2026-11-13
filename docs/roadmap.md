@@ -179,8 +179,35 @@ occurred. Retry later."
 
 Deferred: custom item types. No task in the measured account uses one.
 
-## Phase 5. Wrike's own power features
+## Phase 5. Fit the way you work
 
-Time logs and a timesheet view. Approvals that wait on you. More than one
-account. OAuth with your own app. Rebindable keys. Handing a task to Claude
-Code with its context. Release builds, install scripts and self-update.
+Rebindable keys. A `keys` section in `config.json` maps a command to the keys
+you want for it. There is no screen in the app for this; the README says how,
+and `wrike-tui keys` prints every command with its keys.
+
+OAuth next to the permanent token. `wrike-tui auth login --oauth` signs in
+through the browser with an app you register in Wrike's App Console. The
+keyring keeps the refresh token, and the app renews the access token when it
+runs out. A permanent token and `WRIKE_TOKEN` keep working as they do now.
+
+Release builds and self-update. A tagged commit builds binaries for Linux and
+macOS and publishes them as a GitHub release with checksums.
+`wrike-tui update` replaces a release binary with the newest one. A local
+build never updates itself.
+
+## Later, maybe
+
+Not planned now. Each one stays here in case the need shows up.
+
+Handing a task to an AI agent. One key would write the task, its comments
+and its screenshots to a file and start a coding agent (Claude Code, Codex,
+opencode, Gemini, aider) on it, with the agents and the launcher (the same
+terminal, tmux, or a new Herdr terminal) set in `config.json`. It would
+remember each task's agent session so a second press resumes it, and would
+write nothing back to Wrike.
+
+Time logs and a timesheet view. Only useful where time is tracked in Wrike.
+
+Approvals that wait on you. Only useful where a team uses Wrike approvals.
+
+More than one account.
