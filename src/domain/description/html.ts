@@ -1,5 +1,5 @@
 import { Lexer, Marked, Parser, Renderer, type Token, type TokenizerAndRendererExtension, type Tokens } from "marked"
-import { breaksBetween, type Part } from "./flow"
+import { breaksBetween, ENDS_IN_HARD_BREAK, type Part } from "./flow"
 
 class WrikeRenderer extends Renderer {
   // Wrike stores <b> and <strong> alike, so each keeps its own delimiter: ** and *, or __ and _.
@@ -126,7 +126,9 @@ export function markdownToHtml(markdown: string): string {
 const parser = new Parser(wrikeMarked.defaults)
 const inline = (tokens: Token[]) => parser.parseInline(tokens)
 
-const HARD_BREAK = / {2,}\n*$/
+/** A paragraph that ends in a hard break, spelled with a backslash or, as a person may type it, two spaces. */
+const endsInHardBreak = (raw: string) => ENDS_IN_HARD_BREAK.test(raw) || / {2,}\n*$/.test(raw)
+const withoutHardBreak = (text: string) => (/ $/.test(text) ? text.replace(/ +$/, "") : text.slice(0, -1))
 
 const trailingNewlines = (raw: string) => raw.length - raw.replace(/\n+$/, "").length
 
@@ -147,7 +149,7 @@ function flow(tokens: Token[], bullets: number, opening = (html: string) => html
     const part: Part = token.type === "paragraph" || token.type === "text" || token.type === "html" ? "text" : "block"
     if (previous) html += "<br />".repeat(Math.max(0, breaksBetween(previous.part, part, newlines, previous.hardBreak)))
     html += previous ? render(token, bullets) : opening(render(token, bullets))
-    previous = { part, hardBreak: HARD_BREAK.test(token.raw) }
+    previous = { part, hardBreak: endsInHardBreak(token.raw) }
     newlines = trailingNewlines(token.raw)
   }
   return html
@@ -159,7 +161,7 @@ function render(token: Token, bullets: number): string {
     case "text":
       if (!token.tokens) return escapeHtml(token.text)
       // A hard break at the end of a paragraph is the <br> before the block that follows, which flow writes.
-      return inline(HARD_BREAK.test(token.raw) ? attachRel(Lexer.lexInline(token.text.replace(/ +$/, ""), wrikeMarked.defaults)) : token.tokens)
+      return inline(endsInHardBreak(token.raw) ? attachRel(Lexer.lexInline(withoutHardBreak(token.text), wrikeMarked.defaults)) : token.tokens)
     case "html":
       return escapeHtml(token.text.replace(/\n+$/, ""))
     case "heading":

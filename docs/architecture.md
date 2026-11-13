@@ -303,11 +303,14 @@ The dialect:
 
 Wrike separates lines and blocks with runs of `<br>`, and the count shows on
 screen. `flow.ts` holds the one table both directions use. A single `<br>`
-inside text is a hard break. Two or more between lines are that many newlines,
-so each blank line in the editor is a blank line in Wrike. A block ends at a
-blank line, and each further blank line after it is a `<br>`. A `<br>` just
-before a block draws nothing, so it is spelled with the two trailing spaces of
-a hard break.
+inside text is a hard break, a backslash at the end of the line. Markdown
+also reads two trailing spaces as one, but many editors strip trailing
+whitespace on save, so the client never writes them; a test strips it from
+every corpus description and expects the same HTML back. Two or more `<br>`
+between lines are that many newlines, so each blank line in the editor is a
+blank line in Wrike. A block ends at a blank line, and each further blank line
+after it is a `<br>`. A `<br>` just before a block draws nothing, so it is
+spelled with the backslash of a hard break.
 
 Text that would read as markup is escaped, but only where markdown would read
 it: `snake_case` and `2 * 3` stay as written, `2\*3\*4` does not. A space

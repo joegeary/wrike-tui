@@ -278,7 +278,7 @@ describe("A formatted description", () => {
     expect(frame).toContain("Partners first")
     expect(frame).toContain("Budget is fixed at 10k.")
     expect(frame).toContain("See the venue (https://example.test/venue) and its plan (image)")
-    for (const marker of ["[x]", "[ ]", "{color", "==", "++", "{rel", "<br>", "&#32;"]) expect(frame).not.toContain(marker)
+    for (const marker of ["[x]", "[ ]", "{color", "==", "++", "{rel", "<br>", "&#32;", "\\"]) expect(frame).not.toContain(marker)
   })
 
   test("E opens it as markdown, and ticking a box saves Wrike's checklist with every other style intact", async () => {
@@ -290,14 +290,14 @@ describe("A formatted description", () => {
     expect(app.outside.edited).toEqual([
       {
         initial: [
-          "One page, owners named per line.  ",
+          "One page, owners named per line.\\",
           "- [x] Book the venue",
           "- [ ] {color:#191919}Send the invites{color}",
           "  - Partners first",
           "",
           "",
-          "=={#ffcc80}Budget== is ++fixed++ at {color:#D81B60}10k{color}.  ",
-          "See [the venue](https://example.test/venue){rel=nofollow} and its plan ![](//storage.example.test/plan.png)  ",
+          "=={#ffcc80}Budget== is ++fixed++ at {color:#D81B60}10k{color}.\\",
+          "See [the venue](https://example.test/venue){rel=nofollow} and its plan ![](//storage.example.test/plan.png)\\",
           "| **Item** | **Owner** |",
           "| --- | --- |",
           "| Venue | Riley<br>Sam |",
