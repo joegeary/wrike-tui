@@ -1,23 +1,30 @@
 import { useState } from "react"
 import { contactName, sameItem } from "../app/selectors"
 import type { Loadable, State } from "../app/state"
+import { localDay } from "../domain/dates"
 import { hasPreview, type Attachment } from "../domain/model"
 import { describeError } from "../wrike/errors"
 import { itemAnchor } from "./Comments"
-import { fileKind, fileSize, stamp } from "./format"
+import { fileKind, fileSize, shortDay, truncate } from "./format"
 import { useTheme } from "./theme"
 
 /** A thumbnail's box. With block characters a cell is one pixel wide and two tall, so Wrike's small previews fill it. */
 const PREVIEW = { width: 24, height: 8 }
 
-/** One line per file, oldest first. The selected one carries a bar on its left, and an image shows its thumbnail under it. */
-export function Attachments({ state, attachments }: { state: State; attachments: Attachment[] }) {
+/**
+ * One line per file, oldest first, cut to `width` so a narrow pane never
+ * wraps a row. The selected one carries a bar on its left, and an image shows
+ * its thumbnail under it.
+ */
+export function Attachments({ state, attachments, width }: { state: State; attachments: Attachment[]; width: number }) {
   const theme = useTheme()
   return (
     <>
       {attachments.map((attachment) => {
         const selected = sameItem(state.selected, { kind: "attachment", id: attachment.id })
-        const about = [fileKind(attachment), attachment.size === null ? null : fileSize(attachment.size), contactName(state, attachment.authorId), stamp(attachment.createdDate)]
+        const day = shortDay(localDay(new Date(attachment.createdDate)), state.clock.today)
+        const about = [fileKind(attachment), attachment.size === null ? null : fileSize(attachment.size), contactName(state, attachment.authorId), day]
+        const name = truncate(attachment.name, width)
         return (
           <box
             key={attachment.id}
@@ -25,9 +32,9 @@ export function Attachments({ state, attachments }: { state: State; attachments:
             flexDirection="column"
             {...(selected ? { border: ["left"], borderStyle: "heavy", borderColor: theme.accent, backgroundColor: theme.selection } : { paddingLeft: 1 })}
           >
-            <text wrapMode="word">
-              <span fg={theme.text}>{attachment.name}</span>
-              <span fg={selected ? theme.selectedDim : theme.dim}>{`  ${about.filter((part) => part !== null).join("  ")}`}</span>
+            <text wrapMode="none">
+              <span fg={theme.text}>{name}</span>
+              <span fg={selected ? theme.selectedDim : theme.dim}>{truncate(`  ${about.filter((part) => part !== null).join("  ")}`, width - Bun.stringWidth(name))}</span>
             </text>
             {selected && hasPreview(attachment) ? <Preview key={attachment.id} preview={state.previews.get(attachment.id)} /> : null}
           </box>

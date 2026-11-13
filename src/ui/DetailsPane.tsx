@@ -76,7 +76,10 @@ function Section({ title }: { title: string }) {
   )
 }
 
-function Body({ state, details, onDraft }: { state: State; details: Details; onDraft: (text: string) => void }) {
+/** The columns left for a row of the scrollbox: the pane's borders, the scrollbox's padding and a row's bar or indent. */
+const ROW_CHROME = 5
+
+function Body({ state, details, width, onDraft }: { state: State; details: Details; width: number; onDraft: (text: string) => void }) {
   const theme = useTheme()
   const style = useMarkdownStyle(theme)
   const { task, attachments, comments, folders } = details
@@ -152,7 +155,7 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
       {attachments.length > 0 ? (
         <>
           <Section title={`Attachments (${attachments.length})`} />
-          <Attachments state={state} attachments={attachments} />
+          <Attachments state={state} attachments={attachments} width={width - ROW_CHROME} />
         </>
       ) : null}
 
@@ -192,7 +195,7 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
       ) : null}
       {shownDetails ? (
         <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY>
-          <Body state={state} details={shownDetails} onDraft={props.onDraft} />
+          <Body state={state} details={shownDetails} width={props.width} onDraft={props.onDraft} />
         </scrollbox>
       ) : null}
       {state.mode.kind === "compose" ? <ComposeBox state={state} mode={state.mode} width={props.width} onDraft={props.onDraft} /> : null}

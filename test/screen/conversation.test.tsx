@@ -136,10 +136,10 @@ describe("Attachments", () => {
     const lines = frame.split("\n").map((line) => line.split("│").at(-2)?.trim() ?? "")
     const at = lines.indexOf("Attachments (4)")
     expect(lines.slice(at + 1, at + 6)).toEqual([
-      "callback-loop.png  PNG image  178 KB  Pat Example  Nov 12 12:58",
-      "har-capture.txt  text  47 KB  Pat Example  Nov 12 12:59",
-      "whiteboard.jpg  JPEG image  2.2 MB  Pat Example  Nov 12 14:00",
-      "Login flow notes  Google  Riley Demo  Nov 12 15:00",
+      "callback-loop.png  PNG image  178 KB  Pat Example  Nov 12",
+      "har-capture.txt  text  47 KB  Pat Example  Nov 12",
+      "whiteboard.jpg  JPEG image  2.2 MB  Pat Example  Nov 12",
+      "Login flow notes  Google  Riley Demo  Nov 12",
       "",
     ])
     expect(at).toBeLessThan(lines.findIndex((line) => line.startsWith("Comments (1)")))
