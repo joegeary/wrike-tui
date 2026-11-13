@@ -114,9 +114,12 @@ export function openTask(state: State): Task | null {
   return state.details.state === "ready" ? state.details.value.task : null
 }
 
-/** The open task's history while history is shown: what is loaded, whether more is older, and how its last load went. */
+/**
+ * The drawn task's history while history is shown: what is loaded, whether
+ * more is older, and how its last load went. It stays while the task reloads.
+ */
 export function openHistory(state: State): Paged<HistoryEntry> | null {
-  const task = openTask(state)
+  const task = shown(state.details)?.task
   return task && state.settings.history ? (state.histories.get(task.id) ?? null) : null
 }
 
