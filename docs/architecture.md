@@ -15,7 +15,7 @@ Data flows one way. Each layer depends only on the layers under it.
                     rows, the palette, the session, effects, the clock ticker
     src/persist/    the files on disk: config, session, favorites, cache
     src/auth/       token resolution and storage, data-center probing
-    src/wrike/      HTTP transport, REST client, MCP inbox client, zod schemas
+    src/wrike/      HTTP transport, REST client, MCP client, zod schemas
     src/domain/     branded IDs, the task and workspace models, scopes, list
                     shaping, pure functions over them
 
@@ -64,6 +64,8 @@ These variables exist for development and tests.
 JSON strings the way Wrike expects (`responsibles=["KUAJ25LC"]`). Writes use
 `PUT`, `POST` or `DELETE` with an `application/x-www-form-urlencoded` body.
 `requestPage()` is the same call and also returns `nextPageToken` as `next`.
+`bytes()` is a GET whose answer is a file, not JSON. It returns the body in
+memory and writes it nowhere.
 
 A 429 retries up to three times. It waits for the `Retry-After` header when
 Wrike sends one, as seconds or as an HTTP date, capped at 60 seconds. Without
@@ -71,7 +73,9 @@ the header it backs off exponentially.
 
 In read-only mode a request that is not a GET fails with `read_only` before
 anything is sent, and the status bar shows "read-only mode: not saved". The MCP
-client only reads, so the mode does not touch it. Errors become one tagged
+client only reads, so the mode does not touch it. A 429 from the MCP server is
+`rate_limited` too, and so is a tool result whose text is not JSON and says
+"rate limit", which is how Wrike's MCP server reports one. Errors become one tagged
 union:
 
 ```ts
@@ -110,6 +114,10 @@ more:
 | `updateComment(id, body)` | `PUT /comments/{id}`, the same parameters |
 | `deleteComment(id)` | `DELETE /comments/{id}` |
 | `folders(ids)` | `GET /folders/{ids}` for the titles of a task's parents |
+| `attachments(id)` | `GET /tasks/{id}/attachments`, sorted oldest first |
+| `attachmentPreview(id)` | `GET /attachments/{id}/preview`, a small PNG of an image, through `bytes()` |
+| `attachmentUrl(id)` | `GET /attachments/{id}/url`, a temporary signed link that opens without the token |
+| `inbox(options)`, `history(item, page)` | the MCP client, below |
 
 `tasks()` serves four queries, 200 tasks to a page.
 
@@ -165,13 +173,25 @@ These facts about comments come from probes against a production account.
 first time a task in a list or in the details has a status that the account
 workflows do not hold.
 
-**MCP inbox client.** Inbox has no REST endpoint, so `inbox()` talks to
-`https://mcp.wrike.com/v2` with the same Bearer token through
-`@modelcontextprotocol/sdk` (`StreamableHTTPClientTransport`). It calls
-`get_my_inbox` with `{ includeRead, limit: 100 }`, takes the JSON from the
-tool result's text content, and parses it with zod into `InboxEntry[]`. The
-connection is opened lazily and reused. A failed call drops the connection, so
-the next refresh connects again.
+**MCP client.** The Inbox and field history have no usable REST endpoint, so
+`src/wrike/mcp.ts` talks to `https://mcp.wrike.com/v2` with the same Bearer
+token through `@modelcontextprotocol/sdk` (`StreamableHTTPClientTransport`).
+Each call takes the JSON from the tool result's text content and parses it
+with zod. The connection is opened on the first call and shared by every
+call after it. A failed call drops the connection, so the next call connects
+again.
+
+| Method | Tool |
+| --- | --- |
+| `inbox({ includeRead })` | `get_my_inbox` with `{ includeRead, limit: 100 }`, into `InboxEntry[]` |
+| `history(item, { pageSize, pageToken })` | `get_item_history` with `{ scope: { type: "ITEMS", itemIds: ["w:itm:<N>"] }, requestedChanges, pageSize, nextPageToken }`, into a `HistoryPage` |
+
+`N` is the number in the task's permalink. `requestedChanges` asks for title,
+assignees, parents, status, start and due dates, duration, attachments and
+custom fields. Changes come newest first. An item Wrike could not read comes
+back with `success: false` and an error, which becomes `invalid` with
+Wrike's words. REST's `GET /tasks/{id}/tasks_history` was probed first and
+answers with nothing but the task's ID.
 
 ## Domain
 
@@ -185,6 +205,7 @@ type CustomStatusId = Brand<string, "CustomStatusId">
 type SpaceId = Brand<string, "SpaceId">
 type FolderId = Brand<string, "FolderId">
 type CommentId = Brand<string, "CommentId">
+type AttachmentId = Brand<string, "AttachmentId">
 
 type StatusGroup = "Active" | "Completed" | "Deferred" | "Cancelled"
 type Importance = "High" | "Normal" | "Low"
@@ -217,6 +238,22 @@ type Task = {
 type Comment = { id: CommentId; authorId: UserId; text: string; createdDate: string }
 type Contact = { id: UserId; name: string; email: string | null }
 
+// storage is "Wrike" for an upload, or the service of a linked file ("Google", "Box").
+type Attachment = { id: AttachmentId; name: string; storage: string; contentType: string | null; size: number | null; authorId: UserId; createdDate: string }
+
+type HistoryChange =
+  | { kind: "title"; from: string | null; to: string }
+  | { kind: "status"; from: string | null; to: string }
+  | { kind: "assignees"; added: string[]; removed: string[] }
+  | { kind: "parents"; added: string[]; removed: string[] }
+  | { kind: "start"; day: string | null }
+  | { kind: "due"; day: string | null }
+  | { kind: "duration"; minutes: number | null }
+  | { kind: "field"; name: string; value: string | null }   // a custom field
+  | { kind: "other"; type: string; action: string }
+type HistoryEntry = { at: string; author: string | null; change: HistoryChange }
+type HistoryPage = { entries: HistoryEntry[]; next: string | null }
+
 type InboxKind = "Mention" | "Assign" | "Comment" | "Status" | "Other"
 type InboxEntry = {
   id: string
@@ -235,6 +272,16 @@ for display (`ApprovalRequested` shows as "Approval requested"), so a new
 Wrike notification type never fails the parse. A
 notification whose item has no ID, no permalink or another base type (a
 report, a dashboard, an approval) has `item: null` and nothing to open.
+
+**History.** `HistorySchema` reads each change through a table keyed by its
+`type`, one payload schema per type. A type missing from the table, or a
+payload that does not match its schema, becomes `other` and is still drawn by
+its type and action ("effort changed"), so a change Wrike adds later never
+fails the parse or goes missing. An author is a name, because history names
+people by their MCP ID (`w:usr:N`), which the REST contacts do not carry.
+`describeChange` writes the line the stream shows: `status Active → On Hold`,
+`assigned Pat Example`, `due 2026-11-20`, `moved into Q4 Launch`,
+`Work Type: DB`.
 
 **Edits** are one union, and one function, `patchParams`, turns a patch into
 `PUT` params:
@@ -535,14 +582,14 @@ type Compose = {
   dismissed: number | null       // the `@` whose list Esc closed
 }
 
-// What `]` and `[` step through, in the order the details pane draws it. Attachments join this union.
-type DetailsItem = { kind: "comment"; id: CommentId }
+// What `]` and `[` step through, in the order the details pane draws it: the attachments, then the comments.
+type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "comment"; id: CommentId }
 
 type State = {
   profile: Profile
   readOnly: boolean
   clock: { now: string; today: string }
-  settings: Settings                          // the config file: theme, nav width, list defaults
+  settings: Settings                          // the config file: theme, nav width, history, list defaults
   scope: Scope
   focus: Pane
   zoom: boolean
@@ -557,8 +604,10 @@ type State = {
   favorites: Favorite[]
   missing: Set<string>                        // favorites Wrike answered 404 for
   openTaskId: TaskId | null
-  details: Loadable<{ task: Task; comments: Comment[]; folders: string[] }>
+  details: Loadable<{ task: Task; attachments: Attachment[]; comments: Comment[]; folders: string[] }>
   selected: DetailsItem | null                // kept by identity, cleared when another task opens
+  histories: Map<TaskId, Paged<HistoryEntry>> // field history per task, kept for the session
+  previews: Map<AttachmentId, Loadable<Uint8Array>>   // thumbnails, in memory only
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
   spaceWorkflows: "unloaded" | "loading" | "loaded"
@@ -579,7 +628,7 @@ Four fields carry what the reducer needs to stay pure and correct.
   The clock only ever lags the real time, so a countdown that looks open
   starts the ticker and the first tick corrects it.
 - `requests` holds the latest request number per target: `inbox`, `details`,
-  `spaces`, `tree:<spaceId>` and `list:<scopeKey>`. A response that carries an
+  `spaces`, `tree:<spaceId>`, `list:<scopeKey>` and `history:<taskId>`. A response that carries an
   older number is dropped, so a slow answer never overwrites a newer one, and
   a page that answers after a reload is not appended.
 - `afterOpen` holds a task key pressed on a list row whose task is not open
@@ -596,7 +645,26 @@ their last result, keyed on the state parts they read. A cursor move changes
 none of those parts, so it does not shape the list again.
 
 `r` reloads the list and the open task, and also the contacts, the workflows,
-the spaces list and the trees of the spaces that are open.
+the spaces list, the trees of the spaces that are open, and the open task's
+history while history is shown.
+
+**History** is fetched after the details arrive, because the MCP call needs
+the number in the task's permalink. Opening a task makes that one MCP call,
+for the newest 50 changes, only while history is shown and only when the
+session holds no history for the task, or holds only a failed try. Reopening
+the task costs nothing. `H` turns history off and on, and turning it on
+fetches the open task's history if it was never fetched. Older pages load
+only from the palette's "Load older changes". A failed or rate-limited load
+keeps the comments and says so in one line above them. `settings.history`
+holds the toggle, so the config sets it at launch and "Save as default"
+writes it, the way the theme works.
+
+**Attachments** load with the task, in parallel with the task and its
+comments. `Enter` on a selected file asks Wrike for a signed link
+(`GET /attachments/{id}/url`) and hands it to the browser, the same handoff
+as `o`. The client never downloads a file. Selecting an image Wrike stores
+fetches its preview once into `previews`, and a failed fetch is tried again
+the next time it is selected.
 
 Text is typed into OpenTUI's `<input>`, which gives cursor movement and line
 editing. The input reports each change as a `draft` action, so the draft still
@@ -610,8 +678,10 @@ editor that exits with an error. The comment box stays open while the editor
 runs, and the text that comes back goes through the same submit as `Enter`,
 for a new comment and for an edit.
 
-A comment is selected with `]` and `[`. `Enter` on it edits it and `d` deletes
-it, and both say why when the comment is someone else's. An edit opens the
+`]` and `[` select the attachments and then the comments, the order the pane
+draws them. `Enter` acts on the selection, so one command, `details.act`,
+holds the key: it opens a file and edits a comment. `d` deletes a comment.
+Both say why when the comment is someone else's. An edit opens the
 comment box on the comment's text and is refused after five minutes. A delete
 asks in the status bar and only `y` sends it. A 404 on a delete means the
 comment is already gone, and it leaves the thread with a neutral message. A
@@ -676,10 +746,10 @@ for its values.
 
 | Where | Keys |
 | --- | --- |
-| Anywhere in browse | `1` `2` `3` focus a pane, `h` `l` or the arrows move between panes, `i` Inbox, `t` My to-do, `/` search, `:` commands, `r` refresh, `v` zoom details, `?` keys, `q` quit |
+| Anywhere in browse | `1` `2` `3` focus a pane, `h` `l` or the arrows move between panes, `i` Inbox, `t` My to-do, `/` search, `:` commands, `r` refresh, `v` zoom details, `H` field history on or off, `?` keys, `q` quit |
 | The navigation pane | `j` `k` move, `Enter` show the row in the list, `Space` open or close the row, `F` favorite, `J` `K` move a favorite |
 | A list | `j` `k` move, `g` `G` top and bottom, `Enter` open, `Space` open or close subtasks or a group, `x` completed on or off, `f` filter by title, `a` read notifications on or off (Inbox) |
-| The details pane | `j` `k` scroll, `g` `G` top and bottom, `]` `[` select a comment, and on a selected comment `Enter` edit, `d` delete, `Esc` clear |
+| The details pane | `j` `k` scroll, `g` `G` top and bottom, `]` `[` select an attachment or a comment, `Enter` open the selected file or edit the selected comment, `d` delete the selected comment, `Esc` clear |
 | A task (list or details) | `e` edit fields, `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite |
 | Edit mode | `j` `k` walk fields, `Enter` open the field, `Esc` leave |
 | Picker | arrows or `Ctrl+N` `Ctrl+P` move, typing filters, `Backspace` erases, `Space` toggles (assignees, filters, columns), `Enter` applies, `Esc` cancels |
@@ -743,7 +813,7 @@ through a temp file and a rename.
 
 | File | Holds | Written |
 | --- | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | `theme`, `navWidth` (16 to 60, default 30), `completed`, and `lists`: a partial `ListSpec` per kind of scope (`todo`, `search`, `space`, `folder`, `project`) | by hand, and by the palette's "Save as default", which writes the theme in use and the current list's shaping for scopes of its kind |
+| `$XDG_CONFIG_HOME/wrike-tui/config.json` | `theme`, `navWidth` (16 to 60, default 30), `completed`, `history` (default true), and `lists`: a partial `ListSpec` per kind of scope (`todo`, `search`, `space`, `folder`, `project`) | by hand, and by the palette's "Save as default", which writes the theme in use, the history toggle and the current list's shaping for scopes of its kind |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/session.json` | the scope, the nav cursor and expanded paths, the focus, the zoom, the open task, the read toggle, and the `ListSpec`, cursor, closed groups and open subtasks of up to 50 scopes | at quit, and every 30 seconds when it changed |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/favorites.json` | the favorites, in order | after each change |
 | `$XDG_CACHE_HOME/wrike-tui/<accountId>/spaces.json` and `tree-<spaceId>.json` | the spaces list and each opened space's tree, with the time fetched | after a fetch that differs from what was held |
@@ -791,11 +861,21 @@ Three panes, left to right. Each title carries its number.
    is applied, and a long scope name gives way to the rest.
 3. **Details**, the other half. Title, a field block (status, importance,
    assignees, start, due, folders, permalink), the description as markdown,
-   then comments, oldest first, in one scrollbox. The selected comment has a bar
-   on its left and scrolls into view, and when it is mine its header counts
-   down the edit window ("editable for 3:12"). The comment box opens at the
-   bottom of the pane, titled with the time left during an edit, and the list
-   of people to mention opens above it.
+   the attachments, then comments and field history oldest first, in one
+   scrollbox. `Attachments (n)` lists each file on one line, cut to the
+   pane's width: name, kind, size, author and the day it was added. The
+   section is left out when a task has no files. The selected file has a bar
+   on its left, and a selected image draws its thumbnail below it through
+   OpenTUI's `<image>` with the protocol on `auto` (kitty graphics where the
+   terminal reports it, blocks inside tmux), in a 24 by 8 box. An image that cannot be decoded says so
+   in a line instead. The heading `Comments (n) · 11 changes` counts the
+   changes, with a `+` while older ones are not loaded. A change is one dim
+   line, `author  time  change`, and wraps only when it is longer than the
+   pane. The selected comment has a bar on its left and scrolls into view,
+   and when it is mine its header counts down the edit window ("editable for
+   3:12"). The comment box opens at the bottom of the pane, titled with the
+   time left during an edit, and the list of people to mention opens above
+   it.
 
 Only the rows on screen are rendered, in the list and in the nav pane.
 
@@ -835,8 +915,14 @@ not include the terminal's own drawing.
   the auth commands, the reducer, the session, the palette's matching and
   scoping, and the registry and keymap tables.
 - **Fake Wrike.** `test/fake/wrike.ts` is one in-memory server with synthetic
-  data. It serves the REST calls and a minimal MCP Streamable HTTP endpoint,
-  checks the token, records every write and can be told to fail. It edits and
+  data. It serves the REST calls and a minimal MCP Streamable HTTP endpoint
+  with `get_my_inbox` and `get_item_history`, checks the token, records every
+  write and every tool call, and can be told to fail. `failTool` makes a tool
+  answer with plain text, the way Wrike reports a rate limit. History has the
+  real response shape, a change of every kind and one of a kind the client
+  does not know, and pages by `pageSize`. Attachments have the real shape of
+  `GET /tasks/{id}/attachments`, the preview route answers with a real PNG,
+  and the link route with a signed URL. It edits and
   deletes comments with Wrike's answers, a 404 included, and stores mention
   HTML as sent. A test can set the clock that stamps new comments. Its
   workspace has the shape measured on a real account: a space of 3,548
@@ -853,7 +939,8 @@ not include the terminal's own drawing.
 - **End to end.** `bun run e2e` compiles the binary and drives it in a
   detached tmux session on a private socket against the fake Wrike on a port:
   login, every Phase 1 flow, every Phase 2 flow at 160 by 45 and at 80 by 24,
-  the comment flows of Phase 3 on the real clock, restarts, logout. It saves
+  the comment flows of Phase 3 on the real clock, field history and
+  attachments (`e2e/activity.test.ts`), restarts, logout. It saves
   every screen to `$WRIKE_TUI_E2E_CAPTURES`. The binary runs in the time zone
   of the test process, because `bun test` runs in UTC and the fake lays its
   dates out there.

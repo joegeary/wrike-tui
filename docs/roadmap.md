@@ -19,9 +19,12 @@ approvals. It returns JSON shaped as `{ kind, data: [...] }`. The rate limit is
 about 400 requests a minute, and a 429 means back off and retry.
 
 The **MCP server** (`https://mcp.wrike.com/v2`) is the only public way to read
-the Inbox. Its `get_my_inbox` tool returns notifications (mentions,
-assignments, status changes, comments) with the item, the author and the
-comment text. The same Bearer token works there. Nothing on either surface can
+the Inbox and a task's field history. Its `get_my_inbox` tool returns
+notifications (mentions, assignments, status changes, comments) with the item,
+the author and the comment text. Its `get_item_history` tool returns each
+change with its author, time and old and new values. REST's
+`GET /tasks/{id}/tasks_history` answers with nothing but the task's ID. The
+same Bearer token works on both surfaces. Nothing on either surface can
 mark a notification read or archive it, so the Inbox is read-only until Wrike
 adds that.
 
@@ -65,8 +68,8 @@ Four gaps shape the design.
 | Session restore and a cached tree at launch | Same | local files | 2 |
 | `config.json` and five themes | `config.json` and four themes | none | 2 |
 | `:` command palette scoped to the pane | Same | none | 2 |
-| Threaded replies, edit and delete own comments | Replies; edit only within 5 minutes of posting; delete | `/comments/{id}/comments`, `PUT` and `DELETE /comments/{id}` | 3 |
-| Activity merged into the comment stream | Field history merged by time | `GET /tasks/{ids}/tasks_history` | 3 |
+| Threaded replies, edit and delete own comments | Edit only within 5 minutes of posting; delete. Replies are deferred. | `PUT` and `DELETE /comments/{id}` | 3 |
+| Activity merged into the comment stream | Field history merged by time | MCP `get_item_history` | 3 |
 | Images drawn in the description (Kitty) | Attachments listed, opened, previewed | `GET /tasks/{id}/attachments` | 3 |
 | No @mention helper | @mention autocomplete in comments | `GET /contacts` | 3 |
 | Labels | Folders a task is filed in (a task can live in many), or custom fields | `addParents`, `removeParents` | 4 |
@@ -122,10 +125,18 @@ Deferred: filtering the tree by name, and showing the total a list will reach
 
 ## Phase 3. Conversation and activity
 
-Comments thread and accept replies. Your own comments can be edited inside
-Wrike's five-minute window and deleted any time. Field history folds into the
-comment stream by time. Attachments list, open and preview. Comments gain
-@mention completion.
+Your own comments can be edited inside Wrike's five-minute window and deleted
+any time. Field history folds into the comment stream by time. Attachments
+list, open and preview. Comments gain @mention completion.
+
+Done: editing and deleting your own comments, @mention completion, field
+history in the comment stream with `H` to hide it, and attachments with a
+thumbnail of a selected image.
+
+Deferred: threaded replies. Wrike refused a reply on the account this was
+built against with "Replying to comments is not allowed on this item", and no
+task in that account has a thread to show. Replies wait until there is an
+account that allows them to build and test against.
 
 Descriptions with checklists, highlights, underline, images or tables open as
 markdown too, with an extended syntax for each (task lists for checklists).

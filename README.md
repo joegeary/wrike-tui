@@ -32,6 +32,13 @@ projects, and shapes any list of tasks the way you want to read it.
 - **Comments.** `]` and `[` select a comment. Your own comment can be edited
   in the five minutes after you post it, as in Wrike's web app, and deleted at
   any time. Type `@` and a few letters to mention someone.
+- **Field history.** Changes to the title, status, assignees, folders, dates,
+  duration and custom fields show among the comments by time, one line each.
+  `H` hides them or shows them again. A task opens with its newest 50
+  changes, and "Load older changes" in the `:` palette brings the next 50.
+- **Attachments.** A task's files are listed above the comments with their
+  kind, size, author and date. `Enter` on a selected file opens it in the
+  browser. A selected image shows a thumbnail.
 
 [docs/roadmap.md](docs/roadmap.md) says what is planned.
 [docs/architecture.md](docs/architecture.md) says how the code is laid out.
@@ -96,6 +103,7 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `:` | Show the commands that apply here, and type to find one |
 | | `r` | Refresh the list, the open task, the people, the workflows and the open spaces |
 | | `v` | Zoom the details pane |
+| | `H` | Show or hide field history among the comments |
 | | `?` | Show the keys |
 | | `q` | Quit |
 | Navigation pane | `j` `k`, or the down and up arrows | Move down or up |
@@ -111,8 +119,8 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `f` | Filter by title. An empty filter clears it. |
 | | `a` | Show or hide read notifications (Inbox) |
 | Details pane | `j` `k` `g` `G` | Scroll |
-| | `]` `[` | Select the next or previous comment |
-| | `Enter` | Edit the selected comment, when it is yours and under five minutes old |
+| | `]` `[` | Select the next or previous attachment or comment |
+| | `Enter` | Open the selected file in the browser, or edit the selected comment when it is yours and under five minutes old |
 | | `d` | Delete the selected comment, when it is yours. Only `y` confirms. |
 | | `Esc` | Clear the selection |
 | A task, in the list or the details | `e` | Edit fields |
@@ -165,7 +173,7 @@ Press `:` in a list and type part of a command.
 | Clear the filters | Removes every filter. |
 | Choose the columns | Importance, status, assignees, due date, start date, updated, folder and ID. A narrow pane drops columns to keep the title readable. |
 | Open every group and subtask, Close every group and subtask | Expands or collapses the whole list. |
-| Save as default | Writes the theme in use, and this list's shaping as the default for lists of its kind, to the config file. |
+| Save as default | Writes the theme in use, whether field history is shown, and this list's shaping as the default for lists of its kind, to the config file. |
 
 Each list keeps its own shaping. Shaping works on the tasks that are loaded,
 so a filter on a list that shows `200+` only sees the first 200 until you load
@@ -175,7 +183,7 @@ more.
 
 | File | Holds |
 | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane and the default shaping of lists |
+| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, and the default shaping of lists |
 | `$XDG_STATE_HOME/wrike-tui/<account>/session.json` | Where you were, restored at the next start |
 | `$XDG_STATE_HOME/wrike-tui/<account>/favorites.json` | Your favorites |
 | `$XDG_CACHE_HOME/wrike-tui/<account>/` | The spaces and folder trees, so the navigation pane draws at once |
@@ -190,6 +198,7 @@ An example `config.json`. Every part is optional.
   "theme": "dark",
   "navWidth": 36,
   "completed": false,
+  "history": true,
   "lists": {
     "todo": { "group": "importance" },
     "folder": { "group": "assignee", "columns": ["importance", "title", "status", "due"] }
@@ -197,8 +206,9 @@ An example `config.json`. Every part is optional.
 }
 ```
 
-`theme` is `terminal`, `dark`, `light` or `high-contrast`. `lists` takes the
-kinds `todo`, `search`, `space`, `folder` and `project`.
+`theme` is `terminal`, `dark`, `light` or `high-contrast`. `history` shows
+field history among the comments, and is true unless you set it false.
+`lists` takes the kinds `todo`, `search`, `space`, `folder` and `project`.
 
 A description opens in your editor as markdown when saving it unchanged would
 write back the same HTML. Otherwise it opens as raw HTML, so that saving never
