@@ -66,19 +66,44 @@ projects, and shapes any list of tasks the way you want to read it.
 [docs/roadmap.md](docs/roadmap.md) says what is planned.
 [docs/architecture.md](docs/architecture.md) says how the code is laid out.
 
-## Install from source
+## Install
+
+Each release has a binary for Linux and macOS, on x64 and arm64, on the
+[Releases page](https://github.com/joegeary/wrike-tui/releases).
+
+1. Download `wrike-tui-<os>-<arch>.tar.gz` for your platform, where `<os>` is
+   `linux` or `darwin` and `<arch>` is `x64` or `arm64`. With the GitHub CLI:
+   `gh release download --repo joegeary/wrike-tui --pattern 'wrike-tui-linux-x64.tar.gz'`.
+2. Unpack it: `tar -xzf wrike-tui-linux-x64.tar.gz`. This gives one file,
+   `wrike-tui`.
+3. Move `wrike-tui` to a directory on your `PATH`, for example `~/.local/bin`.
+
+On macOS, a file downloaded in a browser is quarantined, and the first run is
+refused. Clear the flag once with `xattr -d com.apple.quarantine wrike-tui`.
+A download through `gh` or `curl` is not quarantined.
+
+To check a download, get `SHA256SUMS` from the same release and run
+`sha256sum --check --ignore-missing SHA256SUMS` (`shasum -a 256` on macOS).
+
+`wrike-tui update` replaces a release binary with the newest release, after it
+checks the download against `SHA256SUMS`. `wrike-tui update --check` only says
+whether a newer release is out. It asks the GitHub API without a token, which
+GitHub limits to 60 requests an hour.
+
+### From source
 
 You need [Bun](https://bun.sh) 1.4 or later.
 
 ```sh
-git clone <this repository>
+git clone https://github.com/joegeary/wrike-tui.git
 cd wrike-tui
 bun install
 bun run build
 ```
 
 The build writes one binary to `dist/wrike-tui`. Copy it to a directory on your
-`PATH`.
+`PATH`. A build from source has the version `<version>-dev`, and `wrike-tui
+update` refuses to replace it. Pull and build again instead.
 
 ## Log in
 
@@ -100,6 +125,8 @@ token in the keyring of your operating system. It stores your name and host in
 | `wrike-tui auth login` | Stores a token. |
 | `wrike-tui auth status` | Shows who is logged in and where the token comes from. |
 | `wrike-tui auth logout` | Removes the stored token and profile. |
+| `wrike-tui update` | Replaces a release binary with the newest release. `--check` only reports. |
+| `wrike-tui --version` | Shows the version. |
 
 ### Environment
 
@@ -341,6 +368,12 @@ directory to keep the screen captures of every step.
 GitHub Actions runs the typecheck, `bun test ./test` and `bun run e2e` on every
 push. When the e2e job fails, its screen captures are attached to the run as
 the `e2e-captures` artifact.
+
+Pushing a tag such as `v0.2.0` runs `.github/workflows/release.yml`. It builds
+the binary on Linux x64 and arm64 and macOS arm64 and Intel runners, with
+`WRIKE_TUI_VERSION=0.2.0` so the binary reports that version, runs each one
+with `--version`, and publishes the tarballs and `SHA256SUMS` as a GitHub
+release with generated notes.
 
 ## License
 

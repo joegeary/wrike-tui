@@ -7,7 +7,8 @@ wrike-tui is TypeScript on Bun, rendered by OpenTUI through
 
 Data flows one way. Each layer depends only on the layers under it.
 
-    src/cli/        argv parsing, `auth login|logout|status`, launching the TUI
+    src/cli/        argv parsing, `auth login|logout|status`, `update`, launching
+                    the TUI
     src/ui/         React components that render state and dispatch actions,
                     and the terminal handoffs (editor, browser, clipboard)
     src/app/        the app state machine (reducer, with its handlers in
@@ -1248,6 +1249,39 @@ screen, polled every 2 ms. Key times come from `WRIKE_TUI_FRAME_LOG`.
 Both key times are far under the 50 ms where a list feels slow, with only the
 rows on screen rendered. A key time ends when the frame is composed and does
 not include the terminal's own drawing.
+
+## Releases and update
+
+`src/version.ts` holds `VERSION`. `bun run build` runs `scripts/build.ts`,
+which compiles with `--define WRIKE_TUI_VERSION="<version>"`. The release
+workflow sets `WRIKE_TUI_VERSION` to the tag without its `v`. Anywhere else the
+build defines `<package.json version>-dev`, and `bun run dev` defines nothing,
+which reads as the same `-dev` version. The MCP client reports `VERSION` too.
+
+`.github/workflows/release.yml` runs on a pushed `v*` tag. It builds on native
+runners (`ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15`, `macos-15-intel`),
+because OpenTUI loads a native library from a per-platform package. Each job
+checks that `--version` prints the tag's version and packs
+`wrike-tui-<os>-<arch>.tar.gz`, where `<os>` and `<arch>` are Bun's
+`process.platform` and `process.arch`. The last job writes `SHA256SUMS` and
+runs `gh release create --generate-notes`, and it is the only job with
+`contents: write`.
+
+`wrike-tui update` (`src/cli/update.ts`):
+
+1. A `-dev` version stops with "This is a local build. Rebuild it from the
+   source instead." This keeps it away from builds from source and from
+   `bun run dev`, where `process.execPath` is Bun itself.
+2. `GET https://api.github.com/repos/joegeary/wrike-tui/releases/latest`
+   without a token. A 404 means nothing is released yet.
+3. If the tag is not newer than `VERSION`, it says so. `--check` stops here.
+4. It downloads the tarball for this platform and `SHA256SUMS` and checks the
+   tarball's hash before it reads it. `Bun.Archive` unpacks the binary in memory.
+5. It writes the binary to `.wrike-tui-update-<pid>` in the directory of
+   `realpath(process.execPath)`, sets mode 755, runs it with `--version`, and
+   renames it over the real path. A symlink on `PATH` keeps pointing at the
+   same file, and the path always holds a whole binary. Any failure removes
+   the temp file and leaves the old binary in place.
 
 ## Testing
 
