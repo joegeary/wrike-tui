@@ -277,17 +277,24 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     return wrikeError(404, "method_not_found", `No fake route for ${method} ${path}`)
   }
 
-  /** `get_item_history` for the items in the scope, newest first, paged by `pageSize` with an opaque token. */
-  function itemHistory(args: { scope?: { itemIds?: string[] }; pageSize?: number; nextPageToken?: string }) {
+  /**
+   * `get_item_history` for the items in the scope, newest first, paged by
+   * `pageSize` with an opaque token. Like Wrike, it returns only the requested
+   * types, and leaves out an item with no change of those types.
+   */
+  function itemHistory(args: { scope?: { itemIds?: string[] }; requestedChanges?: string[]; pageSize?: number; nextPageToken?: string }) {
     const offset = args.nextPageToken ? Number(Buffer.from(args.nextPageToken, "base64url").toString()) : 0
     const pageSize = args.pageSize ?? 50
+    const requested = (type: string) => !args.requestedChanges || args.requestedChanges.includes(type)
     let more = false
-    const taskChanges = (args.scope?.itemIds ?? []).map((itemId) => {
+    const taskChanges = (args.scope?.itemIds ?? []).flatMap((itemId): Record<string, unknown>[] => {
       const task = data.tasks.find((candidate) => `w:itm:${candidate.permalink.split("=")[1]}` === itemId)
-      if (!task) return { itemId, success: false, error: "Item not found or access denied" }
-      const all = data.history[task.id] ?? []
+      if (!task) return [{ itemId, success: false, error: "Item not found or access denied" }]
+      const all = (data.history[task.id] ?? []).filter((change) => requested(change.type))
+      const changes = all.slice(offset, offset + pageSize)
+      if (changes.length === 0) return []
       more ||= offset + pageSize < all.length
-      return { itemId, success: true, title: task.title, baseType: "TASK", changes: all.slice(offset, offset + pageSize) }
+      return [{ itemId, success: true, title: task.title, baseType: "TASK", changes }]
     })
     return { taskChanges, truncated: more, ...(more ? { nextPageToken: Buffer.from(String(offset + pageSize)).toString("base64url") } : {}) }
   }

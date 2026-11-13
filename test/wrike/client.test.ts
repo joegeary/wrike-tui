@@ -335,7 +335,6 @@ describe("history over MCP", () => {
       "Sam Sample: moved out of Q4 Launch",
       "Sam Sample: start 2026-11-13",
       "Sam Sample: duration 2d",
-      "Riley Demo: effort changed",
       "Pat Example: title Fix login loop → Fix login redirect loop",
     ])
     expect(page.entries[0]!.at).toBe("2026-11-12T15:40:00Z")
@@ -357,9 +356,11 @@ describe("history over MCP", () => {
     await expect(client.history(loginItem(), { pageSize: 50 })).rejects.toMatchObject({ error: { kind: "rate_limited" } })
   })
 
-  test("a task with no history has none", async () => {
+  test("a task with no change of the asked types is an empty page, as Wrike leaves the item out", async () => {
     const sso = legacyItemId(fake.data.tasks.find((task) => task.id === TASK.sso)!.permalink.split("=")[1]!)!
     expect(await client.history(sso, { pageSize: 50 })).toEqual({ entries: [], next: null })
+    fake.failTool({ tool: "get_item_history", text: JSON.stringify({ taskChanges: [], truncated: false }) })
+    expect(await client.history(loginItem(), { pageSize: 50 })).toEqual({ entries: [], next: null })
   })
 })
 
