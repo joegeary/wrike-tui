@@ -42,7 +42,7 @@ function deleteQuestion(target: DeleteTarget): string {
 }
 
 function planText(plan: TaskPlan): string {
-  const what = plan.parent ? `A subtask of ${plan.parent.title}` : "A new task"
+  const what = plan.parent ? `A subtask of ${quoted(plan.parent.title)}` : "A new task"
   return `${what} in ${plan.folder.title}${plan.assignees.length > 0 ? ", assigned to you" : ""}`
 }
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { ME } from "../fake/data"
+import { ME, TASK } from "../fake/data"
 import { FOLDER } from "../fake/workspace"
 import { openApp } from "./harness"
 
@@ -125,5 +125,49 @@ describe("n creates a task", () => {
     await app.type("Doomed")
     await app.press("enter")
     await app.see("Wrike failed with 500: Injected failure", "2 Platform  8 · status")
+  })
+})
+
+describe("N creates a subtask", () => {
+  test("in the parent's first folder, nested under the parent, which counts it", async () => {
+    await inPlatform()
+    await app.press("G", "N")
+    await app.see('A subtask of "Fix login redirect loop" in Platform')
+    await app.type("Add a regression test")
+    await app.press("enter")
+    const frame = await app.see('Created the subtask "Add a regression test"', /Folders\s+Platform/)
+    expect(app.fake.writes).toEqual([
+      { method: "POST", path: `/folders/${FOLDER.platform}/tasks`, params: { title: "Add a regression test", superTasks: `["${TASK.login}"]` } },
+    ])
+    const rows = list(frame)
+    const parent = rows.findIndex((line) => line.includes("▾ Fix login redirect loop"))
+    expect(rows.slice(parent + 1, parent + 4)).toEqual([
+      expect.stringContaining("Reproduce the redirect loop on s"),
+      expect.stringContaining("Add a regression test"),
+      expect.stringContaining("Patch the callback handler"),
+    ])
+    expect(app.fake.data.tasks.find((task) => task.id === TASK.login)!.subTaskIds).toHaveLength(3)
+    expect(await selectedUrl()).toBe(created().permalink)
+  })
+
+  test("a parent filed in no folder of its own gives the scoped folder, and elsewhere the folder is picked", async () => {
+    await inPlatform()
+    await app.press("G", "space", "j", "N")
+    await app.see('A subtask of "Reproduce the redirect loop on staging" in Platform')
+    await app.press("esc", "/")
+    await app.type("4598459110")
+    await app.press("enter")
+    await app.see("2 Search: 4598459110  1", /Folders\s+none/)
+    await app.press("N")
+    await app.see("─ New subtask in ─")
+    await app.type("incid")
+    await app.press("enter")
+    await app.see('A subtask of "Reproduce the redirect loop on staging" in Incidents')
+    await app.type("Capture the HAR")
+    await app.press("enter")
+    await app.see('Created the subtask "Capture the HAR"', /Folders\s+Incidents/)
+    expect(app.fake.writes).toEqual([
+      { method: "POST", path: `/folders/${FOLDER.incidents}/tasks`, params: { title: "Capture the HAR", superTasks: `["${TASK.reproduce}"]` } },
+    ])
   })
 })
