@@ -213,6 +213,29 @@ describe("text color and highlight", () => {
   })
 })
 
+describe("prose a person types", () => {
+  // Like markdown's _, == and ++ open only with no word running into them, and no delimiter takes a space just inside it.
+  test.each([
+    "a==b==c",
+    "if a == b and c == d",
+    "i++; j++",
+    "c++/g++",
+    "c++ and g++",
+    "x++ + y++",
+    "set {color:#fff} and {color} later",
+  ])("%s stays text", (typed) => {
+    expect(markdownToHtml(typed)).toBe(typed)
+  })
+  test.each([
+    ["==look== here", '<span style="background-color: #F8BBD0;">look</span> here'],
+    ["(++under++)", "(<u>under</u>)"],
+    ["a {color:#fff}x{color}, b", 'a <span style="color: #fff;">x</span>, b'],
+    ["in a{color:#fff}x{color}y, as Wrike colors part of a word", 'in a<span style="color: #fff;">x</span>y, as Wrike colors part of a word'],
+  ])("%s is still markup", (typed, html) => {
+    expect(markdownToHtml(typed)).toBe(html)
+  })
+})
+
 describe("underline", () => {
   test.each([
     ["underlined words", "<u>Do not</u> reuse", "++Do not++ reuse"],
