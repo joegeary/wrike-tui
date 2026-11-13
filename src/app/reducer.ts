@@ -269,7 +269,7 @@ function submit(state: State): Update {
       return submitEditText(state, mode)
     case "picker": {
       const { field } = mode
-      if (field !== "status" && field !== "importance" && field !== "assignees" && field !== "custom") return submitListPicker(state, mode, field)
+      if (field !== "status" && field !== "importance" && field !== "assignees" && field !== "set-field" && field !== "custom") return submitListPicker(state, mode, field)
       return submitTaskPicker(state, mode, field)
     }
     case "browse":

@@ -130,6 +130,7 @@ export const COMMANDS: Command[] = [
   command("task.assign-me", "Assign to me", "Task", ["task"], () => ({ type: "task", command: "assign-me" }), { hint: "mine" }),
   command("task.comment", "Write a comment", "Task", ["task"], () => ({ type: "task", command: "comment" }), { hint: "comment" }),
   command("task.description", "Description in $EDITOR", "Task", ["task"], () => ({ type: "task", command: "description" })),
+  command("task.set-field", "Set a field", "Task", ["task"], () => ({ type: "task", command: "set-field" }), { keywords: ["custom fields", "add a field"] }),
   command("task.browser", "Open in the browser", "Task", ["task"], () => ({ type: "link", act: "browser" })),
   command("task.copy-url", "Copy the URL", "Task", ["task"], () => ({ type: "link", act: "copy-url" }), { keywords: ["permalink", "link"] }),
   command("task.copy-id", "Copy the ID", "Task", ["task"], () => ({ type: "link", act: "copy-id" })),

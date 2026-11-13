@@ -1,3 +1,4 @@
+import { customFieldId } from "../../domain/ids"
 import { choicesOf, fieldEditor, inputText, parseInput, writeText, type CustomField, type FieldWrite } from "../../domain/fields"
 import { anySet, CHOICE, CLEAR_FIELD, editRows, fieldDefs, OTHER_VALUE, pickerOptions, sharedValue } from "../selectors"
 import { EDIT_FIELDS, type EditField, type EditRow, type EditTextMode, type Effect, type FieldEdit, type Origin, type PickerMode, type State, type Update } from "../state"
@@ -37,6 +38,13 @@ export function openFieldEditor(state: State, edit: FieldEdit, origin: Origin): 
       return [{ ...state, mode: { ...mode, cursor: Math.max(0, at) } }, []]
     }
   }
+}
+
+/** Opens the editor of the field chosen in "Set a field", for the same tasks. */
+export function submitSetField(state: State, mode: PickerMode & { field: "set-field" }): Update {
+  const option = pickerOptions(state, mode)[mode.cursor]
+  if (!option) return [state, []]
+  return openFieldEditor({ ...state, mode: { kind: "browse" } }, { id: customFieldId(option.id), taskIds: mode.taskIds }, mode.origin)
 }
 
 /** Saves typed text after checking it against the field's type. A refusal keeps the text in place with the reason. */

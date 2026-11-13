@@ -58,6 +58,23 @@ export function fieldEditor(field: CustomField): FieldEditor {
   }
 }
 
+const KIND_LABELS: Record<FieldKind["type"], string> = {
+  Text: "text",
+  DropDown: "drop-down",
+  Multiple: "multi-select",
+  Numeric: "number",
+  Percentage: "percent",
+  Currency: "currency",
+  Date: "date",
+  Checkbox: "checkbox",
+  Duration: "duration",
+  CalculatedNumeric: "calculated",
+  Unknown: "other",
+}
+
+/** What kind of value a field holds, in a word. */
+export const kindLabel = (kind: FieldKind) => (kind.type === "Unknown" ? kind.wireType : KIND_LABELS[kind.type])
+
 /** True for a field "Set a field" offers: one that can be written and is still in use. */
 export const isWritable = (field: CustomField) => !field.archived && fieldEditor(field).kind !== "none"
 
@@ -175,6 +192,23 @@ function parseDuration(text: string): ParsedInput {
 export function inputText(kind: FieldKind, raw: string | null): string {
   if (raw === null) return ""
   return kind.type === "Duration" && /^\d+$/.test(raw) ? formatMinutes(Number(raw)) : raw
+}
+
+/** What an empty input shows, so a field typed for the first time says what it takes. */
+export function inputPlaceholder(kind: FieldKind): string {
+  switch (kind.type) {
+    case "Date":
+      return "YYYY-MM-DD"
+    case "Duration":
+      return "2h 30m"
+    case "Numeric":
+    case "Percentage":
+      return "number"
+    case "Currency":
+      return kind.currency ? `amount in ${kind.currency}` : "amount"
+    default:
+      return ""
+  }
 }
 
 /** Whether Wrike's answer holds what was written. A field that does not apply is answered without it. */

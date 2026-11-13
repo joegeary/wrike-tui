@@ -18,12 +18,14 @@ const MAX_ROWS = 12
 const WIDTH = 56
 
 function title(state: State, mode: PickerMode): string {
+  if (mode.field === "set-field") return "Set a field"
   return mode.field === "custom" ? (fieldDefs(state.customFields).get(mode.edit.id)?.title ?? "Field") : TITLES[mode.field]
 }
 
 function emptyText(state: State, mode: PickerMode): string {
   if (mode.query !== "") return "Nothing matches the filter."
   if (mode.field === "custom") return "This field has no choices."
+  if (mode.field === "set-field") return state.customFields.state === "loading" ? "Loading the custom fields..." : "No custom field can be set here."
   if (mode.field === "status") {
     return state.spaceWorkflows === "loading" ? "Loading this task's workflow..." : "This task's workflow is not available."
   }

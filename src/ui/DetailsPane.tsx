@@ -6,7 +6,7 @@ import type { CustomFieldId } from "../domain/ids"
 import type { Details, EditField, State } from "../app/state"
 import { isDay } from "../domain/dates"
 import { displayMarkdown } from "../domain/description"
-import { fieldText } from "../domain/fields"
+import { fieldText, inputPlaceholder } from "../domain/fields"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
@@ -111,7 +111,7 @@ function Fields(props: { state: State; task: Details["task"]; active: (id: Custo
       {fields.map((shown) => (
         <Field key={shown.id} anchor={fieldAnchor(shown.id)} label={shown.field?.title ?? shown.id} labelWidth={labelWidth} active={props.active(shown.id)}>
           {typing?.edit.id === shown.id ? (
-            <TextInput value={typing.draft} onInput={props.onDraft} />
+            <TextInput value={typing.draft} placeholder={shown.field ? inputPlaceholder(shown.field.kind) : ""} onInput={props.onDraft} />
           ) : (
             <Value fg={shown.field ? theme.text : theme.dim}>{fieldValue(shown, props.state.clock.today)}</Value>
           )}

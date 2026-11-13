@@ -1,5 +1,5 @@
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
-import { choicesOf, type CustomField } from "../domain/fields"
+import { choicesOf, fieldText, isWritable, kindLabel, type CustomField } from "../domain/fields"
 import type { HistoryEntry } from "../domain/history"
 import type { CustomFieldId, CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
@@ -353,6 +353,25 @@ function fieldOptions(state: State, mode: PickerMode & { field: "custom" }, matc
   ]
 }
 
+/**
+ * The fields "Set a field" offers: those set on the tasks of the current
+ * list first, the most used first, then the rest by title. Archived,
+ * read-only, calculated and unknown fields are left out. A field the tasks
+ * already have shows their value, so it can be changed from here too.
+ */
+function settableFields(state: State, mode: PickerMode & { field: "set-field" }, matches: (text: string) => boolean): PickerOption[] {
+  const uses = new Map<CustomFieldId, number>()
+  for (const task of currentList(state)?.items ?? []) for (const value of task.fields) uses.set(value.id, (uses.get(value.id) ?? 0) + 1)
+  const byTitle = (a: CustomField, b: CustomField) => a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true })
+  return [...fieldDefs(state.customFields).values()]
+    .filter((field) => isWritable(field) && matches(field.title))
+    .sort((a, b) => (uses.get(b.id) ?? 0) - (uses.get(a.id) ?? 0) || byTitle(a, b))
+    .map((field): PickerOption => {
+      const current = sharedValue(state, { id: field.id, taskIds: mode.taskIds })
+      return { id: field.id, label: field.title, detail: current === null ? kindLabel(field.kind) : fieldText(field.kind, current) }
+    })
+}
+
 /** The options of the open picker after its filter. The status picker needs the open task. */
 export function pickerOptions(state: State, mode: PickerMode): PickerOption[] {
   const matches = (text: string) => text.toLowerCase().includes(mode.query.toLowerCase())
@@ -389,6 +408,8 @@ export function pickerOptions(state: State, mode: PickerMode): PickerOption[] {
       return [{ id: ANY_DUE, label: "Any date" }, ...DUE_RANGES.map((range) => ({ id: range, label: DUE_LABELS[range] }))].filter((option) => matches(option.label))
     case "columns":
       return COLUMN_KEYS.filter((column) => column !== "title" && matches(COLUMN_LABELS[column])).map((column) => ({ id: column, label: COLUMN_LABELS[column] }))
+    case "set-field":
+      return settableFields(state, mode, matches)
     case "custom":
       return fieldOptions(state, mode, matches)
   }

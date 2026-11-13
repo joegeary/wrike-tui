@@ -6,7 +6,7 @@ import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { editRows, isMultiPicker, openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
 import { type Action, type EditTextMode, type Mode, type OpenTarget, type Origin, type PickerMode, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
-import { closeEditor, openFieldEditor, submitFieldPicker, submitFieldText } from "./fields"
+import { closeEditor, openFieldEditor, submitFieldPicker, submitFieldText, submitSetField } from "./fields"
 import { withPreview } from "./attachments"
 import { newComment } from "./comments"
 import { clamp, failure, info, markMissing, retitle, TODO, then } from "./core"
@@ -118,6 +118,8 @@ function taskCommand(state: State, command: TaskCommand, task: Task, origin: Ori
       return [{ ...state, mode: newComment() }, []]
     case "description":
       return [state, [{ kind: "edit-description", task }]]
+    case "set-field":
+      return [{ ...state, mode: { kind: "picker", field: "set-field", taskIds: [task.id], query: "", cursor: 0, chosen: [], origin } }, []]
   }
 }
 
@@ -181,8 +183,9 @@ export function submitEditText(state: State, mode: EditTextMode): Update {
   return before === after ? [closed, []] : save(closed, task.id, { field: "dates", dates: result.dates }, done)
 }
 
-export function submitTaskPicker(state: State, mode: PickerMode, field: TaskPicker | "custom"): Update {
+export function submitTaskPicker(state: State, mode: PickerMode, field: TaskPicker | "set-field" | "custom"): Update {
   if (mode.field === "custom") return submitFieldPicker(state, mode)
+  if (mode.field === "set-field") return submitSetField(state, mode)
   const task = openTask(state)
   if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
   const closed = closeEditor(state, mode)

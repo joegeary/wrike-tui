@@ -51,7 +51,7 @@ export const TASK_PICKERS = ["status", "importance", "assignees"] as const
 export type TaskPicker = (typeof TASK_PICKERS)[number]
 export const LIST_PICKERS = ["filter-assignee", "filter-status", "filter-importance", "filter-due", "columns"] as const
 export type ListPicker = (typeof LIST_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker | "custom"
+export type PickerField = TaskPicker | ListPicker | "set-field" | "custom"
 
 /**
  * A custom field being changed and the tasks the value goes to. The details
@@ -68,10 +68,10 @@ type Typing = { kind: "edit-text"; draft: string; error?: string; origin: Origin
 export type EditTextMode = Typing & ({ field: TextField } | { field: "custom"; edit: FieldEdit })
 
 type Picking = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin }
-/** A list of choices that filters as it is typed into. `custom` is a custom field's choices. */
-export type PickerMode = Picking & ({ field: TaskPicker | ListPicker } | { field: "custom"; edit: FieldEdit })
+/** A list of choices that filters as it is typed into. `set-field` lists the custom fields to give the tasks, and `custom` is one field's choices. */
+export type PickerMode = Picking & ({ field: TaskPicker | ListPicker } | { field: "set-field"; taskIds: readonly TaskId[] } | { field: "custom"; edit: FieldEdit })
 
-export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description"] as const
+export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "set-field"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
 export type TaskCommand = (typeof TASK_COMMANDS)[number]
 
