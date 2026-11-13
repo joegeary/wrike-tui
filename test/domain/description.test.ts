@@ -85,6 +85,13 @@ describe("line breaks", () => {
 })
 
 describe("editableDescription", () => {
+  test("an editor that strips trailing spaces on save keeps every line break", () => {
+    const html = "Owner: Riley<br />Due: Friday<br />Notes: see below<ul><li>one<br />two</li></ul>"
+    const editable = editableDescription(html)
+    expect(editable.format).toBe("markdown")
+    const stripped = `${editable.text.replace(/[ \t]+$/gm, "")}\n\nAdded a line.`
+    expect(descriptionFromEdit({ ...editable, text: stripped })).toBe(`${html}Added a line.`)
+  })
   test("simple HTML opens as markdown and converts back", () => {
     const editable = editableDescription("Line one<br><br>Line <b>two</b>")
     expect(editable).toMatchObject({ format: "markdown", text: "Line one\n\nLine **two**" })
