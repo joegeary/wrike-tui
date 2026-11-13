@@ -129,7 +129,8 @@ comment stream by time. Attachments list, open and preview. Comments gain
 
 Descriptions with checklists, highlights, underline, images or tables open as
 markdown too, with an extended syntax for each (task lists for checklists).
-Today those open as raw HTML, about one description in five on a real account.
+Done: 1,065 of the 1,122 descriptions in the test corpus open as markdown and
+save back unchanged, up from 599 of which 595 did not.
 
 ## Phase 4. Create and reshape work
 

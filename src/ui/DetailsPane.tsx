@@ -3,7 +3,7 @@ import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { contactName, statusOf } from "../app/selectors"
 import { EDIT_FIELDS, type Details, type EditField, type State } from "../app/state"
-import { htmlToMarkdown } from "../domain/description"
+import { displayMarkdown } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
@@ -87,7 +87,7 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
   const status = statusOf(state, task)
   const [start, due] = [startDay(task.dates), dueDay(task.dates)]
   const overdue = due !== null && due < state.clock.today && task.statusGroup === "Active"
-  const markdown = useMemo(() => htmlToMarkdown(task.descriptionHtml), [task.descriptionHtml])
+  const markdown = useMemo(() => displayMarkdown(task.descriptionHtml), [task.descriptionHtml])
   const cursor = (field: EditField) => (editing ? (active(field) ? "▸ " : "  ") : "")
 
   const day = (field: "start" | "due", value: string | null) => {

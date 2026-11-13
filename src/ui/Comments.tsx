@@ -2,7 +2,7 @@ import type { SyntaxStyle } from "@opentui/core"
 import { contactName, editTimeLeft, mentionName, mentionSuggestions, sameItem } from "../app/selectors"
 import type { Compose, DetailsItem, State } from "../app/state"
 import { showMentions } from "../domain/comment"
-import { htmlToMarkdown } from "../domain/description"
+import { displayMarkdown } from "../domain/description"
 import type { Comment } from "../domain/model"
 import { countdown, fit, fitAfter, stamp } from "./format"
 import { TextInput } from "./TextInput"
@@ -36,7 +36,7 @@ export function Comments({ state, comments, style }: { state: State; comments: C
               </text>
               {selected && left !== null && left > 0 ? <text fg={theme.success} wrapMode="none">{`  editable for ${countdown(left)}`}</text> : null}
             </box>
-            <markdown syntaxStyle={style} content={htmlToMarkdown(showMentions(comment.text, mentionName(state)))} />
+            <markdown syntaxStyle={style} content={displayMarkdown(showMentions(comment.text, mentionName(state)))} />
           </box>
         )
       })}

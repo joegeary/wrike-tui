@@ -130,7 +130,7 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       const edited = await edit(deps, dispatch, editable.text, editable.format === "markdown" ? "md" : "html")
       if (edited === undefined) return
       if (edited === null) return dispatch({ type: "flash", flash: { tone: "info", text: "Description unchanged" } })
-      const html = descriptionFromEdit({ format: editable.format, text: edited })
+      const html = descriptionFromEdit({ ...editable, text: edited })
       const result = await attempt(() => client.updateTask(effect.task.id, { field: "description", html }))
       return dispatch({ type: "task-saved", done: `Description saved from ${editable.format}`, result })
     }
