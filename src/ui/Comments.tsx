@@ -41,7 +41,7 @@ function historyNotices(history: Paged<HistoryEntry> | null): Notice[] {
 export function Comments({ state, comments, history, style }: { state: State; comments: Comment[]; history: Paged<HistoryEntry> | null; style: SyntaxStyle }) {
   const theme = useTheme()
   const left = editTimeLeft(state, selectedComment(state))
-  const deleting = state.mode.kind === "confirm-delete" && state.mode.target.kind === "comment"
+  const deleting = state.mode.kind === "confirm" && state.mode.target.kind === "comment"
   const changes = history?.items
   const stream = useMemo(() => commentStream(comments, changes ?? []), [comments, changes])
   const notices = historyNotices(history)

@@ -1,5 +1,6 @@
 import type { Fetch } from "../../src/wrike/transport"
 import { ACCOUNT, ME, permalink, PREVIEW_PNG, STATUS, seed, type FakeData, type FakeTask } from "./data"
+import { seedForms, type FakeForm } from "./forms"
 
 export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
 type Failure = { method?: string; path: string; status: number; times: number; retryAfter?: string }
@@ -13,6 +14,8 @@ export type FakeWrike = {
   requests: string[]
   /** Every MCP tool call, in order, with its arguments. */
   toolCalls: { name: string; arguments: Record<string, unknown> }[]
+  /** The request forms, and how the next submission answers: at once, or still processing until one poll later. */
+  forms: { list: FakeForm[]; submitAs: "COMPLETED" | "PROCESSING" }
   handle(request: Request): Promise<Response>
   fetch: Fetch
   /** Makes the next `times` requests whose path starts with `path` fail with `status`. A 429 can carry a `Retry-After` header. */
@@ -60,6 +63,8 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
   const writes: RecordedWrite[] = []
   const requests: string[] = []
   const toolCalls: FakeWrike["toolCalls"] = []
+  const forms: FakeWrike["forms"] = { list: seedForms(), submitAs: "COMPLETED" }
+  const jobs = new Map<string, { itemId: string; polls: number }>()
   const failures: Failure[] = []
   const toolFailures: ToolFailure[] = []
   const holds: { path: string; released: Promise<void> }[] = []
@@ -218,6 +223,23 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     return json({ kind: "tasks", data: [task] })
   }
 
+  /**
+   * `PUT /tasks/{a},{b},...`: up to 100 tasks given one change. Wrike refuses
+   * importance here with a 400, which the client avoids by sending it one task
+   * at a time.
+   */
+  async function updateTasks(ids: string[], form: URLSearchParams): Promise<Response> {
+    if (form.has("importance")) return wrikeError(400, "invalid_parameter", "Parameter 'importance' is not allowed")
+    if (ids.length > 100) return wrikeError(400, "invalid_parameter", "Parameter 'taskIds' value is invalid")
+    const tasks = ids.map((id) => data.tasks.find((candidate) => candidate.id === id))
+    if (tasks.some((task) => task === undefined)) return wrikeError(404, "resource_not_found", "Task not found")
+    if (tasks.some((task) => task!.scope === RECYCLED)) return deletedTask()
+    const answers = tasks.map((task) => updateTask(task!, form))
+    const failed = answers.find((answer) => answer.status !== 200)
+    if (failed) return failed
+    return json({ kind: "tasks", data: tasks })
+  }
+
   let created = 0
 
   /** `POST /folders/{id}/tasks`: the folder or space in the path holds the task, and `superTasks` makes it a subtask of another. */
@@ -329,6 +351,9 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       return json({ kind: "folders", data: data.folders.filter((folder) => ids.includes(folder.id)) })
     }
 
+    const batch = /^\/tasks\/([^/]+,[^/]+)$/.exec(path)
+    if (batch && method === "PUT") return updateTasks(batch[1]!.split(","), form)
+
     const taskPath = /^\/tasks\/([^/]+)(\/comments|\/attachments)?$/.exec(path)
     if (taskPath) {
       const task = data.tasks.find((candidate) => candidate.id === taskPath[1])
@@ -412,6 +437,62 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     return { taskChanges, truncated: more, ...(more ? { nextPageToken: Buffer.from(String(offset + pageSize)).toString("base64url") } : {}) }
   }
 
+  /** `search_requestforms`: the forms whose title, description or field titles hold the text, with pages of field titles and types. */
+  function searchForms(args: { textSearch?: string; limit?: number }) {
+    const text = (args.textSearch ?? "").toLowerCase()
+    const found = forms.list.filter((form) =>
+      [form.title, form.description, ...form.pages.flatMap((page) => page.fields.map((field) => field.title))].some((words) => words.toLowerCase().includes(text)),
+    )
+    const limit = Math.min(args.limit ?? 5, 10)
+    return {
+      forms: found.slice(0, limit).map((form) => ({
+        id: form.id,
+        title: form.title,
+        description: form.description,
+        pages: form.pages.map((page) => ({ title: page.title, fields: page.fields.map((field) => ({ title: field.title, type: field.type })) })),
+      })),
+      truncated: found.length > limit,
+    }
+  }
+
+  /** `get_requestform`: the page index alone, or the named pages with their fields. */
+  function getForm(args: { form?: string; pageIds?: string[]; includePageIndex?: boolean }) {
+    const form = forms.list.find((candidate) => candidate.id === args.form)
+    if (!form) return null
+    const pageIndex = form.pages.map(({ fields: _fields, ...page }) => page)
+    const pages = (args.pageIds ?? []).flatMap((id) => form.pages.filter((page) => page.id === id)).map(({ id, title, fields }) => ({ id, title, fields }))
+    return { id: form.id, title: form.title, description: form.description, ...(args.pageIds === undefined || args.includePageIndex !== false ? { pageIndex } : {}), pages }
+  }
+
+  /**
+   * `submit_requestform`: checks the entry page's mandatory fields and every
+   * choice, then creates a task in the first folder of the workspace titled
+   * by the first text answer.
+   */
+  function submitForm(args: { form?: string; fields?: { field: string; values: string[] }[] }): { error: { retrySafe: boolean; message: string } } | Record<string, unknown> {
+    const form = forms.list.find((candidate) => candidate.id === args.form)
+    if (!form) return { error: { retrySafe: true, message: "Request form not found. Nothing was created." } }
+    const answers = new Map((args.fields ?? []).map((entry) => [entry.field, entry.values]))
+    const fields = form.pages.flatMap((page) => page.fields)
+    for (const [id, values] of answers) {
+      const field = fields.find((candidate) => candidate.id === id)
+      if (!field) return { error: { retrySafe: true, message: `Unknown field ${id}. Nothing was created.` } }
+      if (field.options && values.some((value) => !field.options!.some((option) => option.id === value))) {
+        return { error: { retrySafe: true, message: `Field '${field.title}' got a value that is not one of its options. Nothing was created.` } }
+      }
+    }
+    const missing = form.pages.find((page) => page.visibility === "ENTRY")!.fields.find((field) => field.mandatory && !answers.has(field.id))
+    if (missing) return { error: { retrySafe: true, message: `Field '${missing.title}' is mandatory. Nothing was created.` } }
+    const title = fields.flatMap((field) => (field.type === "TEXT_FIELD" ? (answers.get(field.id) ?? []) : []))[0] ?? form.title
+    const folder = data.folders.find((candidate) => candidate.scope === "WsFolder")!
+    createTask(folder.id, new URLSearchParams({ title, responsibles: JSON.stringify([ME]) }))
+    const itemId = `w:itm:${data.tasks.at(-1)!.permalink.split("=")[1]}`
+    if (forms.submitAs === "COMPLETED") return { status: "COMPLETED", itemId }
+    const submissionId = `w:acj:${jobs.size + 1}`
+    jobs.set(submissionId, { itemId, polls: 0 })
+    return { status: "PROCESSING", submissionId }
+  }
+
   async function mcp(request: Request): Promise<Response> {
     if (request.method === "GET") return new Response(null, { status: 405 })
     if (request.method === "DELETE") return new Response(null, { status: 200 })
@@ -432,6 +513,10 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
           tools: [
             { name: "get_my_inbox", description: "Inbox notifications", inputSchema: { type: "object" } },
             { name: "get_item_history", description: "Field history of items", inputSchema: { type: "object" } },
+            { name: "search_requestforms", description: "Finds request forms by text", inputSchema: { type: "object" } },
+            { name: "get_requestform", description: "One request form", inputSchema: { type: "object" } },
+            { name: "submit_requestform", description: "Submits a request form", inputSchema: { type: "object" } },
+            { name: "get_asyncjob", description: "Status of an async job", inputSchema: { type: "object" } },
           ],
         })
       case "tools/call": {
@@ -442,13 +527,35 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
           if (failure.times <= 0) toolFailures.splice(toolFailures.indexOf(failure), 1)
           return result({ ...(failure.isError ? { isError: true } : {}), content: [{ type: "text", text: failure.text }] })
         }
-        if (message.params?.name === "get_item_history") return result({ content: [{ type: "text", text: JSON.stringify(itemHistory(message.params.arguments ?? {})) }] })
+        const text = (body: unknown) => result({ content: [{ type: "text", text: JSON.stringify(body) }] })
+        const toolError = (body: unknown) => result({ isError: true, content: [{ type: "text", text: typeof body === "string" ? body : JSON.stringify(body) }] })
+        const args = message.params?.arguments ?? {}
+        switch (message.params?.name) {
+          case "get_item_history":
+            return text(itemHistory(args))
+          case "search_requestforms":
+            return text(searchForms(args))
+          case "get_requestform": {
+            const form = getForm(args)
+            return form ? text(form) : toolError("Request form not found or access denied")
+          }
+          case "submit_requestform": {
+            const answer = submitForm(args)
+            return "error" in answer ? toolError(answer.error) : text(answer)
+          }
+          case "get_asyncjob": {
+            const job = jobs.get(String(args.jobId))
+            if (!job) return toolError("Async job not found")
+            job.polls += 1
+            return text(job.polls < 2 ? { status: "IN_PROGRESS", progressPercent: 50 } : { status: "COMPLETED", itemId: job.itemId, progressPercent: 100 })
+          }
+        }
         if (message.params?.name !== "get_my_inbox") {
           return result({ isError: true, content: [{ type: "text", text: `Unknown tool ${message.params?.name}` }] })
         }
-        const args = (message.params.arguments ?? {}) as { includeRead?: boolean; limit?: number }
-        const matched = data.inbox.filter((entry) => args.includeRead || entry.isUnread)
-        const inbox = matched.slice(0, args.limit ?? 50)
+        const inboxArgs = args as { includeRead?: boolean; limit?: number }
+        const matched = data.inbox.filter((entry) => inboxArgs.includeRead || entry.isUnread)
+        const inbox = matched.slice(0, inboxArgs.limit ?? 50)
         const body = { inbox, returned: inbox.length, matched: matched.length, hasMore: inbox.length < matched.length }
         return result({ content: [{ type: "text", text: JSON.stringify(body) }] })
       }
@@ -483,6 +590,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     writes,
     requests,
     toolCalls,
+    forms,
     handle,
     fetch: (input, init) => handle(new Request(input, init)),
     fail: (failure) => void failures.push({ times: 1, ...failure }),

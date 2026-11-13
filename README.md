@@ -49,6 +49,16 @@ projects, and shapes any list of tasks the way you want to read it.
   project, and "Take out of a folder" in the `:` palette removes one, never the
   last. "Cancel the task" moves it to its workflow's Cancelled status. `D`
   sends it to the Recycle Bin after you confirm with `y`.
+- **Bulk edit.** `M` marks tasks in a list, and the list title counts them.
+  While tasks are marked, `s`, `p`, `A`, `m`, "Set a field", "Cancel the task"
+  and `D` in the list act on all of them, and one line in the status bar says
+  how many changed and why any failed. `Esc` or "Clear marks" clears them, and
+  so does showing another list.
+- **Request forms.** "Submit a request form" in the `:` palette searches
+  Wrike's request forms as you type, then walks the one you pick a field at a
+  time, through the pages your answers lead to, and sends it. The task it
+  creates opens. A field that takes a file or a person can only be filled in
+  the browser, and `o` opens the form there.
 - **Attachments.** A task's files are listed above the comments with their
   kind, size, author and date. `Enter` on a selected file opens it in the
   browser. A selected image shows a thumbnail.
@@ -131,6 +141,8 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `x` | Show or hide completed, cancelled and deferred tasks |
 | | `f` | Filter by title. An empty filter clears it. |
 | | `a` | Show or hide read notifications (Inbox) |
+| | `M` | Mark the task, or unmark it, and move to the next task |
+| | `Esc` | Clear the marks |
 | Details pane | `j` `k` `g` `G` | Scroll |
 | | `]` `[` | Select the next or previous attachment or comment |
 | | `Enter` | Open the selected file in the browser, or edit the selected comment when it is yours and under five minutes old |
@@ -173,9 +185,27 @@ Press `?` in the client to see the keys for the pane you are in.
 | Mention list | the down and up arrows, or `Ctrl+N` `Ctrl+P` | Move |
 | | `Tab` or `Enter` | Write the person's name as a mention |
 | | `Esc` | Close the list and keep writing |
+| Request form | `Enter` | Keep the answer and go to the next field. On the review, send the form. |
+| | `Ctrl+B` | Go back one field |
+| | the down and up arrows, or `Ctrl+N` `Ctrl+P` | Move among the choices |
+| | `Space` | Pick or drop a check box |
+| | `Alt+Enter` | Start a new line in a long text field |
+| | `o` | Open the form in the browser, where no text is typed |
+| | `Esc` | Close the form |
 
-Dates are typed as `YYYY-MM-DD`. An empty date clears it. "Cancel the task"
-and "Take out of a folder" have no key. Run them from the `:` palette.
+Dates are typed as `YYYY-MM-DD`. An empty date clears it. "Cancel the task",
+"Take out of a folder" and "Submit a request form" have no key. Run them from
+the `:` palette.
+
+With tasks marked, the status, importance and assignee keys and "Set a field"
+in the list pane change every marked task, and the details pane still changes
+only the open task. The assignee picker checks the people on all the marked
+tasks and says "on 2 of 5" beside someone on only some. Checking a person adds
+them to every marked task, and unchecking one who was on all of them removes
+them. Deleting and cancelling marked tasks ask once for all of them. Cancelled
+tasks that need different Cancelled statuses of one workflow get a picker, and
+tasks of several such workflows are refused with a note to cancel one workflow
+at a time.
 
 Custom fields are edited by type. A drop-down picks one choice, and offers
 "Other value..." when the field allows one. A multi-select toggles choices
@@ -274,6 +304,10 @@ These come from the Wrike API.
   Wrike are not available through the API.
 - Search matches task titles only.
 - Favorites live on your machine. Wrike's API has no starred items.
+- Request forms cannot attach files or pick people from the terminal. A
+  required file or person field means finishing the form in the browser.
+- Importance is changed one task at a time, because Wrike refuses it in a
+  bulk update.
 
 ## Develop
 

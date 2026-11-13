@@ -3,7 +3,7 @@ import { BROWSE_CONTEXTS, COMMAND_GROUPS, commandById, COMMANDS, isOffered, type
 import { activeContexts, CONTEXT_TITLES, KEYMAP, MAX_LABEL, normalizeKey, resolveKey } from "../../src/app/keymap"
 import { reduce } from "../../src/app/reducer"
 import { PANES, type Mode, type State } from "../../src/app/state"
-import { commentId, folderId, taskId } from "../../src/domain/ids"
+import { commentId, folderId, requestFormId, taskId } from "../../src/domain/ids"
 import { inTodo, loaded, play, withTree } from "../support/app"
 
 const MODES: Mode[] = [
@@ -16,12 +16,15 @@ const MODES: Mode[] = [
   { kind: "picker", field: "assignees", query: "", cursor: 0, chosen: [], origin: "browse" },
   { kind: "compose", draft: "", editing: null, mentions: [], pick: 0, dismissed: null },
   { kind: "compose", draft: "Thanks @pa", editing: null, mentions: [], pick: 0, dismissed: null },
-  { kind: "confirm-delete", target: { kind: "comment", id: commentId("C1") } },
-  { kind: "confirm-delete", target: { kind: "task", id: taskId("T1"), title: "Overdue task", subtasks: 2 } },
+  { kind: "confirm", target: { kind: "comment", id: commentId("C1") } },
+  { kind: "confirm", target: { kind: "task", id: taskId("T1"), title: "Overdue task", subtasks: 2 } },
   { kind: "new-task", draft: "", plan: { folder: { id: folderId("A"), title: "Platform" }, parent: null, assignees: [] } },
   { kind: "picker", field: "folder", query: "", cursor: 0, chosen: [], origin: "browse" },
   { kind: "palette", query: "", cursor: 0 },
   { kind: "help" },
+  { kind: "confirm", target: { kind: "delete-tasks", tasks: [{ id: taskId("T1"), title: "Overdue task" }] } },
+  { kind: "form", form: { id: requestFormId("w:rf:1"), title: "Access request", description: "" }, phase: "loading" },
+  { kind: "form", form: { id: requestFormId("w:rf:1"), title: "Access request", description: "" }, phase: "failed", error: { kind: "unavailable", message: "Retry later." } },
 ]
 
 /** Every mode in every pane, in the Inbox, in My to-do, and in the nav pane on a favorite. */

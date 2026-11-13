@@ -2,7 +2,7 @@ import { descriptionFromEdit, editableDescription } from "../domain/description"
 import type { Persistence } from "../persist/persistence"
 import type { TaskPage, WrikeClient } from "../wrike/client"
 import { describeError, toWrikeError, WrikeFailure } from "../wrike/errors"
-import { HISTORY_PAGE, type Action, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
+import { HISTORY_PAGE, type Action, type BulkJob, type BulkOutcome, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
 
 export type EffectDeps = {
   client: WrikeClient
@@ -15,7 +15,15 @@ export type EffectDeps = {
   scroll(pane: "details" | "help", to: ScrollTo): void
   persistence: Persistence
   quit(): void
+  /** Waits between polls and while typing pauses. Real time unless a caller passes its own. */
+  sleep?(ms: number): Promise<void>
 }
+
+/** How long typing must pause before the form search runs. */
+const SEARCH_PAUSE_MS = 250
+/** Wrike asks for a poll about every 5 seconds. After a minute the client stops asking, and never submits again. */
+const POLL_MS = 5000
+const POLLS = 12
 
 async function attempt<T>(work: () => Promise<T>): Promise<Result<T>> {
   try {
@@ -47,6 +55,37 @@ async function loadTasks(client: WrikeClient, source: TaskSource, completed: boo
     }
     default:
       return client.tasks(source, { completed, ...(pageToken ? { pageToken } : {}) })
+  }
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** Runs a change to several tasks to the end. One failed request never stops the rest. */
+async function runBulk(client: WrikeClient, job: BulkJob): Promise<BulkOutcome> {
+  const outcome: BulkOutcome = { saved: [], deleted: [], failed: [] }
+  switch (job.kind) {
+    case "update": {
+      const { saved, failed } = await client.updateTasks(job.tasks.map((task) => task.id), job.patch)
+      outcome.saved.push(...saved)
+      for (const batch of failed) {
+        for (const task of job.tasks.filter((candidate) => batch.ids.includes(candidate.id))) outcome.failed.push({ task, error: batch.error })
+      }
+      return outcome
+    }
+    case "cancel":
+      for (const task of job.plan) {
+        const result = await attempt(() => client.updateTask(task.id, { field: "status", statusId: task.statusId }))
+        if (result.ok) outcome.saved.push(result.value)
+        else outcome.failed.push({ task, error: result.error })
+      }
+      return outcome
+    case "delete":
+      for (const task of job.tasks) {
+        const result = await attempt(() => client.deleteTask(task.id))
+        if (result.ok) outcome.deleted.push({ task, result: result.value })
+        else outcome.failed.push({ task, error: result.error })
+      }
+      return outcome
   }
 }
 
@@ -138,6 +177,28 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return dispatch({ type: "task-created", key: effect.key, result: await attempt(() => client.createTask(effect.task)) })
     case "delete-task":
       return dispatch({ type: "task-deleted", id: effect.id, title: effect.title, result: await attempt(() => client.deleteTask(effect.id)) })
+    case "bulk":
+      return dispatch({ type: "bulk-done", job: effect.job, outcome: await runBulk(client, effect.job) })
+    case "search-forms":
+      await (deps.sleep ?? wait)(SEARCH_PAUSE_MS)
+      return dispatch({ type: "forms-due", request: effect.request, query: effect.query })
+    case "load-forms":
+      return dispatch({ type: "forms-loaded", request: effect.request, result: await attempt(() => client.requestForms(effect.query)) })
+    case "load-form":
+      return dispatch({ type: "form-loaded", request: effect.request, result: await attempt(() => client.requestForm(effect.form)) })
+    case "submit-form":
+      return dispatch({ type: "form-submitted", request: effect.request, result: await attempt(() => client.submitRequestForm(effect.form, effect.answers)) })
+    case "poll-form": {
+      const result = await attempt(async () => {
+        for (let poll = 0; poll < POLLS; poll++) {
+          await (deps.sleep ?? wait)(POLL_MS)
+          const answer = await client.submission(effect.submission)
+          if (answer.kind !== "waiting") return answer
+        }
+        return { kind: "waiting" } as const
+      })
+      return dispatch({ type: "form-submitted", request: effect.request, result })
+    }
     case "save-comment": {
       const { taskId, editing, body } = effect
       const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))

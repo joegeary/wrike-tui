@@ -1,9 +1,10 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, detailsItems, isMultiPicker, mentionSuggestions, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
+import { currentStep, currentView, detailsItems, isMultiPicker, markedTasks, mentionSuggestions, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
+import { cannotFill } from "../domain/forms"
 import type { Action, State } from "./state"
 
-export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
+export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help" | "form"
 
 /** The contexts a pane can be in while browsing. The palette lists the commands of these. */
 export const BROWSE_CONTEXTS: ReadonlySet<Context> = new Set(["global", "nav", "list", "task", "details"])
@@ -42,6 +43,24 @@ const editingComment = (state: State) => state.mode.kind === "compose" && state.
 const olderHistory = (state: State) => {
   const history = openHistory(state)
   return history !== null && history.next !== null && history.loading === null
+}
+const filling = (state: State) => (state.mode.kind === "form" && state.mode.phase === "filling" ? state.mode : null)
+const formField = (state: State) => {
+  const mode = filling(state)
+  return mode ? (currentStep(mode)?.field ?? null) : null
+}
+/** True while the current form field takes typed text. */
+const typing = (state: State) => {
+  const field = formField(state)
+  return field !== null && !cannotFill(field) && field.kind.type !== "choice"
+}
+/** What Enter does on the form now, or null when it does nothing. */
+function formHint(state: State): string | null {
+  const { mode } = state
+  if (mode.kind !== "form") return null
+  if (mode.phase === "failed") return "retry"
+  if (mode.phase !== "filling" || mode.sending) return null
+  return currentStep(mode) ? "next" : "send"
 }
 const multi = (state: State) => state.mode.kind === "picker" && isMultiPicker(state, state.mode)
 
@@ -100,6 +119,11 @@ export const COMMANDS: Command[] = [
     when: inTasks,
     keywords: ["cancelled", "deferred", "closed", "done"],
   }),
+  command("list.mark", "Mark or unmark the task", "List", ["list"], () => ({ type: "mark" }), {
+    when: inTasks,
+    keywords: ["select", "bulk", "several", "tag"],
+  }),
+  command("list.clear-marks", "Clear marks", "List", ["list"], () => ({ type: "clear-marks" }), { when: (state) => markedTasks(state).length > 0, hint: "clear marks", keywords: ["unmark", "bulk"] }),
   command("list.filter.text", "Filter by title", "List", ["list"], () => ({ type: "filter-text" }), { when: inTasks, hint: "filter" }),
   ...GROUP_KEYS.map((group) =>
     command(`list.group.${group}`, `Group by ${GROUP_LABELS[group]}`, "List", ["list"], () => ({ type: "spec", change: { set: "group", group } }), { when: inTasks }),
@@ -137,6 +161,7 @@ export const COMMANDS: Command[] = [
   command("task.delete", "Delete the task", "Task", ["task"], () => ({ type: "task", command: "delete" }), { keywords: ["remove", "recycle", "trash"] }),
   command("task.file", "File in another folder", "Task", ["task"], () => ({ type: "task", command: "file" }), { keywords: ["folder", "project", "add", "parent", "tag"] }),
   command("task.unfile", "Take out of a folder", "Task", ["task"], () => ({ type: "task", command: "unfile" }), { keywords: ["folder", "project", "remove", "parent", "untag"] }),
+  command("task.request-form", "Submit a request form", "Task", ["global"], () => ({ type: "request-form" }), { keywords: ["request", "form", "intake", "ticket"] }),
   command("task.browser", "Open in the browser", "Task", ["task"], () => ({ type: "link", act: "browser" })),
   command("task.copy-url", "Copy the URL", "Task", ["task"], () => ({ type: "link", act: "copy-url" }), { keywords: ["permalink", "link"] }),
   command("task.copy-id", "Copy the ID", "Task", ["task"], () => ({ type: "link", act: "copy-id" })),
@@ -185,7 +210,9 @@ export const COMMANDS: Command[] = [
   command("compose.editor", "Write it in $EDITOR", "Task", ["compose"], () => ({ type: "compose-editor" }), { hint: "editor" }),
   command("compose.discard", "Discard", "Task", ["compose"], () => ({ type: "cancel" }), { when: (state) => !suggesting(state), hint: "discard" }),
 
-  command("confirm.yes", "Delete it", "Task", ["confirm"], () => ({ type: "confirm" }), { hint: "delete" }),
+  command("confirm.yes", "Go ahead", "Task", ["confirm"], () => ({ type: "confirm" }), {
+    hint: (state) => (state.mode.kind === "confirm" && state.mode.target.kind === "cancel-tasks" ? "cancel them" : "delete"),
+  }),
   command("confirm.no", "Keep it", "Task", ["confirm"], () => ({ type: "cancel" }), { hint: "keep" }),
 
   command("palette.down", "Move down", "App", ["palette"], () => ({ type: "choice-move", by: 1 })),
@@ -193,6 +220,21 @@ export const COMMANDS: Command[] = [
   command("palette.erase", "Erase the query", "App", ["palette"], () => ({ type: "erase" })),
   command("palette.run", "Run the command", "App", ["palette"], () => ({ type: "submit" }), { hint: "run" }),
   command("palette.close", "Close", "App", ["palette"], () => ({ type: "cancel" }), { hint: "close" }),
+
+  command("form.next", "Next field, or send the form", "App", ["form"], () => ({ type: "submit" }), { when: (state) => formHint(state) !== null, hint: formHint }),
+  command("form.back", "Previous field", "App", ["form"], () => ({ type: "form-back" }), { when: (state) => filling(state)?.at !== undefined && filling(state)!.at > 0 && !filling(state)!.sending, hint: "back" }),
+  command("form.down", "Next choice", "App", ["form"], () => ({ type: "choice-move", by: 1 }), { when: (state) => formField(state)?.kind.type === "choice" }),
+  command("form.up", "Previous choice", "App", ["form"], () => ({ type: "choice-move", by: -1 }), { when: (state) => formField(state)?.kind.type === "choice" }),
+  command("form.toggle", "Pick or drop the choice", "App", ["form"], () => ({ type: "choice-toggle" }), {
+    when: (state) => {
+      const kind = formField(state)?.kind
+      return kind?.type === "choice" && kind.multi
+    },
+    hint: "toggle",
+  }),
+  // A text field takes o as a letter, so the browser key works only where nothing is typed.
+  command("form.browser", "Open the form in the browser", "App", ["form"], () => ({ type: "form-browser" }), { when: (state) => state.mode.kind === "form" && !typing(state), hint: "browser" }),
+  command("form.close", "Close the form", "App", ["form"], () => ({ type: "cancel" }), { hint: "close" }),
 
   command("help.down", "Scroll down", "App", ["help"], () => ({ type: "scroll", pane: "help", to: "down" })),
   command("help.up", "Scroll up", "App", ["help"], () => ({ type: "scroll", pane: "help", to: "up" })),

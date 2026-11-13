@@ -1,12 +1,13 @@
 import type { CommentBody } from "../domain/comment"
 import type { CustomField } from "../domain/fields"
+import type { FormAnswer, FormDefinition, FormSummary, Submission } from "../domain/forms"
 import type { HistoryPage } from "../domain/history"
-import type { AttachmentId, CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, FolderId, LegacyItemId, RequestFormId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { folderId, taskId, userId } from "../domain/ids"
 import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import { patchParams, type Params, type TaskPatch } from "../domain/patch"
 import type { Space, SpaceTree } from "../domain/workspace"
-import { WrikeFailure } from "./errors"
+import { toWrikeError, WrikeFailure, type WrikeError } from "./errors"
 import {
   AttachmentSchema,
   AttachmentUrlSchema,
@@ -44,6 +45,12 @@ export type WrikeClient = {
   taskIdFromLegacy(id: LegacyItemId): Promise<TaskId | null>
   task(id: TaskId): Promise<Task>
   updateTask(id: TaskId, patch: TaskPatch): Promise<Task>
+  /**
+   * One change to several tasks, `PUT /tasks/{a},{b},...` with up to 100 IDs.
+   * Wrike refuses importance in a batch, so importance goes one task at a
+   * time. A request that fails fails only the tasks it carried.
+   */
+  updateTasks(ids: readonly TaskId[], patch: TaskPatch): Promise<BatchResult>
   createTask(task: NewTask): Promise<Task>
   /** Moves the task to the Recycle Bin. A task already there is "already-deleted", which is not an error. */
   deleteTask(id: TaskId): Promise<"deleted" | "already-deleted">
@@ -62,6 +69,14 @@ export type WrikeClient = {
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
   /** One page of an item's field history, newest first. */
   history(item: LegacyItemId, page: { pageSize: number; pageToken?: string }): Promise<HistoryPage>
+  /** Up to 10 request forms that match the text, best first. */
+  requestForms(text: string): Promise<FormSummary[]>
+  /** A form's index and every page that is not an orphan, with their fields. */
+  requestForm(form: FormSummary): Promise<FormDefinition>
+  /** Sends the answers. A `processing` answer is followed with `submission`, never by sending again. */
+  submitRequestForm(form: RequestFormId, answers: FormAnswer[]): Promise<Submission>
+  /** How a submission Wrike was still processing went, or `waiting` while it still is. */
+  submission(job: string): Promise<Submission | { kind: "waiting" }>
 }
 
 export type TaskQuery =
@@ -72,12 +87,17 @@ export type TaskQuery =
 
 export type TaskPage = { tasks: Task[]; next: string | null }
 
+export type BatchResult = { saved: Task[]; failed: { ids: TaskId[]; error: WrikeError }[] }
+
+/** The most task IDs Wrike takes in one `PUT /tasks/{ids}`. */
+export const BATCH_SIZE = 100
+
 export const PAGE_SIZE = 200
 /** Wrike's thumbnails are small, so a larger answer is refused rather than held in memory. */
 const PREVIEW_LIMIT = 1024 * 1024
 
 /** The calls that go to Wrike's MCP server, and the end of its session. */
-export type McpClient = Pick<WrikeClient, "inbox" | "history"> & { close(): Promise<void> }
+export type McpClient = Pick<WrikeClient, "inbox" | "history" | "requestForms" | "requestForm" | "submitRequestForm" | "submission"> & { close(): Promise<void> }
 
 // A task list omits these unless asked, and the app's Task always carries them.
 const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds", "customFields"]
@@ -185,6 +205,21 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
       return one(parseAll(TaskSchema, await transport.request("PUT", `/tasks/${id}`, patchParams(patch)), "task"))
     },
 
+    async updateTasks(ids, patch) {
+      // Wrike answers 400 "Parameter 'importance' is not allowed" to importance in a batch.
+      const size = patch.field === "importance" ? 1 : BATCH_SIZE
+      const result: BatchResult = { saved: [], failed: [] }
+      for (let at = 0; at < ids.length; at += size) {
+        const batch = ids.slice(at, at + size)
+        try {
+          result.saved.push(...parseAll(TaskSchema, await transport.request("PUT", `/tasks/${batch.join(",")}`, patchParams(patch)), "tasks"))
+        } catch (thrown) {
+          result.failed.push({ ids: batch, error: toWrikeError(thrown) })
+        }
+      }
+      return result
+    },
+
     async createTask(task) {
       const params: Params = {
         title: task.title,
@@ -250,6 +285,10 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
 
     inbox: (options) => mcp.inbox(options),
     history: (item, page) => mcp.history(item, page),
+    requestForms: (text) => mcp.requestForms(text),
+    requestForm: (form) => mcp.requestForm(form),
+    submitRequestForm: (form, answers) => mcp.submitRequestForm(form, answers),
+    submission: (job) => mcp.submission(job),
   }
 }
 

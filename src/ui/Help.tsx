@@ -48,6 +48,19 @@ function Column({ lines, width }: { lines: Line[]; width: number }) {
   )
 }
 
+/**
+ * The two columns as drawn. When the pane's keys run past the screen and the
+ * Anywhere column has room under it, the pane's last keys move to the top of
+ * the second column, so everything shows without scrolling. A heading never
+ * ends a column.
+ */
+function flow(left: Line[], right: Line[], rows: number): [Line[], Line[]] {
+  if (left.length <= rows || right.length >= rows) return [left, right]
+  let at = rows
+  if (left[at - 1]?.kind === "title") at -= 1
+  return [left.slice(0, at), [...left.slice(at), ...right]]
+}
+
 /** The keys that work in the pane the legend was opened from, read from the keymap and the command registry. It scrolls when it is taller than the screen. */
 export function Help({ state, screen, bridge }: { state: State; screen: { width: number; height: number }; bridge: UiBridge }) {
   const scroll = useRef<ScrollBoxRenderable>(null)
@@ -60,7 +73,7 @@ export function Help({ state, screen, bridge }: { state: State; screen: { width:
   const local = contexts.filter((context) => context !== "global")
   const tallest = (gaps: boolean) => Math.max(column(state, local, gaps).length, column(state, ["global"], gaps).length)
   const gaps = tallest(true) + 2 <= screen.height - 1
-  const [left, right] = [column(state, local, gaps), column(state, ["global"], gaps)]
+  const [left, right] = flow(column(state, local, gaps), column(state, ["global"], gaps), screen.height - 3)
   // On a narrow terminal the legend takes the whole width, so no pane border shows beside its own.
   const columnWidth = Math.min(COLUMN_WIDTH, Math.floor((screen.width - 2) / 2))
   return (

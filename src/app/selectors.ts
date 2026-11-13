@@ -1,5 +1,6 @@
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
 import { choicesOf, fieldText, isWritable, kindLabel, type CustomField } from "../domain/fields"
+import { formSteps, type FormStep } from "../domain/forms"
 import type { HistoryEntry } from "../domain/history"
 import type { CustomFieldId, CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
@@ -15,6 +16,9 @@ import {
   type Details,
   type DetailsItem,
   type EditRow,
+  type EditTextMode,
+  type FormFilling,
+  type FormMode,
   type FieldEdit,
   type ListView,
   type Loadable,
@@ -117,6 +121,40 @@ export function selectedRow(state: State): PaneRow | null {
 export function selectedTask(state: State): Task | null {
   const row = selectedRow(state)
   return row?.kind === "task" ? row.task : null
+}
+
+const markedIn = memo((list: Paged<Task> | undefined, marks: State["marks"]): Task[] => (list?.items ?? []).filter((task) => marks.has(task.id)))
+
+/** The marked tasks of the current list, in list order. A mark on a task that left the list counts no more. */
+export function markedTasks(state: State): Task[] {
+  return state.scope.kind === "inbox" || state.marks.size === 0 ? [] : markedIn(currentList(state), state.marks)
+}
+
+/** The form field `at` names, or null on the review after the last one. */
+export function currentStep(mode: FormMode & FormFilling): FormStep | null {
+  return formSteps(mode.definition, mode.answers)[mode.at] ?? null
+}
+
+/** A custom field typed for tasks other than just the open one, which the list pane takes instead of the details pane. */
+export function typedInList(state: State): (EditTextMode & { field: "custom" }) | null {
+  const { mode } = state
+  if (mode.kind !== "edit-text" || mode.field !== "custom") return null
+  const [only, ...more] = mode.edit.taskIds
+  return more.length === 0 && only === openTask(state)?.id ? null : mode
+}
+
+/** The tasks a task command acts on together: the marked ones while the list has the focus, else none. */
+export const bulkTargets = (state: State): Task[] => (state.focus === "list" ? markedTasks(state) : [])
+
+/**
+ * The statuses every one of the tasks can move to, in the order of the first
+ * one's workflow: all of them, or only the Cancelled ones. Empty when the
+ * tasks are in different workflows.
+ */
+export function bulkStatuses(state: State, tasks: Task[], which: "status" | "cancel"): CustomStatus[] {
+  const choices = tasks.map((task) => (which === "cancel" ? cancelStatuses(state.workflows, task.statusId) : statusChoices(state.workflows, task.statusId)))
+  const [first = []] = choices
+  return first.filter((status) => choices.every((statuses) => statuses.some((other) => other.id === status.id)))
 }
 
 export function selectedEntry(state: State): InboxEntry | null {
@@ -362,6 +400,7 @@ const folderOptions = memo(
 
 /** True when the picker takes several choices: Space toggles them and Enter applies them all. */
 export function isMultiPicker(state: State, mode: PickerMode): boolean {
+  if (mode.field === "bulk") return mode.change === "assignees"
   return mode.field === "custom" ? fieldDefs(state.customFields).get(mode.edit.id)?.kind.type === "Multiple" : MULTI_PICKERS.has(mode.field)
 }
 
@@ -405,6 +444,25 @@ function settableFields(state: State, mode: PickerMode & { field: "set-field" },
       const current = sharedValue(state, { id: field.id, taskIds: mode.taskIds })
       return { id: field.id, label: field.title, detail: current === null ? kindLabel(field.kind) : fieldText(field.kind, current) }
     })
+}
+
+/** A picker on the marked tasks. A person on some of them, not all, says on how many. */
+function bulkOptions(state: State, mode: PickerMode & { field: "bulk" }, matches: (text: string) => boolean, people: () => PickerOption[]): PickerOption[] {
+  const tasks = mode.tasks.flatMap((task) => heldTask(state, task.id) ?? [])
+  switch (mode.change) {
+    case "status":
+    case "cancel":
+      return bulkStatuses(state, tasks, mode.change)
+        .filter((status) => matches(status.name))
+        .map((status) => ({ id: status.id, label: status.name, detail: status.group, color: status.color }))
+    case "importance":
+      return IMPORTANCES.filter(matches).map((importance) => ({ id: importance, label: importance }))
+    case "assignees":
+      return people().map((option) => {
+        const on = tasks.filter((task) => task.assigneeIds.some((id) => id === option.id)).length
+        return on > 0 && on < tasks.length ? { ...option, detail: `on ${on} of ${tasks.length}` } : option
+      })
+  }
 }
 
 /** The options of the open picker after its filter. The status picker needs the open task. */
@@ -463,6 +521,11 @@ export function pickerOptions(state: State, mode: PickerMode): PickerOption[] {
         .filter((status) => matches(status.name))
         .map((status) => ({ id: status.id, label: status.name, detail: status.group, color: status.color }))
     }
+    case "bulk":
+      return bulkOptions(state, mode, matches, people)
+    case "request-form":
+      // Wrike's search already matched the text, on the description and the fields too, so nothing is filtered again here.
+      return mode.query.trim() === "" ? [] : (shown(state.forms) ?? []).map((form) => ({ id: form.id, label: form.title, ...(form.description ? { detail: form.description } : {}) }))
     case "set-field":
       return settableFields(state, mode, matches)
     case "custom":

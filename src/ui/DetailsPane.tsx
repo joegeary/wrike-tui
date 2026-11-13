@@ -1,7 +1,7 @@
 import { parseColor, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
-import { contactName, editRows, openHistory, statusOf, taskFields, type ShownField } from "../app/selectors"
+import { contactName, editRows, openHistory, statusOf, taskFields, typedInList, type ShownField } from "../app/selectors"
 import type { CustomFieldId } from "../domain/ids"
 import type { Details, EditField, State } from "../app/state"
 import { isDay } from "../domain/dates"
@@ -100,7 +100,7 @@ function fieldValue(shown: ShownField, today: string): string {
 function Fields(props: { state: State; task: Details["task"]; active: (id: CustomFieldId) => boolean | undefined; onDraft: (text: string) => void }) {
   const theme = useTheme()
   const { mode } = props.state
-  const typing = mode.kind === "edit-text" && mode.field === "custom" && mode.edit.taskIds.includes(props.task.id) ? mode : null
+  const typing = mode.kind === "edit-text" && mode.field === "custom" && !typedInList(props.state) ? mode : null
   const fields = taskFields(props.state, props.task, typing?.edit.id ?? null)
   if (fields.length === 0) return null
   const longest = Math.max(...fields.map((shown) => Bun.stringWidth(shown.field?.title ?? shown.id)))

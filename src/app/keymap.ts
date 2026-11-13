@@ -42,6 +42,8 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("list", "list.completed", "x"),
   ...bind("list", "list.filter.text", "f"),
   ...bind("list", "inbox.read", "a"),
+  ...bind("list", "list.mark", "M"),
+  ...bind("list", "list.clear-marks", "esc"),
 
   ...bind("details", "details.down", "j", "down"),
   ...bind("details", "details.up", "k", "up"),
@@ -102,6 +104,14 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("palette", "palette.run", "enter"),
   ...bind("palette", "palette.close", "esc"),
 
+  ...bind("form", "form.next", "enter"),
+  ...bind("form", "form.back", "ctrl+b"),
+  ...bind("form", "form.down", "down", "ctrl+n"),
+  ...bind("form", "form.up", "up", "ctrl+p"),
+  ...bind("form", "form.toggle", "space"),
+  ...bind("form", "form.browser", "o"),
+  ...bind("form", "form.close", "esc"),
+
   ...bind("help", "help.down", "j", "down"),
   ...bind("help", "help.up", "k", "up"),
   ...bind("help", "help.close", "esc", "?", "q"),
@@ -121,6 +131,7 @@ export const CONTEXT_TITLES: Record<Context, string> = {
   confirm: "Confirm",
   palette: "Commands",
   help: "Keys",
+  form: "Request form",
 }
 
 /** The contexts whose keys work in this state, most specific first. */
@@ -135,7 +146,7 @@ export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] 
       return ["text"]
     case "compose":
       return ["mention", "compose"]
-    case "confirm-delete":
+    case "confirm":
       return ["confirm"]
     case "edit":
       return ["edit"]
@@ -145,6 +156,8 @@ export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] 
       return ["palette"]
     case "help":
       return ["help"]
+    case "form":
+      return ["form"]
   }
 }
 
@@ -192,7 +205,7 @@ export function keysFor(command: string, contexts: Context[]): string[] {
 
 const KEY_LABELS: Record<string, string> = {
   enter: "Enter", esc: "Esc", space: "Space", backspace: "Backspace", tab: "Tab",
-  up: "↑", down: "↓", left: "←", right: "→", "ctrl+n": "Ctrl+N", "ctrl+p": "Ctrl+P", "ctrl+e": "Ctrl+E",
+  up: "↑", down: "↓", left: "←", right: "→", "ctrl+n": "Ctrl+N", "ctrl+p": "Ctrl+P", "ctrl+e": "Ctrl+E", "ctrl+b": "Ctrl+B",
 }
 
 export const keyLabel = (key: string) => KEY_LABELS[key] ?? key

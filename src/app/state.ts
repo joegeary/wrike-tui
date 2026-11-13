@@ -1,8 +1,9 @@
 import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
 import type { CustomField, FieldWrite } from "../domain/fields"
+import type { Answers, FormAnswer, FormDefinition, FormSummary, Submission } from "../domain/forms"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
-import type { AttachmentId, CommentId, CustomFieldId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, CustomFieldId, CustomStatusId, LegacyItemId, RequestFormId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
@@ -58,7 +59,10 @@ export type ListPicker = (typeof LIST_PICKERS)[number]
  */
 export const WORK_PICKERS = ["folder", "subtask-folder", "file", "unfile", "cancel"] as const
 export type WorkPicker = (typeof WORK_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker | WorkPicker | "set-field" | "custom"
+/** Changes picked once for every marked task. */
+export const BULK_PICKERS = ["status", "importance", "assignees", "cancel"] as const
+export type BulkPicker = (typeof BULK_PICKERS)[number]
+export type PickerField = TaskPicker | ListPicker | WorkPicker | "set-field" | "custom" | "bulk" | "request-form"
 
 /**
  * A custom field being changed and the tasks the value goes to. The details
@@ -76,7 +80,15 @@ export type EditTextMode = Typing & ({ field: TextField } | { field: "custom"; e
 
 type Picking = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin }
 /** A list of choices that filters as it is typed into. `set-field` lists the custom fields to give the tasks, and `custom` is one field's choices. */
-export type PickerMode = Picking & ({ field: TaskPicker | ListPicker | WorkPicker } | { field: "set-field"; taskIds: readonly TaskId[] } | { field: "custom"; edit: FieldEdit })
+export type PickerMode = Picking &
+  (
+    /** `request-form` lists what Wrike's search found for the typed text. */
+    | { field: TaskPicker | ListPicker | WorkPicker | "request-form" }
+    | { field: "set-field"; taskIds: readonly TaskId[] }
+    | { field: "custom"; edit: FieldEdit }
+    /** A status, importance, assignees or Cancelled status for every marked task. `assigned` holds who was on all of them when it opened. */
+    | { field: "bulk"; change: BulkPicker; tasks: BulkTask[]; assigned: UserId[] }
+  )
 
 export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "set-field", "subtask", "delete", "file", "unfile", "cancel"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
@@ -95,16 +107,59 @@ export type Mode =
   | Compose
   /** The title of a new task, typed in the list pane. The plan says where it goes. */
   | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
-  /** Asks before a comment or a task is deleted. Only `y` deletes it. */
-  | { kind: "confirm-delete"; target: DeleteTarget }
+  /** Asks before a comment or tasks are deleted, or marked tasks cancelled. Only `y` goes ahead. */
+  | { kind: "confirm"; target: ConfirmTarget }
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
+  | FormMode
+
+/**
+ * A request form on screen. It loads, then is filled one field at a time:
+ * `at` indexes the steps the answers lead through, and `at` past the last
+ * step is the review that submits. A submission Wrike is still processing is
+ * followed, never sent again.
+ */
+export type FormMode = { kind: "form"; form: FormSummary } & (
+  | { phase: "loading" }
+  | { phase: "failed"; error: WrikeError }
+  | FormFilling
+  | { phase: "processing"; submission: string }
+)
+
+/** `draft` is the text being typed into the current field and `cursor` the highlighted choice. `sending` is true while Wrike has the submission. */
+export type FormFilling = { phase: "filling"; definition: FormDefinition; answers: Answers; at: number; draft: string; cursor: number; error?: string; sending: boolean }
 
 /** Where a new task goes and who gets it. Only the title is still to come. */
 export type TaskPlan = { folder: FolderRef; parent: { id: TaskId; title: string } | null; assignees: UserId[] }
 
-/** What a delete confirm asks about. A task names how many subtasks it leaves behind. */
-export type DeleteTarget = { kind: "comment"; id: CommentId } | { kind: "task"; id: TaskId; title: string; subtasks: number }
+/** A task named in a change made to several at once. */
+export type BulkTask = { id: TaskId; title: string }
+
+/** What a confirm asks about. A task names how many subtasks it leaves behind. Marked tasks are deleted, or cancelled each to its own status. */
+export type ConfirmTarget =
+  | { kind: "comment"; id: CommentId }
+  | { kind: "task"; id: TaskId; title: string; subtasks: number }
+  | { kind: "delete-tasks"; tasks: BulkTask[] }
+  | { kind: "cancel-tasks"; plan: CancelPlan[] }
+
+/** A marked task and the Cancelled status of its workflow. */
+export type CancelPlan = BulkTask & { statusId: CustomStatusId }
+
+/**
+ * One change to several tasks. An update sends the same patch to each, in
+ * batches Wrike takes. Cancel and delete go one request per task.
+ */
+export type BulkJob =
+  | { kind: "update"; tasks: BulkTask[]; patch: TaskPatch; done: string; check?: FieldCheck }
+  | { kind: "cancel"; plan: CancelPlan[] }
+  | { kind: "delete"; tasks: BulkTask[] }
+
+/** What a bulk job did, task by task. */
+export type BulkOutcome = {
+  saved: Task[]
+  deleted: { task: BulkTask; result: "deleted" | "already-deleted" }[]
+  failed: { task: BulkTask; error: WrikeError }[]
+}
 
 /** The comment box, for a new comment or for an edit of one of mine. */
 export type Compose = {
@@ -128,7 +183,7 @@ export type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "co
 export type Clock = { now: string; today: string }
 export type Flash = { tone: "info" | "error"; text: string }
 
-/** What a response is checked against: `inbox`, `details`, `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>` or `history:<taskId>`. */
+/** What a response is checked against: `inbox`, `details`, `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>`, `history:<taskId>`, `forms` (the form search) or `form` (the open request form). */
 export type RequestKey = string
 
 export type State = {
@@ -176,6 +231,10 @@ export type State = {
   afterOpen: TaskCommand | null
   /** The latest request number per target. A response carrying an older number is dropped. */
   requests: ReadonlyMap<RequestKey, number>
+  /** Tasks marked in the current list. The status, assignee, importance, field, cancel and delete commands act on all of them. Cleared when the scope changes. */
+  marks: ReadonlySet<TaskId>
+  /** What Wrike's form search found for the text typed into the form picker. */
+  forms: Loadable<FormSummary[]>
 }
 
 export const LIST_LIMIT = 8
@@ -209,6 +268,14 @@ export type Effect =
   /** `key` is the list the task was created from, which shows it. Null from the Inbox. */
   | { kind: "create-task"; key: ScopeKey | null; task: NewTask }
   | { kind: "delete-task"; id: TaskId; title: string }
+  | { kind: "bulk"; job: BulkJob }
+  /** Waits for typing to pause, then reports back so only the latest text is searched. */
+  | { kind: "search-forms"; request: number; query: string }
+  | { kind: "load-forms"; request: number; query: string }
+  | { kind: "load-form"; request: number; form: FormSummary }
+  | { kind: "submit-form"; request: number; form: RequestFormId; answers: FormAnswer[] }
+  /** Asks Wrike every few seconds about a submission it was still processing, and never submits again. */
+  | { kind: "poll-form"; request: number; submission: string }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
   | { kind: "edit-description"; task: Task }
@@ -251,6 +318,11 @@ export type Intent =
   | { type: "open" }
   | { type: "toggle-row" }
   | { type: "toggle-read" }
+  | { type: "mark" }
+  | { type: "clear-marks" }
+  | { type: "request-form" }
+  | { type: "form-back" }
+  | { type: "form-browser" }
   | { type: "filter-text" }
   | { type: "spec"; change: SpecChange }
   | { type: "pick"; field: ListPicker }
@@ -303,6 +375,12 @@ export type Action =
   | { type: "task-saved"; done: string; check?: FieldCheck; result: Result<Task>; folders?: FolderRef[] }
   | { type: "task-created"; key: ScopeKey | null; result: Result<Task> }
   | { type: "task-deleted"; id: TaskId; title: string; result: Result<"deleted" | "already-deleted"> }
+  | { type: "bulk-done"; job: BulkJob; outcome: BulkOutcome }
+  | { type: "forms-due"; request: number; query: string }
+  | { type: "forms-loaded"; request: number; result: Result<FormSummary[]> }
+  | { type: "form-loaded"; request: number; result: Result<FormDefinition> }
+  /** `waiting` is a submission still processing when the polling gave up. */
+  | { type: "form-submitted"; request: number; result: Result<Submission | { kind: "waiting" }> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
@@ -373,6 +451,8 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     lastFolder: null,
     afterOpen: null,
     requests: new Map(),
+    marks: new Set(),
+    forms: { state: "idle" },
   }
   return boot.session ? restoreSession(fresh, boot.session) : fresh
 }
