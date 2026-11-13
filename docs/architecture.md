@@ -73,7 +73,7 @@ the header it backs off exponentially.
 
 In read-only mode a request that is not a GET fails with `read_only` before
 anything is sent, and the status bar shows "read-only mode: not saved". The MCP
-client only reads, so the mode does not touch it. A 429 from the MCP server is
+client refuses `submit_requestform`, its one write, the same way. A 429 from the MCP server is
 `rate_limited` too, and so is a tool result whose text is not JSON and says
 "rate limit", which is how Wrike's MCP server reports one. Errors become one tagged
 union:
@@ -87,7 +87,12 @@ type WrikeError =
   | { kind: "invalid"; message: string }
   | { kind: "network"; message: string }
   | { kind: "server"; status: number; message: string }
+  | { kind: "unavailable"; message: string }   // MCP said in plain text to retry later
 ```
+
+A tool result whose text is not JSON and says "A server error occurred" or
+"Retry later", as `get_requestform` answered during the probe, is
+`unavailable`, and the form screen offers to try again.
 
 Inside the wire layer a failure is thrown as `WrikeFailure`, which carries the
 union. The effect runner is the one place that catches it, and it hands the
@@ -110,6 +115,7 @@ more:
 | `taskIdFromLegacy(n)` | `GET /ids?ids=[n]&type=ApiV2Task` |
 | `task(id)` | `GET /tasks/{id}` |
 | `updateTask(id, patch)` | `PUT /tasks/{id}` |
+| `updateTasks(ids, patch)` | `PUT /tasks/{a},{b},...`, 100 IDs to a request. Importance goes one task at a time. A request that fails fails only its tasks, and the rest are still sent |
 | `createTask(task)` | `POST /folders/{id}/tasks` with `title`, and `responsibles` and `superTasks` when set. The ID may be a space's |
 | `deleteTask(id)` | `DELETE /tasks/{id}`. Wrike's 400 for a task already in the Recycle Bin comes back as `"already-deleted"`, not as an error |
 | `comments(id)` | `GET /tasks/{id}/comments`, sorted oldest first |
@@ -120,7 +126,7 @@ more:
 | `attachments(id)` | `GET /tasks/{id}/attachments`, sorted oldest first |
 | `attachmentPreview(id)` | `GET /attachments/{id}/preview`, a small PNG of an image, through `bytes()` |
 | `attachmentUrl(id)` | `GET /attachments/{id}/url`, a temporary signed link that opens without the token |
-| `inbox(options)`, `history(item, page)` | the MCP client, below |
+| `inbox(options)`, `history(item, page)`, the request form calls | the MCP client, below |
 
 `tasks()` serves four queries, 200 tasks to a page.
 
@@ -190,6 +196,12 @@ production account.
 - Cancelling is a status change to a status in the Cancelled group of the
   task's workflow.
 
+These facts about bulk updates come from probes against a production account.
+
+- `PUT /tasks/{a},{b}` takes `customStatus`, `addResponsibles`,
+  `removeResponsibles` and `customFields` for up to 100 tasks at once.
+- `importance` there answers 400 "Parameter 'importance' is not allowed".
+
 These facts about custom fields come from probes against a production account.
 
 - `GET /customfields` returned 107 definitions shaped
@@ -229,6 +241,11 @@ another call has already replaced it, so the next call connects again.
 | `inbox({ includeRead })` | `get_my_inbox` with `{ includeRead, limit: 100 }`, into `InboxEntry[]` |
 | `history(item, { pageSize, pageToken })` | `get_item_history` with `{ scope: { type: "ITEMS", itemIds: ["w:itm:<N>"] }, requestedChanges, pageSize, nextPageToken }`, into a `HistoryPage` |
 
+| `requestForms(text)` | `search_requestforms` with `{ textSearch, limit: 10 }`, into `FormSummary[]` |
+| `requestForm(form)` | `get_requestform` with `{ form }` for the page index, then once per page that is not an orphan with `{ form, pageIds: [page], includePageIndex: false }`, into a `FormDefinition` |
+| `submitRequestForm(form, answers)` | `submit_requestform` with `{ form, fields: [{ field, values }] }`, into a `Submission` |
+| `submission(job)` | `get_asyncjob` with `{ jobId }`: completed, failed, or still waiting |
+
 `N` is the number in the task's permalink. `requestedChanges` asks for title,
 assignees, parents, status, start and due dates, duration, attachments and
 custom fields. Changes come newest first, and only of those types. Wrike
@@ -236,6 +253,15 @@ leaves out an item with no change of them (`{"taskChanges":[]}`), which is
 an empty page. An item Wrike could not read comes back with
 `success: false` and an error, which becomes `invalid` with Wrike's words. REST's `GET /tasks/{id}/tasks_history` was probed first and
 answers with nothing but the task's ID.
+
+The request form tools are read from Wrike's published tool schemas and are
+not verified against a live answer. REST's `GET /request_forms` lists the
+forms with their pages, but submitting takes MCP IDs (`w:rf:N`, `w:rffld:S`,
+`w:rfopt:S`), so the whole flow goes through MCP. Each page is loaded on its
+own call because the tool fails an answer past its size limit. An option's
+title and a condition's parts are read from any of the likely keys, since the
+schemas do not pin them down. A submission refused with `{ retrySafe, message }`
+becomes `refused`.
 
 ## Domain
 
@@ -364,6 +390,34 @@ Wrike counts every duration in minutes and hours need no guess at the length
 of a working day. Empty text is a clear. `fieldEditor` names the editor a
 field takes, or why it has none: read-only, calculated, or unknown. `kept`
 tells whether Wrike's answer holds a write.
+
+**Request forms.** `src/domain/forms.ts` holds a form and the rules for
+walking it.
+
+```ts
+type Condition = { option: FormOptionId | null; title: string | null }   // an option picked, by ID or title
+type FormFieldKind =
+  | { type: "text"; lines: "one" | "many" } | { type: "date" } | { type: "number" }
+  | { type: "choice"; options: FormOption[]; multi: boolean }   // combo box, check boxes, importance
+  | { type: "attachment" } | { type: "unsupported"; wireType: string }   // a user field among them
+type FormField = { id: FormFieldId; title: string; mandatory: boolean; helperText: string; kind: FormFieldKind; visibleWhenAny: Condition[] }
+type PageVisibility = { kind: "entry" } | { kind: "orphan" } | { kind: "after"; pages: FormPageId[] } | { kind: "condition"; after: FormPageId[]; when: Condition[] }
+type FormDefinition = { form: FormSummary; pages: FormPage[] }   // index order, orphans left out
+type Answers = ReadonlyMap<FormFieldId, readonly string[]>
+type Submission = { kind: "completed"; item: LegacyItemId } | { kind: "processing"; submission: string } | { kind: "refused"; message: string; retrySafe: boolean }
+```
+
+`formFlow` derives the pages the answers reach: the entry page, each page
+after a page shown, and each conditional page whose condition an answer meets
+and whose earlier pages, when it names any, are shown. Orphans never show.
+`formSteps` lists their fields, leaving out a field that waits for an option
+not picked. Nothing stores the path, so changing an answer changes the steps
+after it. `answerProblem` refuses an empty required field, a date that is not
+`YYYY-MM-DD` and a number that is not one. A field the terminal cannot fill,
+a file or a person, blocks only when it is required. `submission` sends the
+answered fields of the steps shown, so an answer on a page that stopped
+showing stays behind. `formUrl` opens the form in Wrike's web app, by the
+number of `w:rf:N` in a `formid` link, which is not verified.
 
 **Edits** are one union, and one function, `patchParams`, turns a patch into
 `PUT` params:
@@ -657,9 +711,12 @@ results, and shows a scope. `nav.ts` has the tree and the favorites. `lists.ts`
 has the list pane: the cursor, grouping, filters and the pickers that shape it.
 `task.ts` has the open task and its edits. `comments.ts` has the selection in
 the details pane, the comment box, and the edits and deletes of comments.
-`work.ts` creates, files, cancels and deletes tasks. The modules depend in one
-direction, `core` then `load`, then `nav`, `lists`, `comments`, `work` and
-`task`, and `nav` calls into `lists` and `task` into `comments` and `work`.
+`work.ts` creates, files, cancels and deletes tasks. `bulk.ts` runs the task
+commands on marked tasks, and `fields.ts` hands it a field written to several.
+`forms.ts` has the request form picker and screen. The modules depend in one
+direction, `core` then `load`, then `nav`, `lists`, `comments`, `work`,
+`bulk`, `fields`, `forms` and `task`, and `nav` calls into `lists` and `task`
+into `comments`, `work`, `bulk` and `fields`.
 `reducer.ts` imports them all, and nothing in `reduce/` imports `reducer.ts`.
 
 ```ts
@@ -682,14 +739,28 @@ type Mode =
   | PickerMode
   | Compose
   | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
-  | { kind: "confirm-delete"; target: DeleteTarget }   // only `y` deletes
+  | { kind: "confirm"; target: ConfirmTarget }   // only `y` goes ahead
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
+  | FormMode
+
+// A request form: loading, failed (Enter retries), filled a step at a time, or a submission Wrike is still processing.
+type FormMode = { kind: "form"; form: FormSummary } & (
+  | { phase: "loading" }
+  | { phase: "failed"; error: WrikeError }
+  | { phase: "filling"; definition: FormDefinition; answers: Answers; at: number; draft: string; cursor: number; error?: string; sending: boolean }
+  | { phase: "processing"; submission: string }
+)
 
 type EditTextMode = { kind: "edit-text"; draft: string; error?: string; origin: Origin } &
   ({ field: "title" | "start" | "due" } | { field: "custom"; edit: FieldEdit })
 type PickerMode = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin } &
-  ({ field: TaskPicker | ListPicker } | { field: "set-field"; taskIds: TaskId[] } | { field: "custom"; edit: FieldEdit })
+  (
+    | { field: TaskPicker | ListPicker | WorkPicker | "request-form" }
+    | { field: "set-field"; taskIds: TaskId[] }
+    | { field: "custom"; edit: FieldEdit }
+    | { field: "bulk"; change: "status" | "importance" | "assignees" | "cancel"; tasks: BulkTask[]; assigned: UserId[] }
+  )
 
 // A custom field being changed and the tasks the value goes to.
 type FieldEdit = { id: CustomFieldId; taskIds: TaskId[] }
@@ -705,7 +776,19 @@ type Compose = {
 
 // Where a new task goes and who gets it. Only the title is still to come.
 type TaskPlan = { folder: FolderRef; parent: { id: TaskId; title: string } | null; assignees: UserId[] }
-type DeleteTarget = { kind: "comment"; id: CommentId } | { kind: "task"; id: TaskId; title: string; subtasks: number }
+type BulkTask = { id: TaskId; title: string }
+type ConfirmTarget =
+  | { kind: "comment"; id: CommentId }
+  | { kind: "task"; id: TaskId; title: string; subtasks: number }
+  | { kind: "delete-tasks"; tasks: BulkTask[] }
+  | { kind: "cancel-tasks"; plan: (BulkTask & { statusId: CustomStatusId })[] }
+
+// One change to several tasks, and what it did task by task.
+type BulkJob =
+  | { kind: "update"; tasks: BulkTask[]; patch: TaskPatch; done: string; check?: FieldCheck }
+  | { kind: "cancel"; plan: (BulkTask & { statusId: CustomStatusId })[] }
+  | { kind: "delete"; tasks: BulkTask[] }
+type BulkOutcome = { saved: Task[]; deleted: { task: BulkTask; result: "deleted" | "already-deleted" }[]; failed: { task: BulkTask; error: WrikeError }[] }
 
 // What `]` and `[` step through, in the order the details pane draws it: the attachments, then the comments.
 type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "comment"; id: CommentId }
@@ -742,6 +825,8 @@ type State = {
   lastFolder: FolderRef | null                // where the last task of the session was created
   afterOpen: TaskCommand | null
   requests: Map<string, number>
+  marks: Set<TaskId>                          // marked tasks of the current list, cleared when the scope changes
+  forms: Loadable<FormSummary[]>              // what the form search found for the typed text
 }
 ```
 
@@ -755,7 +840,8 @@ Four fields carry what the reducer needs to stay pure and correct.
   The clock only ever lags the real time, so a countdown that looks open
   starts the ticker and the first tick corrects it.
 - `requests` holds the latest request number per target: `inbox`, `details`,
-  `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>` and `history:<taskId>`. A response that carries an
+  `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>`, `history:<taskId>`,
+  `forms` and `form`. A response that carries an
   older number is dropped, so a slow answer never overwrites a newer one, and
   a page that answers after a reload is not appended.
 - `afterOpen` holds a task key pressed on a list row whose task is not open
@@ -795,8 +881,52 @@ leaves every list and the details pane, its subtasks lose it as a parent, its
 parent stops counting it, and a favorite of it is marked "not found". Wrike's
 answer that it was already deleted ends the same way, with a neutral flash.
 
-In read-only mode `n`, `N`, `D`, `L`, cancel and take out are refused before a
-picker, a prompt or a question opens.
+In read-only mode `n`, `N`, `D`, `L`, cancel, take out, every command on marks
+and "Submit a request form" are refused before a picker, a prompt or a
+question opens.
+
+**Bulk edit.** `M` on a task row toggles its mark and moves to the next task,
+past group headings. `markedTasks` is the current list's tasks that carry a
+mark, in list order, so a task that left the list stops counting. The list
+title shows the count, and marked rows carry a `✓` column while any are
+marked. Marks clear on `Esc`, on "Clear marks" and when the scope changes.
+
+While the list pane has the focus and tasks are marked, `onTask` hands status,
+importance, assignees, assign to me, "Set a field", cancel and delete to
+`bulk.ts`. The details pane always acts on the open task. Status offers the
+statuses every marked task's workflow shares, and refuses tasks of different
+workflows. The assignee picker starts with the people on every marked task
+checked; it adds the people checked and removes the ones it started with that
+were unchecked, one patch for all. Each change goes only to the tasks it would
+change. A field written to several tasks goes through the same editors with a
+`FieldEdit` of the marked IDs; its text is typed in the list pane, since no
+details row belongs to it. Cancel finds each task's Cancelled status: one per
+workflow goes to a confirm, several in one shared workflow go to a picker, and
+several across workflows are refused. Delete and cancel ask once in the status
+bar and go one request per task.
+
+A bulk job is one `bulk` effect. The runner sends it to the end and reports a
+`BulkOutcome`. `bulkDone` puts each saved task where it is listed, drops each
+deleted one the way a single delete does, and writes one flash: "Status set
+to Done on 7 tasks", "..., failed on 2: <reason>", or, for a field Wrike did
+not keep, "Wrike did not keep Size on 2 tasks".
+
+**Request forms.** "Submit a request form" opens a picker whose text is sent
+to `search_requestforms` once typing pauses for 250 ms: the `search-forms`
+effect waits and reports back, and only the latest request number searches.
+`Enter` loads the form, its index and then each page. The form screen shows
+one field at a time with its page, its place among the steps, its helper text
+and its editor: a line, a box of lines for a long text, or a list of choices.
+`Enter` keeps the answer and moves on once `answerProblem` accepts it, and
+`Ctrl+B` goes back without checking. After the last step a review lists every
+answer, and `Enter` there jumps to the first field that blocks sending, or
+sends the form. While Wrike has the submission `Esc` waits. `completed` closes
+the form and opens the created task through the legacy ID lookup.
+`processing` polls `get_asyncjob` every 5 seconds for a minute and never
+submits again; closing the form or running out of polls says the request will
+show in Wrike when it is done. A `refused` answer that is safe to retry stays
+on the review with Wrike's words, and one that is not closes the form. A field
+the terminal cannot fill says so, and `o` opens the form in the browser.
 
 The rows of the list pane and of the nav pane are selectors that remember
 their last result, keyed on the state parts they read. A cursor move changes
@@ -913,7 +1043,7 @@ One command registry, `src/app/commands.ts`, holds everything the client can
 do.
 
 ```ts
-type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
+type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help" | "form"
 
 type Command = {
   id: string                     // stable, for example "list.group.status"
@@ -950,14 +1080,15 @@ With nothing typed they come under their group headings. A query ranks them
 flat by a fuzzy match on the title, and on the keywords at a small discount.
 Each line shows the keys that run the command there. Grouping, subgrouping,
 sorting, the filters, the columns, expand all, collapse all, the themes and
-"Save as default", "Cancel the task" and "Take out of a folder" live only in
-the palette. A filter command opens the picker for its values.
+"Save as default", "Cancel the task", "Take out of a folder", "Clear marks"
+and "Submit a request form" live only in the palette, though `Esc` in the list
+also clears marks. A filter command opens the picker for its values.
 
 | Where | Keys |
 | --- | --- |
 | Anywhere in browse | `1` `2` `3` focus a pane, `h` `l` or the arrows move between panes, `i` Inbox, `t` My to-do, `/` search, `:` commands, `r` refresh, `v` zoom details, `H` field history on or off, `?` keys, `q` quit |
 | The navigation pane | `j` `k` move, `Enter` show the row in the list, `Space` open or close the row, `F` favorite, `J` `K` move a favorite |
-| A list | `j` `k` move, `g` `G` top and bottom, `Enter` open, `Space` open or close subtasks or a group, `x` completed on or off, `f` filter by title, `a` read notifications on or off (Inbox) |
+| A list | `j` `k` move, `g` `G` top and bottom, `Enter` open, `Space` open or close subtasks or a group, `x` completed on or off, `f` filter by title, `a` read notifications on or off (Inbox), `M` mark, `Esc` clear the marks |
 | The details pane | `j` `k` scroll, `g` `G` top and bottom, `]` `[` select an attachment or a comment, `Enter` open the selected file or edit the selected comment, `d` delete the selected comment, `Esc` clear |
 | A task (list or details) | `e` edit fields (the walk goes on into the custom fields), `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite, `n` new task, `N` new subtask, `D` delete, `L` file in another folder |
 | Edit mode | `j` `k` walk fields, `Enter` open the field, `Esc` leave |
@@ -966,7 +1097,8 @@ the palette. A filter command opens the picker for its values.
 | Text field | `Enter` saves, or creates the new task, `Esc` discards |
 | Comment | `Enter` posts or saves the edit, `Alt+Enter` and `Ctrl+J` start a new line, `Ctrl+E` moves the draft to the editor, `Esc` discards |
 | Mention list | arrows or `Ctrl+N` `Ctrl+P` move, `Tab` or `Enter` writes the name, `Esc` closes the list |
-| Delete confirm | `y` deletes, any other key keeps the comment or the task |
+| Confirm | `y` deletes, or cancels the marked tasks, any other key keeps them |
+| Request form | `Enter` next field or send, `Ctrl+B` back, arrows or `Ctrl+N` `Ctrl+P` move among choices, `Space` toggles a check box, `o` opens the form in the browser where nothing is typed, `Esc` closes |
 | Legend | `j` `k` scroll, `Esc`, `?` or `q` closes |
 
 In a picker and in the palette every letter filters, so `j` and `k` do not
@@ -1146,7 +1278,14 @@ not include the terminal's own drawing.
   read-only and an unknown one, stores a field write the way Wrike does (any
   string, a list as JSON text, null clears, empty keeps), answers 200 to a
   read-only write without storing it, and drops a Checkbox, Currency or
-  Duration write on a task its data marks the field as not applying to. Its
+  Duration write on a task its data marks the field as not applying to. It
+  takes a bulk `PUT /tasks/{a},{b}` of up to 100 tasks and answers importance
+  there with Wrike's 400. Its MCP endpoint serves `search_requestforms`,
+  `get_requestform`, `submit_requestform` and `get_asyncjob` over three forms:
+  one with an entry page, a page shown when "Database" is picked, a page after
+  the entry page, a required combo box and an orphan page, one with a required
+  file and a user field, and a plain one. A submission creates a task, and
+  `forms.submitAs = "PROCESSING"` makes the next one wait one poll. Its
   workspace has the shape measured on a real account: a space of 3,548
   folders, six levels deep, 18 of them under two parents, and a folder of
   1,040 active tasks that pages the way Wrike does, down to a follow-up page

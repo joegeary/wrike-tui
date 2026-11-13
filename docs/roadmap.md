@@ -161,6 +161,22 @@ walk edits them with an editor per type, and "Set a field" adds one. No call
 says which fields apply to a task, and Wrike answers 200 to a write it then
 drops, so the client reads Wrike's answer and says when a value was not kept.
 
+Done: bulk edit. `M` marks tasks in a list, and status, importance,
+assignees, "Set a field", cancel and delete act on every marked task, with
+one confirm for cancel and delete and one status line for the result. Wrike
+takes up to 100 task IDs in one `PUT /tasks/{ids}` for statuses, assignees
+and custom fields, and refuses importance there, so importance goes one task
+at a time.
+
+Done: request forms, against the fake server only. "Submit a request form"
+searches the forms through MCP, walks the chosen one a field at a time along
+the pages its answers reach, submits it, and opens the created task. A
+submission Wrike is still processing is polled and never sent again. Files
+and people cannot be picked in the terminal, so those fields hand the form to
+the browser. The MCP shapes come from Wrike's published tool schemas and are
+unverified: the one live call to `get_requestform` answered "A server error
+occurred. Retry later."
+
 Deferred: custom item types. No task in the measured account uses one.
 
 ## Phase 5. Wrike's own power features
