@@ -261,6 +261,53 @@ describe("Editing a task", () => {
   })
 })
 
+describe("A formatted description", () => {
+  async function openChecklistTask() {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("/")
+    await app.type("4598459103")
+    await app.press("enter")
+    return app.see("Draft the Q4 launch checklist", "Comments (0)", "☑ Book the venue", /│Venue\s+│Riley Sam\s+│/)
+  }
+
+  test("reads as checkboxes and plain text in the details pane, with no style markers", async () => {
+    const frame = await openChecklistTask()
+    expect(frame).toContain("☐ Send the invites")
+    expect(frame).toContain("Partners first")
+    expect(frame).toContain("Budget is fixed at 10k.")
+    expect(frame).toContain("See the venue (https://example.test/venue) and its plan (image)")
+    for (const marker of ["[x]", "[ ]", "{color", "==", "++", "{rel", "<br>", "&#32;"]) expect(frame).not.toContain(marker)
+  })
+
+  test("E opens it as markdown, and ticking a box saves Wrike's checklist with every other style intact", async () => {
+    await openChecklistTask()
+    const stored = app.fake.data.tasks.find((task) => task.id === TASK.checklist)!.description
+    app.outside.editor = (initial) => initial.replace("- [ ] {color:#191919}Send", "- [x] {color:#191919}Send")
+    await app.press("E")
+    await app.see("Description saved from markdown")
+    expect(app.outside.edited).toEqual([
+      {
+        initial: [
+          "One page, owners named per line.  ",
+          "- [x] Book the venue",
+          "- [ ] {color:#191919}Send the invites{color}",
+          "  - Partners first",
+          "",
+          "",
+          "=={#ffcc80}Budget== is ++fixed++ at {color:#D81B60}10k{color}.  ",
+          "See [the venue](https://example.test/venue){rel=nofollow} and its plan ![](//storage.example.test/plan.png)  ",
+          "| **Item** | **Owner** |",
+          "| --- | --- |",
+          "| Venue | Riley<br>Sam |",
+        ].join("\n"),
+        extension: "md",
+      },
+    ])
+    expect(app.fake.writes[0]!.params.description).toBe(stored.replace('<input type="checkbox" /><span', '<input type="checkbox" checked="checked" /><span'))
+  })
+})
+
 describe("Comments", () => {
   test("c posts a comment and shows it at the end of the thread", async () => {
     app = await openApp(WIDE)

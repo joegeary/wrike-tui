@@ -216,7 +216,8 @@ export function seed(today: string, now: string) {
       dates: planned(-2, 1),
       responsibleIds: [ME, RILEY],
       parentIds: [FOLDER.launch],
-      description: "One page, owners named per line.",
+      description:
+        'One page, owners named per line.<br /><ul class="checklist" style="list-style-type: none;"><li><label><input type="checkbox" checked="checked" />Book the venue</label></li><li><label><input type="checkbox" /><span style="color: #191919;">Send the invites</span></label><ul style="list-style-type: circle;"><li>Partners first</li></ul></li></ul><br /><span style="background-color: #ffcc80;">Budget</span> is <u>fixed</u> at <span style="color: #D81B60;">10k</span>.<br />See <a href="https://example.test/venue" rel="nofollow">the venue</a> and its plan <img src="//storage.example.test/plan.png" /><br /><table><tr><td><b>Item</b></td><td><b>Owner</b></td></tr><tr><td>Venue</td><td>Riley<br />Sam</td></tr></table>',
     }),
     task(TASK.onboarding, "Write onboarding guide for new support agents", {
       status: "Active",

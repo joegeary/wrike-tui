@@ -14,9 +14,10 @@ class WrikeRenderer extends Renderer {
   }
   // Written by hand so the href goes back exactly as written, without the URL encoding marked's own renderer applies.
   override link(token: Tokens.Link): string {
-    const rel = (token as LinkWithRel).rel ? ` rel="${escapeAttribute((token as LinkWithRel).rel!)}"` : ""
+    const { rel } = token as LinkWithRel
+    const relAttribute = rel ? ` rel="${escapeAttribute(rel)}"` : ""
     const title = token.title ? ` title="${escapeAttribute(token.title)}"` : ""
-    return `<a href="${escapeAttribute(token.href)}"${title}${rel}>${this.parser.parseInline(token.tokens)}</a>`
+    return `<a href="${escapeAttribute(token.href)}"${title}${relAttribute}>${this.parser.parseInline(token.tokens)}</a>`
   }
   // Wrike stores an image as a bare <img src>, so the URL goes back exactly as written.
   override image(token: Tokens.Image): string {
@@ -42,7 +43,7 @@ const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "
 const escapeAttribute = (text: string) => escapeHtml(text).replace(/"/g, "&quot;")
 
 /** The highlight a bare ==text== takes: the one Wrike descriptions use most. */
-export const DEFAULT_HIGHLIGHT = "#F8BBD0"
+const DEFAULT_HIGHLIGHT = "#F8BBD0"
 
 const HEX = "#[0-9a-fA-F]{3,8}"
 

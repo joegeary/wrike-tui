@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { descriptionFromEdit, editableDescription, htmlToMarkdown, markdownToHtml } from "../../src/domain/description"
+import { descriptionFromEdit, displayMarkdown, editableDescription, htmlToMarkdown, markdownToHtml } from "../../src/domain/description"
 
 describe("htmlToMarkdown", () => {
   test("renders Wrike's tags", () => {
@@ -244,5 +244,17 @@ describe("escaping", () => {
   ])("%s", (_name, html, markdown) => {
     expect(editableDescription(html)).toMatchObject({ format: "markdown", text: markdown })
     expect(descriptionFromEdit(editableDescription(html))).toBe(html)
+  })
+})
+
+describe("displayMarkdown", () => {
+  test("draws checklist boxes and drops the markers a terminal cannot show", () => {
+    const html =
+      '<ul class="checklist" style="list-style-type: none;"><li><label><input type="checkbox" checked="checked" />Done</label></li><li><label><input type="checkbox" /><span style="color: #191919;">Open</span></label></li></ul><br /><br /><br />' +
+      '<span style="background-color: #ffcc80;">Hot</span> and <u>firm</u>, see <a href="https://example.test" rel="nofollow">this</a> <img src="//storage.example.test/a.png" /> a == b'
+    expect(displayMarkdown(html)).toBe(["- ☑ Done", "- ☐ Open", "", "Hot and firm, see [this](https://example.test) (image) a == b"].join("\n"))
+  })
+  test("shows a break in a table cell as a space", () => {
+    expect(displayMarkdown("<table><tr><td>a<br />b</td></tr></table>")).toBe("| a b |\n| --- |")
   })
 })
