@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { z } from "zod"
-import pkg from "../../package.json"
+import { VERSION } from "../version"
 import type { McpClient } from "./client"
 import { WrikeFailure, type WrikeError } from "./errors"
 import { AsyncJobSchema, FormIndexSchema, FormPagesSchema, FormSearchSchema, HistorySchema, InboxSchema, SubmissionSchema, SubmitErrorSchema } from "./schemas"
@@ -31,7 +31,7 @@ export function createMcpClient(options: McpOptions): McpClient {
   function connect(): Promise<Client> {
     if (!connection) {
       const opening = (async () => {
-        const client = new Client({ name: pkg.name, version: pkg.version })
+        const client = new Client({ name: "wrike-tui", version: VERSION })
         await client.connect(
           new StreamableHTTPClientTransport(new URL(options.url), {
             requestInit: { headers: { Authorization: `Bearer ${options.token}` } },
