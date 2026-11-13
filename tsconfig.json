@@ -15,5 +15,5 @@
     "resolveJsonModule": true,
     "types": ["bun"]
   },
-  "include": ["src", "test", "e2e"]
+  "include": ["src", "test", "e2e", "scripts"]
 }

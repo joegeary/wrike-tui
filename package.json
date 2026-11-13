@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "bun run src/main.tsx",
-    "build": "bun build --compile --define 'process.env.NODE_ENV=\"production\"' src/main.tsx --outfile dist/wrike-tui",
+    "build": "bun scripts/build.ts",
     "test": "bun test ./test",
     "e2e": "bun run build && bun test ./e2e",
     "typecheck": "tsc --noEmit"
