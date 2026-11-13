@@ -224,35 +224,84 @@ function isoTime(raw: string | number): string {
   return Number.isNaN(time.getTime()) ? String(raw) : time.toISOString().replace(/\.\d+Z$/, "Z")
 }
 
-const Named = z.object({ name: z.string() })
-const Titled = z.object({ title: z.string() })
-const Values = <T extends z.ZodType>(value: T) => z.object({ oldValue: value.nullish(), newValue: value })
-const Day = z.object({ newValue: z.string().nullish() })
+type Values<T> = { from: T | null; to: T | null }
 
-/** How each history type's payload reads. A type missing here, or a payload that does not match, is drawn as `other`. */
-const CHANGES: Record<string, (action: string, payload: unknown) => HistoryChange | null> = {
-  TITLE: (_, payload) => read(Values(z.string()), payload, (v) => ({ kind: "title", from: v.oldValue ?? null, to: v.newValue })),
-  STATUS: (_, payload) => read(Values(Named), payload, (v) => ({ kind: "status", from: v.oldValue?.name ?? null, to: v.newValue.name })),
-  ASSIGNEES: (action, payload) =>
-    action === "ADD"
-      ? read(z.object({ addedUsers: z.array(Named).min(1) }), payload, (v) => ({ kind: "assignees", added: v.addedUsers.map((user) => user.name), removed: [] }))
-      : read(z.object({ removedUsers: z.array(Named).min(1) }), payload, (v) => ({ kind: "assignees", added: [], removed: v.removedUsers.map((user) => user.name) })),
-  PARENTS: (action, payload) =>
-    action === "ADD"
-      ? read(z.object({ addedParents: z.array(Titled).min(1) }), payload, (v) => ({ kind: "parents", added: v.addedParents.map((parent) => parent.title), removed: [] }))
-      : read(z.object({ removedParents: z.array(Titled).min(1) }), payload, (v) => ({ kind: "parents", added: [], removed: v.removedParents.map((parent) => parent.title) })),
-  START_DATE: (_, payload) => read(Day, payload, (v) => ({ kind: "start", day: v.newValue?.slice(0, 10) ?? null })),
-  DUE_DATE: (_, payload) => read(Day, payload, (v) => ({ kind: "due", day: v.newValue?.slice(0, 10) ?? null })),
-  DURATION: (_, payload) =>
-    read(z.object({ newValue: z.object({ durationInMinutes: z.number() }).nullish() }), payload, (v) => ({ kind: "duration", minutes: v.newValue?.durationInMinutes ?? null })),
-  CUSTOM_FIELDS: (_, payload) =>
-    read(z.object({ customField: Named, newString: z.string().nullish() }), payload, (v) => ({ kind: "field", name: v.customField.name, value: v.newString ?? null })),
+/**
+ * A field's old and new value under `keys`. A null or empty value counts as
+ * absent, and a payload with neither is not this shape. So the field reads as
+ * cleared only when the payload names an old value and no new one.
+ */
+function values<T>(payload: unknown, keys: [string, string], value: z.ZodType<T>, empty: (value: T) => boolean = () => false): Values<T> | null {
+  const [oldKey, newKey] = keys
+  const parsed = z.object({ [oldKey]: value.nullish(), [newKey]: value.nullish() }).safeParse(payload)
+  if (!parsed.success) return null
+  const present = (found: T | null | undefined) => (found === null || found === undefined || empty(found) ? null : found)
+  const [from, to] = [present(parsed.data[oldKey]), present(parsed.data[newKey])]
+  return from === null && to === null ? null : { from, to }
 }
 
-function read<T>(schema: z.ZodType<T>, payload: unknown, build: (value: T) => HistoryChange): HistoryChange | null {
-  const parsed = schema.safeParse(payload)
-  return parsed.success ? build(parsed.data) : null
+/** The names under `key`, or null when the payload has none there. */
+function names(payload: unknown, key: string, field: "name" | "title"): string[] | null {
+  const parsed = z.object({ [key]: z.array(z.object({ [field]: z.string() })).min(1) }).safeParse(payload)
+  return parsed.success ? parsed.data[key]!.map((item) => item[field]!) : null
 }
+
+const Text = z.string()
+const Name = z.object({ name: z.string() }).transform((named) => named.name)
+const Day = z.string().transform((value) => value.slice(0, 10))
+const Minutes = z.object({ durationInMinutes: z.number() }).transform((duration) => duration.durationInMinutes)
+const Choices = z.array(z.string()).transform((choices) => choices.join(", "))
+const blank = (text: string) => text === ""
+
+function changed<T>(found: Values<T> | null): { from: T | null; to: T } | null {
+  return found && found.to !== null ? { from: found.from, to: found.to } : null
+}
+
+function customField(payload: unknown): HistoryChange | null {
+  const field = z.object({ customField: z.object({ name: z.string() }) }).safeParse(payload)
+  if (!field.success) return null
+  const name = field.data.customField.name
+  // A text or single-choice field sends strings, a multi-select field lists its choices.
+  const text = values(payload, ["oldString", "newString"], Text, blank)
+  if (text) return { kind: "field", name, ...text }
+  // A list of choices reads better as what it became than as one list turning into another.
+  const choices = values(payload, ["oldValues", "newValues"], Choices, blank)
+  return choices && { kind: "field", name, from: null, to: choices.to }
+}
+
+const listed = (kind: "assignees" | "parents" | "attachments", side: "added" | "removed", found: string[] | null): HistoryChange | null =>
+  found && { kind, added: side === "added" ? found : [], removed: side === "removed" ? found : [] }
+
+/** How each history type and action reads, keyed `TYPE ACTION`. One missing here, or a payload that does not match, is drawn as `other`. */
+const CHANGES = new Map<string, (payload: unknown) => HistoryChange | null>([
+  ["TITLE UPDATE", (payload) => {
+    const found = changed(values(payload, ["oldValue", "newValue"], Text))
+    return found && { kind: "title", ...found }
+  }],
+  ["STATUS UPDATE", (payload) => {
+    const found = changed(values(payload, ["oldValue", "newValue"], Name))
+    return found && { kind: "status", ...found }
+  }],
+  ["ASSIGNEES ADD", (payload) => listed("assignees", "added", names(payload, "addedUsers", "name"))],
+  ["ASSIGNEES DELETE", (payload) => listed("assignees", "removed", names(payload, "removedUsers", "name"))],
+  ["PARENTS ADD", (payload) => listed("parents", "added", names(payload, "addedParents", "title"))],
+  ["PARENTS DELETE", (payload) => listed("parents", "removed", names(payload, "removedParents", "title"))],
+  ["ATTACHMENTS ADD", (payload) => listed("attachments", "added", names(payload, "addedAttachments", "name"))],
+  ["ATTACHMENTS DELETE", (payload) => listed("attachments", "removed", names(payload, "removedAttachments", "name"))],
+  ["START_DATE UPDATE", (payload) => {
+    const found = values(payload, ["oldValue", "newValue"], Day)
+    return found && { kind: "start", ...found }
+  }],
+  ["DUE_DATE UPDATE", (payload) => {
+    const found = values(payload, ["oldValue", "newValue"], Day)
+    return found && { kind: "due", ...found }
+  }],
+  ["DURATION UPDATE", (payload) => {
+    const found = values(payload, ["oldValue", "newValue"], Minutes)
+    return found && { kind: "duration", ...found }
+  }],
+  ["CUSTOM_FIELDS UPDATE", customField],
+])
 
 const HistoryChangeSchema = z
   .object({
@@ -266,7 +315,7 @@ const HistoryChangeSchema = z
     (wire): HistoryEntry => ({
       at: isoTime(wire.timestamp),
       author: wire.author?.name || null,
-      change: CHANGES[wire.type]?.(wire.action, wire.payload) ?? { kind: "other", type: wire.type, action: wire.action },
+      change: CHANGES.get(`${wire.type} ${wire.action}`)?.(wire.payload) ?? { kind: "other", type: wire.type, action: wire.action },
     }),
   )
 

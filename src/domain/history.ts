@@ -1,17 +1,19 @@
 /**
- * One change to a task's fields, as Wrike's history tells it. A change of a
- * type or a shape this version does not know is `other`, which still names
- * what changed.
+ * One change to a task's fields, as Wrike's history tells it. `from` is null
+ * when Wrike did not send the old value, and `to` is null only when the field
+ * was cleared. A change of a type or a shape this version does not know is
+ * `other`, which still names what changed.
  */
 export type HistoryChange =
   | { kind: "title"; from: string | null; to: string }
   | { kind: "status"; from: string | null; to: string }
   | { kind: "assignees"; added: string[]; removed: string[] }
   | { kind: "parents"; added: string[]; removed: string[] }
-  | { kind: "start"; day: string | null }
-  | { kind: "due"; day: string | null }
-  | { kind: "duration"; minutes: number | null }
-  | { kind: "field"; name: string; value: string | null }
+  | { kind: "attachments"; added: string[]; removed: string[] }
+  | { kind: "start"; from: string | null; to: string | null }
+  | { kind: "due"; from: string | null; to: string | null }
+  | { kind: "duration"; from: number | null; to: number | null }
+  | { kind: "field"; name: string; from: string | null; to: string | null }
   | { kind: "other"; type: string; action: string }
 
 /** `at` is an ISO time like a comment's `createdDate`. The author is a name, because history names people by their MCP ID. */
@@ -28,26 +30,38 @@ function span(minutes: number): string {
   return `${minutes}m`
 }
 
-const VERBS: Record<string, string> = { ADD: "added", DELETE: "removed", UPDATE: "changed" }
+const VERBS = new Map([
+  ["ADD", "added"],
+  ["DELETE", "removed"],
+  ["UPDATE", "changed"],
+])
+
+const fromTo = (from: string | null, to: string) => (from === null ? to : `${from} → ${to}`)
+
+function addedRemoved(change: { added: string[]; removed: string[] }, added: string, removed: string): string {
+  return [change.added.length > 0 ? `${added} ${change.added.join(", ")}` : "", change.removed.length > 0 ? `${removed} ${change.removed.join(", ")}` : ""].filter(Boolean).join(", ")
+}
 
 /** The change as the comment stream draws it, after the author and the time. */
 export function describeChange(change: HistoryChange): string {
   switch (change.kind) {
     case "title":
     case "status":
-      return change.from === null ? `${change.kind} ${change.to}` : `${change.kind} ${change.from} → ${change.to}`
+      return `${change.kind} ${fromTo(change.from, change.to)}`
     case "assignees":
-      return [change.added.length > 0 ? `assigned ${change.added.join(", ")}` : "", change.removed.length > 0 ? `unassigned ${change.removed.join(", ")}` : ""].filter(Boolean).join(", ")
+      return addedRemoved(change, "assigned", "unassigned")
     case "parents":
-      return [change.added.length > 0 ? `moved into ${change.added.join(", ")}` : "", change.removed.length > 0 ? `moved out of ${change.removed.join(", ")}` : ""].filter(Boolean).join(", ")
+      return addedRemoved(change, "moved into", "moved out of")
+    case "attachments":
+      return addedRemoved(change, "attached", "removed attachment")
     case "start":
     case "due":
-      return `${change.kind} ${change.day ?? "cleared"}`
+      return change.to === null ? `${change.kind} cleared` : `${change.kind} ${fromTo(change.from, change.to)}`
     case "duration":
-      return change.minutes === null ? "duration cleared" : `duration ${span(change.minutes)}`
+      return change.to === null ? "duration cleared" : `duration ${fromTo(change.from === null ? null : span(change.from), span(change.to))}`
     case "field":
-      return change.value === null || change.value === "" ? `${change.name} cleared` : `${change.name}: ${change.value}`
+      return change.to === null ? `${change.name} cleared` : `${change.name}: ${fromTo(change.from, change.to)}`
     case "other":
-      return `${change.type.toLowerCase().replace(/_/g, " ")} ${VERBS[change.action] ?? change.action.toLowerCase()}`.trim()
+      return `${change.type.toLowerCase().replace(/_/g, " ")} ${VERBS.get(change.action) ?? change.action.toLowerCase()}`.trim()
   }
 }

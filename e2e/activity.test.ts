@@ -27,23 +27,28 @@ afterAll(() => e2e.stop())
 const historyCalls = () => e2e.fake.toolCalls.filter((call) => call.name === "get_item_history")
 
 describe("field history", () => {
-  test("folds into the comments, one line per change of every kind, an unknown kind named by its type", async () => {
+  test("folds into the comments, one line per change of every kind, an unknown shape named by its type", async () => {
     await tmux.run(BINARY)
     await tmux.see("inbox", "2 Inbox", "Fix login redirect loop")
     await tmux.keys("j", "j", "Enter")
     // The thumbnail and the attachments push the oldest changes above the fold, so G brings the stream's end into view.
-    await tmux.see("history-open", "Comments (1) · 11 changes", change("Pat Example", "Work Type: DB"))
+    await tmux.see("history-open", "Comments (1) · 16 changes", change("Pat Example", "Work Type: DB"))
     await tmux.keys("G")
     const stream = await tmux.see(
       "history-stream",
       change("Pat Example", "title Fix login loop → Fix login"),
-      change("Riley Demo", "effort changed"),
-      change("Sam Sample", "duration 2d"),
+      change("Riley Demo", "custom fields changed"),
+      change("Pat Example", "removed attachment old-capture.har"),
+      change("Riley Demo", "due cleared"),
+      change("Sam Sample", "duration 1d → 2d"),
       change("Sam Sample", "moved out of Q4 Launch"),
       change("Sam Sample", "moved into Platform"),
       change("Jordan Placeholder", "unassigned Riley Demo"),
       change("Pat Example", "assigned Pat Example"),
+      change("Pat Example", "attached callback-loop.png"),
       change("Pat Example", "status New → In Progress"),
+      change("Riley Demo", "attached Login flow notes"),
+      change("Jordan Placeholder", "Labels: auth, sso"),
       change("Pat Example", "Work Type: DB"),
       /│ {2}Repro steps attached, it loops after the callback\. +│/,
     )
@@ -62,7 +67,7 @@ describe("field history", () => {
     await tmux.keys("H")
     await tmux.see("history-hidden", "Field history hidden", /Comments \(1\) +│/, absent("Work Type: DB"))
     await tmux.keys("H")
-    await tmux.see("history-shown", "Field history shown among the comments", "Comments (1) · 11 changes")
+    await tmux.see("history-shown", "Field history shown among the comments", "Comments (1) · 16 changes")
     expect(historyCalls()).toHaveLength(1)
   })
 })
