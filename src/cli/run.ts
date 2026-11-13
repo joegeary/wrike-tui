@@ -1,10 +1,13 @@
 import pkg from "../../package.json"
+import { buildKeymap } from "../app/keymap"
 import type { Env } from "../auth/config"
 import { deleteProfile, readProfile, writeProfile } from "../auth/profile"
 import { loadSession, probe, type Session } from "../auth/session"
 import { resolveToken, type TokenStore } from "../auth/token"
+import { createPersistence, persistencePaths } from "../persist/persistence"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Fetch } from "../wrike/transport"
+import { keyLines } from "./keys"
 
 export type Io = {
   env: Env
@@ -24,6 +27,7 @@ Usage:
   wrike-tui auth login    Store a Wrike permanent access token in the OS keyring
   wrike-tui auth status   Show who is logged in and where the token comes from
   wrike-tui auth logout   Remove the stored token and profile
+  wrike-tui keys          List every command with its keys, as config.json sets them
   wrike-tui --version
 
 Environment:
@@ -45,6 +49,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (sub === "status") return status(io)
     if (sub === "logout") return logout(io)
   }
+  if (command === "keys" && sub === undefined) return keys(io)
   io.err(`Unknown command: ${argv.join(" ")}\n\n${USAGE}`)
   return 2
 }
@@ -91,6 +96,20 @@ async function status(io: Io): Promise<number> {
     io.err(`The token${who} from ${source} did not work. ${describeError(toWrikeError(thrown))}`)
     return 1
   }
+}
+
+/** Reads the config the way a launch does, so a file that does not parse is moved aside here too. */
+async function keys(io: Io): Promise<number> {
+  // The config is shared by every account, so its path needs none.
+  const paths = persistencePaths(io.env, "")
+  const { value: settings, movedAside } = await createPersistence(paths).loadConfig()
+  if (movedAside) io.err(`Could not read ${paths.config}. Kept as ${movedAside}, using the defaults.`)
+  const built = buildKeymap(settings.keys)
+  for (const line of keyLines(built)) io.out(line)
+  io.out("")
+  io.out(`* changed by the keys in ${paths.config}`)
+  for (const problem of built.problems) io.err(`Ignored: ${problem}`)
+  return built.problems.length > 0 ? 1 : 0
 }
 
 async function logout(io: Io): Promise<number> {

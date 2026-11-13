@@ -290,7 +290,7 @@ export type BuiltKeymap = {
 }
 
 /** Where a command's keys go: the contexts its default keys are in, or for a command with none, the contexts the registry gives it. */
-function overrideContexts(command: string): Context[] {
+export function overrideContexts(command: string): Context[] {
   const bound = [...new Set(KEYMAP.filter((binding) => binding.command === command).map((binding) => binding.context))]
   return bound.length > 0 ? bound : commandById(command).contexts
 }
@@ -301,7 +301,7 @@ function overrideRows(command: string, value: string | readonly string[]): KeyBi
   const keys: string[] = []
   for (const written of typeof value === "string" ? [value] : value) {
     const key = parseKey(written)
-    if (key === null) return `${command}: ${JSON.stringify(written)} is not a key`
+    if (key === null) return `${command}: ${JSON.stringify(written)} is not a key wrike-tui can bind`
     if (!keys.includes(key)) keys.push(key)
   }
   const rows = overrideContexts(command).flatMap((context) => keys.map((key): KeyBinding => ({ context, key, command })))
