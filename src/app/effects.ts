@@ -126,8 +126,12 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       if (!link.ok) return dispatch({ type: "flash", flash: { tone: "error", text: `Could not open ${effect.name}: ${describeError(link.error)}` } })
       return runEffect({ kind: "open-url", url: link.value }, deps, dispatch)
     }
-    case "update-task":
-      return dispatch({ type: "task-saved", done: effect.done, result: await attempt(() => client.updateTask(effect.taskId, effect.patch)) })
+    case "update-task": {
+      const result = await attempt(() => client.updateTask(effect.taskId, effect.patch))
+      // A task filed or taken out names its folders again. Like on open, a failure to name them leaves the task saved.
+      const folders = result.ok && effect.patch.field === "parents" ? await client.folders(result.value.parentIds).catch(() => undefined) : undefined
+      return dispatch({ type: "task-saved", done: effect.done, result, ...(folders ? { folders } : {}) })
+    }
     case "save-comment": {
       const { taskId, editing, body } = effect
       const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))

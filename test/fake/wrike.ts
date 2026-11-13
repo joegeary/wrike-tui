@@ -1,5 +1,5 @@
 import type { Fetch } from "../../src/wrike/transport"
-import { ME, PREVIEW_PNG, seed, type FakeData, type FakeTask } from "./data"
+import { ACCOUNT, ME, permalink, PREVIEW_PNG, STATUS, seed, type FakeData, type FakeTask } from "./data"
 
 export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
 type Failure = { method?: string; path: string; status: number; times: number; retryAfter?: string }
@@ -42,6 +42,12 @@ export type FakeOptions = {
   /** The time a new comment is stamped with. Real time unless a test sets a clock of its own. */
   stamp?: () => string
 }
+
+/** Where Wrike puts a task whose last folder was removed: the account root, which answers 200. */
+export const ACCOUNT_ROOT = "IEAA5UTEI7777777"
+/** A task in the Recycle Bin has this scope. Lists leave it out, and changing it again answers 400. */
+const RECYCLED = "RbTask"
+const deletedTask = () => wrikeError(400, "invalid_request", "Operation is not allowed on deleted Folder/Task")
 
 const realTime = () => new Date().toISOString().replace(/\.\d+Z$/, "Z")
 const commentNotFound = () => wrikeError(404, "resource_not_found", "Comment not found or access denied")
@@ -117,6 +123,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     const title = first.get("title")?.toLowerCase()
     let found = scope(first).filter(
       (task) =>
+        task.scope !== RECYCLED &&
         (!responsibles || task.responsibleIds.some((id) => responsibles.includes(id))) &&
         (!first.has("status") || task.status === first.get("status")) &&
         (title === undefined || task.title.toLowerCase().includes(title)) &&
@@ -167,10 +174,79 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
         ...(dates.due ? { due: `${dates.due.slice(0, 10)}T17:00:00` } : {}),
       }
     }
+    const folders = (name: string) => (form.has(name) ? (JSON.parse(form.get(name)!) as string[]) : [])
+    const [addParents, removeParents] = [folders("addParents"), folders("removeParents")]
+    if (addParents.some((id) => !folderById().has(id))) return invalid("addParents")
+    if (addParents.length + removeParents.length > 0) {
+      task.parentIds = [...new Set([...task.parentIds, ...addParents])].filter((id) => !removeParents.includes(id))
+      if (task.parentIds.length === 0) task.parentIds = [ACCOUNT_ROOT]
+    }
     const added = form.has("addResponsibles") ? (JSON.parse(form.get("addResponsibles")!) as string[]) : []
     const removed = form.has("removeResponsibles") ? (JSON.parse(form.get("removeResponsibles")!) as string[]) : []
     task.responsibleIds = [...new Set([...task.responsibleIds, ...added])].filter((id) => !removed.includes(id))
     task.updatedDate = new Date().toISOString().replace(/\.\d+Z$/, "Z")
+    return json({ kind: "tasks", data: [task] })
+  }
+
+  let created = 0
+
+  /** `POST /folders/{id}/tasks`: the folder or space in the path holds the task, and `superTasks` makes it a subtask of another. */
+  function createTask(container: string, form: URLSearchParams): Response {
+    if (!folderById().has(container)) return wrikeError(404, "resource_not_found", "Folder not found")
+    const title = form.get("title") ?? ""
+    if (title.trim() === "") return wrikeError(400, "invalid_parameter", "Parameter 'title' value is invalid")
+    const superTaskIds = form.has("superTasks") ? (JSON.parse(form.get("superTasks")!) as string[]) : []
+    const parents = superTaskIds.map((id) => data.tasks.find((candidate) => candidate.id === id && candidate.scope !== RECYCLED))
+    if (parents.some((parent) => parent === undefined)) return wrikeError(400, "invalid_parameter", "Parameter 'superTasks' value is invalid")
+    created += 1
+    const now = stamp()
+    const task: FakeTask = {
+      id: `IEAAAAAAKQAN${String(created).padStart(4, "0")}`,
+      accountId: ACCOUNT,
+      title,
+      description: "",
+      briefDescription: "",
+      parentIds: [container],
+      superParentIds: [],
+      sharedIds: [ME],
+      responsibleIds: form.has("responsibles") ? (JSON.parse(form.get("responsibles")!) as string[]) : [],
+      status: "Active",
+      importance: "Normal",
+      createdDate: now,
+      updatedDate: now,
+      dates: { type: "Backlog" },
+      scope: "WsTask",
+      authorIds: [ME],
+      customStatusId: STATUS.new,
+      hasAttachments: false,
+      permalink: permalink(4598469000 + created),
+      priority: "0",
+      superTaskIds,
+      subTaskIds: [],
+      dependencyIds: [],
+      metadata: [],
+      customFields: [],
+    }
+    data.tasks.push(task)
+    for (const parent of parents) parent!.subTaskIds.push(task.id)
+    return json({ kind: "tasks", data: [task] })
+  }
+
+  /**
+   * `DELETE /tasks/{id}` moves the task to the Recycle Bin. Its subtasks are
+   * detached and stay active as top-level tasks, so one that was filed nowhere
+   * of its own stays in its parent's folders.
+   */
+  function deleteTask(task: FakeTask): Response {
+    task.scope = RECYCLED
+    for (const child of data.tasks.filter((candidate) => candidate.superTaskIds.includes(task.id))) {
+      child.superTaskIds = child.superTaskIds.filter((id) => id !== task.id)
+      if (child.parentIds.length === 0) child.parentIds = [...task.parentIds]
+    }
+    for (const parent of data.tasks.filter((candidate) => candidate.subTaskIds.includes(task.id))) {
+      parent.subTaskIds = parent.subTaskIds.filter((id) => id !== task.id)
+    }
+    task.subTaskIds = []
     return json({ kind: "tasks", data: [task] })
   }
 
@@ -198,6 +274,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       return json({ kind: "folderTree", data: [...subtree(spaceFolders[1]!)].map((id) => byId.get(id)!) })
     }
     const containerTasks = /^\/(spaces|folders)\/([^/]+)\/tasks$/.exec(path)
+    if (method === "POST" && containerTasks?.[1] === "folders") return createTask(containerTasks[2]!, form)
     if (method === "GET" && containerTasks) {
       const [, kind, id] = containerTasks
       if (!folderById().has(id!)) return wrikeError(404, "resource_not_found", `${kind === "spaces" ? "Space" : "Folder"} not found`)
@@ -229,7 +306,9 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
         if (method === "GET") return json({ kind: "attachments", data: data.attachments.filter((attachment) => attachment.taskId === task.id) })
       } else if (!taskPath[2]) {
         if (method === "GET") return json({ kind: "tasks", data: [task] })
+        if (method !== "GET" && task.scope === RECYCLED) return deletedTask()
         if (method === "PUT") return updateTask(task, form)
+        if (method === "DELETE") return deleteTask(task)
       } else {
         if (method === "GET") return json({ kind: "comments", data: data.comments.filter((comment) => comment.taskId === task.id) })
         if (method === "POST") {

@@ -1,4 +1,4 @@
-import type { CustomStatusId, UserId } from "./ids"
+import type { CustomStatusId, FolderId, UserId } from "./ids"
 import type { Importance, TaskDates } from "./model"
 
 export type TaskPatch =
@@ -8,6 +8,8 @@ export type TaskPatch =
   | { field: "assignees"; add: UserId[]; remove: UserId[] }
   | { field: "dates"; dates: TaskDates }
   | { field: "description"; html: string }
+  /** Files the task into folders and takes it out of others. Wrike moves a task left in none to the account root, so a caller never removes the last one. */
+  | { field: "parents"; add: FolderId[]; remove: FolderId[] }
 
 /** A request parameter before encoding. Arrays and objects travel as JSON strings. */
 export type ParamValue = string | number | boolean | readonly string[] | { readonly [key: string]: unknown }
@@ -30,6 +32,11 @@ export function patchParams(patch: TaskPatch): Params {
       return { dates: datesParam(patch.dates) }
     case "description":
       return { description: patch.html }
+    case "parents":
+      return {
+        ...(patch.add.length > 0 ? { addParents: patch.add } : {}),
+        ...(patch.remove.length > 0 ? { removeParents: patch.remove } : {}),
+      }
   }
 }
 

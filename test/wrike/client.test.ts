@@ -7,7 +7,7 @@ import { createMcpClient } from "../../src/wrike/mcp"
 import { createTransport, type Fetch } from "../../src/wrike/transport"
 import { ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
 import { BIG_FOLDER, FOLDER, SPACE } from "../fake/workspace"
-import { createFakeWrike, type FakeWrike } from "../fake/wrike"
+import { ACCOUNT_ROOT, createFakeWrike, type FakeWrike } from "../fake/wrike"
 
 let fake: FakeWrike
 let client: WrikeClient
@@ -184,9 +184,16 @@ describe("reads", () => {
     expect((await client.comments(taskId(TASK.flags))).map((comment) => comment.text)).toEqual(["first", "second"])
   })
 
-  test("folders returns the titles of a task's parents", async () => {
+  test("folders names a task's parents in the task's order", async () => {
     const task = await client.task(taskId(TASK.sso))
-    expect(await client.folders(task.parentIds)).toEqual(["Platform", "Q4 Launch"])
+    expect(await client.folders(task.parentIds)).toEqual([
+      { id: folderId(FOLDER.platform), title: "Platform" },
+      { id: folderId(FOLDER.launch), title: "Q4 Launch" },
+    ])
+    expect(await client.folders([FOLDER.launch, FOLDER.platform])).toEqual([
+      { id: folderId(FOLDER.launch), title: "Q4 Launch" },
+      { id: folderId(FOLDER.platform), title: "Platform" },
+    ])
     expect(await client.folders([])).toEqual([])
   })
 
@@ -245,6 +252,49 @@ describe("writes", () => {
     expect(fake.writes).toEqual([{ method: "DELETE", path: `/comments/${original!.id}`, params: {} }])
     expect((await client.comments(taskId(TASK.sso))).map((comment) => comment.id)).not.toContain(original!.id)
     await expect(client.deleteComment(commentId(original!.id))).rejects.toMatchObject({ error: { kind: "not_found" } })
+  })
+
+  test("createTask posts to the folder, and a subtask is the same call with superTasks", async () => {
+    const task = await client.createTask({ title: "Write the runbook", folder: folderId(FOLDER.platform), parent: null, assignees: [userId(ME)] })
+    expect(task).toMatchObject({ title: "Write the runbook", parentIds: [FOLDER.platform], assigneeIds: [ME], superTaskIds: [], statusGroup: "Active" })
+    const sub = await client.createTask({ title: "Draft the outline", folder: folderId(FOLDER.platform), parent: task.id, assignees: [] })
+    expect(sub).toMatchObject({ parentIds: [FOLDER.platform], superTaskIds: [task.id], assigneeIds: [] })
+    expect(fake.writes).toEqual([
+      { method: "POST", path: `/folders/${FOLDER.platform}/tasks`, params: { title: "Write the runbook", responsibles: `["${ME}"]` } },
+      { method: "POST", path: `/folders/${FOLDER.platform}/tasks`, params: { title: "Draft the outline", superTasks: `["${task.id}"]` } },
+    ])
+    expect((await client.task(task.id)).subTaskIds).toEqual([sub.id])
+  })
+
+  test("a task can be created in a space, and Wrike has no call that creates under a task", async () => {
+    expect(await client.createTask({ title: "Space level", folder: folderId(SPACE.engineering), parent: null, assignees: [] })).toMatchObject({ parentIds: [SPACE.engineering] })
+    const response = await fake.fetch(`http://fake.test/api/v4/tasks/${TASK.login}/tasks`, { method: "POST", headers: { Authorization: "bearer good-token" }, body: "title=x" })
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({ error: "method_not_found" })
+  })
+
+  test("parents patches send addParents and removeParents, and removing the last folder moves the task to the account root", async () => {
+    const filed = await client.updateTask(taskId(TASK.keys), { field: "parents", add: [folderId(FOLDER.launch)], remove: [] })
+    expect(filed.parentIds).toEqual([FOLDER.platform, FOLDER.launch])
+    const out = await client.updateTask(taskId(TASK.keys), { field: "parents", add: [], remove: [folderId(FOLDER.platform)] })
+    expect(out.parentIds).toEqual([FOLDER.launch])
+    expect(fake.writes.map((write) => write.params)).toEqual([{ addParents: `["${FOLDER.launch}"]` }, { removeParents: `["${FOLDER.platform}"]` }])
+    expect((await client.updateTask(taskId(TASK.keys), { field: "parents", add: [], remove: [folderId(FOLDER.launch)] })).parentIds).toEqual([ACCOUNT_ROOT])
+  })
+
+  test("deleteTask moves the task to the Recycle Bin, its subtasks stay as top-level tasks, and a second delete is already-deleted", async () => {
+    expect(await client.deleteTask(taskId(TASK.login))).toBe("deleted")
+    expect(fake.writes).toEqual([{ method: "DELETE", path: `/tasks/${TASK.login}`, params: {} }])
+    expect(fake.data.tasks.find((task) => task.id === TASK.login)!.scope).toBe("RbTask")
+    const platform = await client.tasks({ kind: "folder", id: folderId(FOLDER.platform) }, { completed: false })
+    const ids = platform.tasks.map((task) => task.id)
+    expect(ids).not.toContain(taskId(TASK.login))
+    expect(ids).toContain(taskId(TASK.reproduce))
+    expect(platform.tasks.find((task) => task.id === TASK.reproduce)!.superTaskIds).toEqual([])
+    expect(await client.deleteTask(taskId(TASK.login))).toBe("already-deleted")
+    await expect(client.updateTask(taskId(TASK.login), { field: "title", title: "x" })).rejects.toMatchObject({
+      error: { kind: "invalid", message: "Operation is not allowed on deleted Folder/Task" },
+    })
   })
 
   test("updating a comment that is gone is not_found", async () => {

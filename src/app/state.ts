@@ -3,7 +3,7 @@ import type { CommentBody, Mention } from "../domain/comment"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
 import type { AttachmentId, CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
-import type { Attachment, Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
+import type { Attachment, Comment, Contact, FolderRef, InboxEntry, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
 import type { Scope, ScopeKey } from "../domain/scope"
 import type { Settings, ThemeName } from "../domain/settings"
@@ -86,8 +86,8 @@ export type Compose = {
   dismissed: number | null
 }
 
-/** An open task and what is drawn with it. `attachmentsError` says why the attachments are missing when their call failed. */
-export type Details = { task: Task; attachments: Attachment[]; attachmentsError?: WrikeError; comments: Comment[]; folders: string[] }
+/** An open task and what is drawn with it. `attachmentsError` says why the attachments are missing when their call failed. `folders` are the task's parents Wrike could name. */
+export type Details = { task: Task; attachments: Attachment[]; attachmentsError?: WrikeError; comments: Comment[]; folders: FolderRef[] }
 
 /** Something in the details pane that `]` and `[` step through, in the order the pane draws it: the attachments, then the comments. */
 export type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "comment"; id: CommentId }
@@ -253,7 +253,8 @@ export type Action =
   | { type: "details-loaded"; request: number; result: Result<Details> }
   | { type: "history-loaded"; taskId: TaskId; request: number; more: boolean; result: Result<HistoryPage> }
   | { type: "preview-loaded"; id: AttachmentId; result: Result<Uint8Array> }
-  | { type: "task-saved"; done: string; result: Result<Task> }
+  /** `folders` comes with a save that filed the task, named again by Wrike. */
+  | { type: "task-saved"; done: string; result: Result<Task>; folders?: FolderRef[] }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
