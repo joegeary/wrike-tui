@@ -12,6 +12,10 @@ class WrikeRenderer extends Renderer {
   override del(token: Tokens.Del): string {
     return tag("s", this.parser.parseInline(token.tokens))
   }
+  // listItem writes the checkbox inside the item's label.
+  override checkbox(): string {
+    return ""
+  }
   override br(): string {
     return "<br />"
   }
@@ -43,8 +47,11 @@ const HARD_BREAK = / {2,}\n*$/
 
 const trailingNewlines = (raw: string) => raw.length - raw.replace(/\n+$/, "").length
 
-/** The blocks of a document or a list item, with the <br>s the newlines between them spell. */
-function flow(tokens: Token[]): string {
+/**
+ * The blocks of a document or a list item, with the <br>s the newlines between them spell.
+ * `opening` wraps the first part, which is how a checklist item puts its text in a label.
+ */
+function flow(tokens: Token[], opening = (html: string) => html): string {
   let html = ""
   let previous: { part: Part; hardBreak: boolean } | null = null
   let newlines = 0
@@ -55,7 +62,7 @@ function flow(tokens: Token[]): string {
     }
     const part: Part = token.type === "paragraph" || token.type === "text" || token.type === "html" ? "text" : "block"
     if (previous) html += "<br />".repeat(Math.max(0, breaksBetween(previous.part, part, newlines, previous.hardBreak)))
-    html += render(token)
+    html += previous ? render(token) : opening(render(token))
     previous = { part, hardBreak: HARD_BREAK.test(token.raw) }
     newlines = trailingNewlines(token.raw)
   }
@@ -76,11 +83,21 @@ function render(token: Token): string {
     case "code":
       return tag("pre", escapeHtml(token.text))
     case "list": {
-      const items = (token as Tokens.List).items.map((item) => tag("li", flow(item.tokens))).join("")
-      if (!token.ordered) return tag("ul", items)
-      return token.start === 1 ? tag("ol", items) : `<ol start="${token.start}">${items}</ol>`
+      const { items, ordered } = token as Tokens.List
+      const html = items.map(listItem).join("")
+      if (items.some((item) => item.task)) return `<ul class="checklist" style="list-style-type: none;">${html}</ul>`
+      if (!ordered) return tag("ul", html)
+      return token.start === 1 ? tag("ol", html) : `<ol start="${token.start}">${html}</ol>`
     }
     default:
       return parser.parse([token]).replace(/\n/g, "")
   }
+}
+
+/** A task list item is a Wrike checklist item: a checkbox and the item's text inside a label. */
+function listItem(item: Tokens.ListItem): string {
+  if (!item.task) return tag("li", flow(item.tokens))
+  const checkbox = `<input type="checkbox"${item.checked ? ' checked="checked"' : ""} />`
+  const content = item.tokens.filter((token) => token.type !== "checkbox")
+  return tag("li", content.length === 0 ? tag("label", checkbox) : flow(content, (first) => tag("label", checkbox + first)))
 }

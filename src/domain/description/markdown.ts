@@ -16,9 +16,12 @@ const childrenOf = (node: Node): Node[] => Array.from(node.childNodes as ArrayLi
 
 const isElement = (node: Node): node is Element => node.nodeType === node.ELEMENT_NODE
 
+type TextPart = { part: "text"; lines: string[]; breaks: number }
+type BlockPart = { part: "block"; markdown: string; breaks: number; tag: string; alternate: boolean }
+
 /** Text and blocks, joined by the newlines that spell the <br>s between them. */
 function flow(parent: Node): string {
-  const parts: ({ part: "text"; lines: string[]; breaks: number } | { part: "block"; markdown: string; breaks: number })[] = []
+  const parts: (TextPart | BlockPart)[] = []
   let breaks = 0
   for (const child of childrenOf(parent)) {
     if (isElement(child) && child.nodeName === "BR") {
@@ -27,7 +30,9 @@ function flow(parent: Node): string {
     }
     const last = parts.at(-1)
     if (isElement(child) && BLOCK_TAGS.has(child.nodeName)) {
-      parts.push({ part: "block", markdown: block(child), breaks })
+      // Markdown runs two lists in a row together unless the second one changes its marker.
+      const alternate = last?.part === "block" && last.tag === child.nodeName && !last.alternate
+      parts.push({ part: "block", markdown: block(child, alternate), breaks, tag: child.nodeName, alternate })
     } else if (last?.part === "text" && breaks < 2) {
       if (breaks === 1) last.lines.push("")
       last.lines[last.lines.length - 1] += inline(child)
@@ -49,9 +54,9 @@ const SPACE_REFERENCES: Record<string, string> = { " ": "&#32;", "\t": "&#9;", "
 /** Markdown drops spaces at the ends of a line or inside emphasis, so the outermost one is written as a character reference. */
 const keepEdgeSpace = (markdown: string) => markdown.replace(/^[ \t\u00a0]|[ \t\u00a0]$/g, (space) => SPACE_REFERENCES[space]!)
 
-function block(element: Element): string {
+function block(element: Element, alternate: boolean): string {
   const name = element.nodeName
-  if (name === "UL" || name === "OL") return list(element)
+  if (name === "UL" || name === "OL") return list(element, alternate)
   if (/^H[1-6]$/.test(name)) return `${"#".repeat(Number(name[1]))} ${keepEdgeSpace(inlineChildren(element))}`
   if (name === "PRE") return fenced(element.textContent ?? "")
   if (name === "TABLE") return table(element)
@@ -59,12 +64,12 @@ function block(element: Element): string {
   return flow(element)
 }
 
-function list(element: Element): string {
+function list(element: Element, alternate: boolean): string {
   const start = Number(element.getAttribute("start") ?? 1)
   const items = childrenOf(element).filter((child) => child.nodeName === "LI")
   return items
     .map((item, index) => {
-      const marker = element.nodeName === "OL" ? `${start + index}. ` : "- "
+      const marker = element.nodeName === "OL" ? `${start + index}${alternate ? ")" : "."} ` : alternate ? "* " : "- "
       return marker + indent(flow(item), marker.length)
     })
     .join("\n")
@@ -110,6 +115,9 @@ function inline(node: Node): string {
       return codeSpan(node.textContent ?? "")
     case "A":
       return `[${inlineChildren(node)}](${destination(node.getAttribute("href") ?? "")})`
+    case "INPUT":
+      // A checklist item: the checkbox opens its label, which reads as a task list item.
+      return node.hasAttribute("checked") ? "[x] " : "[ ] "
     case "IMG":
       return `![](${destination(node.getAttribute("src") ?? "")})`
     case "BR":

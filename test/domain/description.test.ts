@@ -119,3 +119,28 @@ describe("code in a description", () => {
     expect(editableDescription("<pre>a <b>b</b></pre>").format).toBe("html")
   })
 })
+
+describe("checklists", () => {
+  const roundTrip = (html: string) => descriptionFromEdit(editableDescription(html))
+  const CHECKLIST = '<ul class="checklist" style="list-style-type: none;">'
+  const item = (text: string, checked = false) => `<li><label><input type="checkbox"${checked ? ' checked="checked"' : ""} />${text}</label></li>`
+
+  test("open as a task list and save back as Wrike's checklist", () => {
+    const html = `Before launch${CHECKLIST}${item("Book the room")}${item("<b>Send</b> the invite", true)}</ul>`
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Before launch\n- [ ] Book the room\n- [x] **Send** the invite" })
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("keep nested items under their parent", () => {
+    const html = `${CHECKLIST}<li><label><input type="checkbox" />Venue</label>${CHECKLIST}${item("Deposit", true)}</ul></li></ul>`
+    expect(editableDescription(html).text).toBe("- [ ] Venue\n  - [x] Deposit")
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("a task list typed in the editor becomes a checklist", () => {
+    expect(markdownToHtml("- [ ] one\n- [X] two")).toBe(`${CHECKLIST}${item("one")}${item("two", true)}</ul>`)
+  })
+  test("two lists in a row stay two lists", () => {
+    const html = `${CHECKLIST}${item("a")}</ul><br />${CHECKLIST}${item("b")}</ul>`
+    expect(editableDescription(html).text).toBe("- [ ] a\n\n\n* [ ] b")
+    expect(roundTrip(html)).toBe(html)
+  })
+})
