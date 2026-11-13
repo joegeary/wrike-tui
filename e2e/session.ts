@@ -46,6 +46,8 @@ export async function startE2e(name: string, size: { width: number; height: numb
     EDITOR: await script("editor", 'print -r -- "" >> "$1"\nprint -r -- "Edited in the e2e editor." >> "$1"'),
     // A recorder, never a real browser.
     BROWSER: await script("browser", `print -r -- "$1" >> "${join(work, "opened-urls")}"`),
+    // bun test runs in UTC and the fake lays its dates out in this process's zone, so the binary must count days in the same one.
+    TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
     TERM: "xterm-256color",
     COLORTERM: "truecolor",
     ...extra,
