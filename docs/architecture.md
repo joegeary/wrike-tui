@@ -7,7 +7,8 @@ wrike-tui is TypeScript on Bun, rendered by OpenTUI through
 
 Data flows one way. Each layer depends only on the layers under it.
 
-    src/cli/        argv parsing, `auth login|logout|status`, launching the TUI
+    src/cli/        argv parsing, `auth login|logout|status`, `keys`, launching
+                    the TUI
     src/ui/         React components that render state and dispatch actions,
                     and the terminal handoffs (editor, browser, clipboard)
     src/app/        the app state machine (reducer, with its handlers in
@@ -1068,8 +1069,26 @@ The keymap table, `src/app/keymap.ts`, binds keys to command IDs per context.
 The contexts that are active come from the mode and the focused pane. A
 command whose `when` does not hold leaves its key unbound, which is how `a`
 works only in the Inbox and `Space` toggles only in a picker that takes
-several choices. The `?` legend, the status bar hints and the palette all read
-these two tables. A test walks both and fails on a binding that names no
+several choices.
+
+`KEYMAP` holds the default keys. The keymap in effect is built once, in
+`initialState`, by `buildKeymap` from the defaults and the config's `keys`,
+and is kept in the state as `state.keymap`. A listed command's keys replace
+its default rows in each context it had them, at the same place in the table,
+and a command with no default key gets them in its registry contexts. An
+entry is dropped, and the command keeps its defaults, when it names no
+command, names a key `normalizeKey` never produces, puts a printable key in a
+context where text is typed (picker, text, mention, compose, palette, form),
+or clashes: one key for two commands among contexts that are active together,
+which covers a pane key hiding a global one. Dropping an entry brings its
+defaults back, so the clash check runs until nothing clashes. Clashes among
+the defaults alone are left to each command's `when`. One status line names
+every dropped entry. Dispatch, the `?` legend, the status bar hints, the
+palette and the sentences that name a key, such as "Press r to retry", all
+read `state.keymap` and the registry. `wrike-tui keys` reads the config the
+same way and prints the result.
+
+A test walks the registry and the default keymap and fails on a binding that names no
 command, on a key that runs two commands among contexts that are active
 together, on a command that neither a key nor the palette reaches, and on a
 command whose intent the reducer does not handle.
@@ -1154,7 +1173,7 @@ through a temp file and a rename.
 
 | File | Holds | Written |
 | --- | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | `theme`, `navWidth` (16 to 60, default 30), `completed`, `history` (default true), and `lists`: a partial `ListSpec` per kind of scope (`todo`, `search`, `space`, `folder`, `project`) | by hand, and by the palette's "Save as default", which writes the theme in use, the history toggle and the current list's shaping for scopes of its kind |
+| `$XDG_CONFIG_HOME/wrike-tui/config.json` | `theme`, `navWidth` (16 to 60, default 30), `completed`, `history` (default true), `lists`: a partial `ListSpec` per kind of scope (`todo`, `search`, `space`, `folder`, `project`), and `keys`: a command ID to a key or a list of keys | by hand, and by the palette's "Save as default", which writes the theme in use, the history toggle and the current list's shaping for scopes of its kind |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/session.json` | the scope, the nav cursor and expanded paths, the focus, the zoom, the open task, the read toggle, and the `ListSpec`, cursor, closed groups and open subtasks of up to 50 scopes | at quit, and every 30 seconds when it changed |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/favorites.json` | the favorites, in order | after each change |
 | `$XDG_CACHE_HOME/wrike-tui/<accountId>/spaces.json` and `tree-<spaceId>.json` | the spaces list and each opened space's tree, with the time fetched | after a fetch that differs from what was held |

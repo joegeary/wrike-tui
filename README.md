@@ -100,6 +100,7 @@ token in the keyring of your operating system. It stores your name and host in
 | `wrike-tui auth login` | Stores a token. |
 | `wrike-tui auth status` | Shows who is logged in and where the token comes from. |
 | `wrike-tui auth logout` | Removes the stored token and profile. |
+| `wrike-tui keys` | Lists every command with its keys. See [Change the keys](#change-the-keys). |
 
 ### Environment
 
@@ -114,7 +115,8 @@ token in the keyring of your operating system. It stores your name and host in
 
 ## Keys
 
-Press `?` in the client to see the keys for the pane you are in.
+Press `?` in the client to see the keys for the pane you are in. These are the
+defaults, and [Change the keys](#change-the-keys) says how to change them.
 
 | Where | Key | Action |
 | --- | --- | --- |
@@ -216,6 +218,42 @@ Every field clears: "Clear the field", nothing chosen, an empty input, or a
 checkbox flipped off. Read-only and calculated fields say why they cannot be
 edited.
 
+## Change the keys
+
+Put a `keys` object in `config.json`. It maps a command ID to a key, or to a
+list of keys. Those keys replace the command's default keys wherever it had
+them. An empty list removes the command's keys. A command you do not list
+keeps its defaults.
+
+```json
+{
+  "keys": {
+    "task.status": "S",
+    "list.group.status": "B",
+    "help.close": ["esc", "ctrl+g"],
+    "app.quit": []
+  }
+}
+```
+
+A key is one character, such as `S`, `B` or `?`, or one of these names:
+`enter`, `esc`, `space`, `tab`, `backspace`, `delete`, `insert`, `home`,
+`end`, `pageup`, `pagedown`, `up`, `down`, `left`, `right` and `f1` to `f12`.
+Put `ctrl+` in front of a letter or a name for the Ctrl key, as in `ctrl+n`.
+`ctrl+c` quits and is not free, and `ctrl+h`, `ctrl+i`, `ctrl+j` and `ctrl+m`
+reach the client as `backspace`, `tab`, a new line and `enter`. Alt is not
+supported. Names take any case.
+
+Run `wrike-tui keys` to list every command with its ID, where it works, its
+keys and its title. A star marks the commands your config changed. A command
+with no key, such as `list.group.status`, can get one in the place it works.
+
+The client checks the keys when it starts. It ignores an entry that names an
+unknown command, a key it cannot read, a key that another command already has
+where both work, or a single character or `space` in a picker, a text field, the comment
+box, the palette or a request form, where that character must stay typeable.
+The status bar names each ignored entry, and `wrike-tui keys` prints them.
+
 ## Shape a list
 
 Press `:` in a list and type part of a command.
@@ -241,7 +279,7 @@ more.
 
 | File | Holds |
 | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, and the default shaping of lists |
+| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, the default shaping of lists, and your keys |
 | `$XDG_STATE_HOME/wrike-tui/<account>/session.json` | Where you were, restored at the next start |
 | `$XDG_STATE_HOME/wrike-tui/<account>/favorites.json` | Your favorites |
 | `$XDG_CACHE_HOME/wrike-tui/<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
