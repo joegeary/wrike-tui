@@ -8,6 +8,8 @@ export type WrikeError =
   | { kind: "server"; status: number; message: string }
   /** Wrike's MCP server said in plain text that it failed and to retry later. */
   | { kind: "unavailable"; message: string }
+  /** The OAuth refresh token was refused, so only a new login helps. */
+  | { kind: "expired" }
 
 /** The one exception the wire layer throws. Callers above it read `error`. */
 export class WrikeFailure extends Error {
@@ -40,6 +42,8 @@ export function describeError(error: WrikeError): string {
       return `Wrike failed with ${error.status}: ${error.message}`
     case "unavailable":
       return `Wrike could not answer: ${error.message}`
+    case "expired":
+      return "Your Wrike login expired. Run `wrike-tui auth login --oauth`."
   }
 }
 

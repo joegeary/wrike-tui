@@ -5,10 +5,18 @@ import pkg from "../../package.json"
 import type { McpClient } from "./client"
 import { WrikeFailure, type WrikeError } from "./errors"
 import { AsyncJobSchema, FormIndexSchema, FormPagesSchema, FormSearchSchema, HistorySchema, InboxSchema, SubmissionSchema, SubmitErrorSchema } from "./schemas"
-import type { Fetch } from "./transport"
+import { fixedToken, withToken, type Fetch, type TokenProvider } from "./transport"
 
-/** `readOnly` refuses the one tool that writes, `submit_requestform`, before it is sent. */
-export type McpOptions = { url: string; token: string; fetch?: Fetch; readOnly?: boolean }
+/**
+ * `readOnly` refuses the one tool that writes, `submit_requestform`, before it
+ * is sent. `oauth` says the token comes from an OAuth login, so a refusal can
+ * say that the MCP server may not take such a token.
+ */
+export type McpOptions = { url: string; token: string | TokenProvider; fetch?: Fetch; readOnly?: boolean; oauth?: boolean }
+
+/** Wrike documents the MCP server for permanent tokens. Whether it takes an OAuth access token is not known. */
+const OAUTH_REFUSED =
+  "Wrike's MCP server refused the OAuth login, so the Inbox and history cannot load. Log in with a permanent token instead: `wrike-tui auth login`."
 
 const ToolResult = z.object({
   isError: z.boolean().optional(),
@@ -27,16 +35,14 @@ const HISTORY_TYPES = ["TITLE", "ASSIGNEES", "PARENTS", "STATUS", "START_DATE", 
 /** Reads what only Wrike's MCP server has: the Inbox and field history. One connection, opened on first use and shared by every call. */
 export function createMcpClient(options: McpOptions): McpClient {
   let connection: Promise<Client> | null = null
+  const provider = typeof options.token === "string" ? fixedToken(options.token) : options.token
 
   function connect(): Promise<Client> {
     if (!connection) {
       const opening = (async () => {
         const client = new Client({ name: pkg.name, version: pkg.version })
         await client.connect(
-          new StreamableHTTPClientTransport(new URL(options.url), {
-            requestInit: { headers: { Authorization: `Bearer ${options.token}` } },
-            fetch: options.fetch,
-          }),
+          new StreamableHTTPClientTransport(new URL(options.url), { fetch: withToken(provider, options.fetch) }),
         )
         return client
       })()
@@ -60,7 +66,10 @@ export function createMcpClient(options: McpOptions): McpClient {
       return await (await used).callTool({ name, arguments: args })
     } catch (thrown) {
       drop(used)
-      throw new WrikeFailure(mcpError(thrown))
+      // A login that cannot be renewed fails inside the fetch and passes through the SDK as it was thrown.
+      if (thrown instanceof WrikeFailure) throw thrown
+      const error = mcpError(thrown)
+      throw new WrikeFailure(error.kind === "unauthorized" && options.oauth ? { kind: "invalid", message: OAUTH_REFUSED } : error)
     }
   }
 
