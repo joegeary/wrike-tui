@@ -60,6 +60,16 @@ describe("editableComment", () => {
     expect(editableComment(commentBody(draft, mentions).text, nameOf)).toEqual({ text: draft, mentions })
   })
 
+  test("every HTML character reference reads as its character, and one out of range as U+FFFD", () => {
+    expect(editableComment("caf&eacute; &hellip; &mdash; &copy; &#x1F600; &#99999999;", nameOf)?.text).toBe("café \u2026 \u2014 \u00a9 \u{1F600} \uFFFD")
+    expect(showMentions(anchor("KUNKNOWN", "&#99999999;"), nameOf)).toBe("<strong>@\uFFFD</strong>")
+  })
+
+  test("a newline in the HTML source is a space, as in a browser, and none at a line break", () => {
+    expect(editableComment("first\nsecond", nameOf)?.text).toBe("first second")
+    expect(editableComment("a<br />\nb\n<br />c", nameOf)?.text).toBe("a\nb\nc")
+  })
+
   test("other markup is refused, so an edit never strips formatting", () => {
     expect(editableComment('See <a href="https://example.test">the PR</a>', nameOf)).toBeNull()
     expect(editableComment("<b>bold</b> claim", nameOf)).toBeNull()
