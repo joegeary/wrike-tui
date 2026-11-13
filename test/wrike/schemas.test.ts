@@ -131,10 +131,48 @@ describe("history parser", () => {
     expect(one({ timestamp: Date.UTC(2026, 10, 12, 18, 24, 31, 500), payload: {} }).at).toBe("2026-11-12T18:24:31Z")
   })
 
-  test("a cleared date, duration or field says so", () => {
-    expect(describeChange(one({ type: "DUE_DATE", payload: {} }).change)).toBe("due cleared")
-    expect(describeChange(one({ type: "DURATION", payload: { newValue: null } }).change)).toBe("duration cleared")
-    expect(describeChange(one({ type: "DURATION", payload: { newValue: { durationInMinutes: 90 } } }).change)).toBe("duration 90m")
-    expect(describeChange(one({ type: "CUSTOM_FIELDS", payload: { customField: { id: "w:cf:1", name: "Work Type" } } }).change)).toBe("Work Type cleared")
+  const drawn = (change: Record<string, unknown>) => describeChange(one(change).change)
+
+  test("a field is cleared only when the payload names an old value and no new one", () => {
+    expect(drawn({ type: "DUE_DATE", payload: { oldValue: "2026-11-09T17:00:00" } })).toBe("due cleared")
+    expect(drawn({ type: "START_DATE", payload: { oldValue: "2026-11-09T09:00:00", newValue: null } })).toBe("start cleared")
+    expect(drawn({ type: "DURATION", payload: { oldValue: { durationInMinutes: 480 } } })).toBe("duration cleared")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: { id: "w:cf:1", name: "Work Type" }, oldString: "DB" } })).toBe("Work Type cleared")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: { id: "w:cf:2", name: "Labels" }, oldValues: ["auth"], newValues: [] } })).toBe("Labels cleared")
+  })
+
+  test("a payload missing its values, or of a shape this version does not know, is drawn by its type and action", () => {
+    const field = { id: "w:cf:1", name: "Owner" }
+    expect(drawn({ type: "DUE_DATE", payload: {} })).toBe("due date changed")
+    expect(drawn({ type: "START_DATE", payload: { surprise: true } })).toBe("start date changed")
+    expect(drawn({ type: "DUE_DATE", payload: { newValue: 1794000000000 } })).toBe("due date changed")
+    expect(drawn({ type: "DURATION", payload: { whatever: 1 } })).toBe("duration changed")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: field } })).toBe("custom fields changed")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: field, newUsers: [{ name: "Pat" }] } })).toBe("custom fields changed")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: field, newNumber: 5 } })).toBe("custom fields changed")
+    expect(drawn({ type: "ASSIGNEES", action: "REPLACE", payload: { removedUsers: [{ name: "Pat" }] } })).toBe("assignees replace")
+    expect(drawn({ type: "TITLE", payload: { oldValue: "Old" } })).toBe("title changed")
+  })
+
+  test("Wrike's measured shapes read as a change from one value to another where it has both", () => {
+    const field = (name: string) => ({ id: "w:cf:1", name })
+    expect(drawn({ type: "DUE_DATE", payload: { newValue: "2026-11-14T17:00:00" } })).toBe("due 2026-11-14")
+    expect(drawn({ type: "DUE_DATE", payload: { oldValue: "2026-11-12T17:00:00", newValue: "2026-11-14T17:00:00" } })).toBe("due 2026-11-12 → 2026-11-14")
+    expect(drawn({ type: "DURATION", payload: { newValue: { durationInMinutes: 90 } } })).toBe("duration 90m")
+    expect(drawn({ type: "DURATION", payload: { oldValue: { durationInMinutes: 480 }, newValue: { durationInMinutes: 960 } } })).toBe("duration 1d → 2d")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: field("Work Type"), newString: "DB" } })).toBe("Work Type: DB")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: field("Work Type"), oldString: "Frontend", newString: "DB" } })).toBe("Work Type: Frontend → DB")
+    expect(drawn({ type: "CUSTOM_FIELDS", payload: { customField: field("Labels"), oldValues: ["auth"], newValues: ["auth", "sso"] } })).toBe("Labels: auth, sso")
+    expect(drawn({ type: "ATTACHMENTS", action: "ADD", payload: { addedAttachments: [{ name: "a.png", id: "w:att:1", type: "WRIKE" }, { name: "b.txt" }] } })).toBe("attached a.png, b.txt")
+    expect(drawn({ type: "ATTACHMENTS", action: "DELETE", payload: { removedAttachments: [{ name: "old.har" }] } })).toBe("removed attachment old.har")
+    expect(drawn({ type: "TITLE", payload: { newValue: "New" } })).toBe("title New")
+  })
+
+  test("a type or action named like an Object property is drawn by its name", () => {
+    for (const type of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(one({ type, payload: {} }).change).toEqual({ kind: "other", type, action: "UPDATE" })
+    }
+    expect(describeChange({ kind: "other", type: "STATUS", action: "constructor" })).toBe("status constructor")
+    expect(describeChange({ kind: "other", type: "STATUS", action: "toString" })).toBe("status tostring")
   })
 })

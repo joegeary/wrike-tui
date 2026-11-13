@@ -417,18 +417,26 @@ export function seed(today: string, now: string) {
   })
   const statusValue = (id: string, name: string) => ({ id: `w:wfst:${id}`, name, category: "Active" })
   const folderRef = (title: string, n: number) => ({ id: `w:itm:${4598458000 + n}`, title, baseType: "FOLDER" })
+  const field = (n: number, name: string) => ({ id: `w:cf:${n}`, name })
+  // The payload shapes Wrike sends, measured on real tasks. EFFORT is a type the client never asks for.
   const history: Record<string, ReturnType<typeof change>[]> = {
     [TASK.login]: [
-      change(20, pat, "CUSTOM_FIELDS", "UPDATE", { customField: { id: "w:cf:1201", name: "Work Type" }, newString: "DB" }),
-      change(60, riley, "DUE_DATE", "UPDATE", { newValue: `${addDays(today, 2)}T17:00:00` }),
+      change(20, pat, "CUSTOM_FIELDS", "UPDATE", { customField: field(1201, "Work Type"), newString: "DB" }),
+      change(30, jordan, "CUSTOM_FIELDS", "UPDATE", { customField: field(1202, "Labels"), oldValues: ["auth"], newValues: ["auth", "sso"] }),
+      change(60, riley, "ATTACHMENTS", "ADD", { addedAttachments: [{ name: "Login flow notes", id: "w:att:4", type: "GOOGLE" }] }),
+      change(60 + 1, riley, "DUE_DATE", "UPDATE", { newValue: `${addDays(today, 2)}T17:00:00` }),
       change(60 * 2, pat, "STATUS", "UPDATE", { oldValue: statusValue(STATUS.new, "New"), newValue: statusValue(STATUS.inProgress, "In Progress") }),
+      change(60 * 3 + 2, pat, "ATTACHMENTS", "ADD", { addedAttachments: [{ name: "callback-loop.png", id: "w:att:1", type: "WRIKE" }] }),
       change(60 * 4, pat, "ASSIGNEES", "ADD", { addedUsers: [usr(pat)] }),
       change(60 * 5, jordan, "ASSIGNEES", "DELETE", { removedUsers: [usr(riley)] }),
       change(60 * 6, sam, "PARENTS", "ADD", { addedParents: [folderRef("Platform", 1)] }),
       change(60 * 6 + 1, sam, "PARENTS", "DELETE", { removedParents: [folderRef("Q4 Launch", 2)] }),
       change(60 * 24, sam, "START_DATE", "UPDATE", { newValue: `${addDays(today, 1)}T09:00:00` }),
-      change(60 * 24 + 1, sam, "DURATION", "UPDATE", { newValue: { durationInMinutes: 960 } }),
+      change(60 * 24 + 1, sam, "DURATION", "UPDATE", { newValue: { durationInMinutes: 960 }, oldValue: { durationInMinutes: 480 } }),
+      change(60 * 24 + 2, riley, "DUE_DATE", "UPDATE", { oldValue: `${addDays(today, -3)}T17:00:00` }),
       change(60 * 24 * 2, riley, "EFFORT", "UPDATE", { newValue: { totalEffort: 120 } }),
+      change(60 * 24 * 2 + 1, pat, "ATTACHMENTS", "DELETE", { removedAttachments: [{ name: "old-capture.har" }] }),
+      change(60 * 24 * 2 + 2, riley, "CUSTOM_FIELDS", "UPDATE", { customField: field(1203, "Story Points"), newNumber: 5 }),
       change(60 * 24 * 3, pat, "TITLE", "UPDATE", { oldValue: "Fix login loop", newValue: "Fix login redirect loop" }),
     ],
   }

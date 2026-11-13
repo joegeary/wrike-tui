@@ -322,19 +322,25 @@ describe("history over MCP", () => {
   const loginItem = () => legacyItemId(fake.data.tasks.find((task) => task.id === TASK.login)!.permalink.split("=")[1]!)!
   const describeAll = (entries: { author: string | null; change: Parameters<typeof describeChange>[0] }[]) => entries.map((entry) => `${entry.author}: ${describeChange(entry.change)}`)
 
-  test("a task's changes come newest first, each kind read, an unknown kind named by its type", async () => {
+  test("a task's changes come newest first, each kind read, an unknown shape named by its type, an unasked type left out", async () => {
     const page = await client.history(loginItem(), { pageSize: 50 })
     expect(page.next).toBeNull()
     expect(describeAll(page.entries)).toEqual([
       "Pat Example: Work Type: DB",
+      "Jordan Placeholder: Labels: auth, sso",
+      "Riley Demo: attached Login flow notes",
       `Riley Demo: due ${fake.data.tasks.find((task) => task.id === TASK.login)!.dates.due!.slice(0, 10)}`,
       "Pat Example: status New → In Progress",
+      "Pat Example: attached callback-loop.png",
       "Pat Example: assigned Pat Example",
       "Jordan Placeholder: unassigned Riley Demo",
       "Sam Sample: moved into Platform",
       "Sam Sample: moved out of Q4 Launch",
       "Sam Sample: start 2026-11-13",
-      "Sam Sample: duration 2d",
+      "Sam Sample: duration 1d → 2d",
+      "Riley Demo: due cleared",
+      "Pat Example: removed attachment old-capture.har",
+      "Riley Demo: custom fields changed",
       "Pat Example: title Fix login loop → Fix login redirect loop",
     ])
     expect(page.entries[0]!.at).toBe("2026-11-12T15:40:00Z")
@@ -345,7 +351,13 @@ describe("history over MCP", () => {
     expect(first.entries).toHaveLength(4)
     expect(first.next).not.toBeNull()
     const second = await client.history(loginItem(), { pageSize: 4, pageToken: first.next! })
-    expect(describeAll(second.entries)[0]).toBe("Jordan Placeholder: unassigned Riley Demo")
+    expect(describeAll(second.entries)[0]).toBe("Pat Example: status New → In Progress")
+    const item = `w:itm:${loginItem()}`
+    expect(fake.toolCalls.map((call) => call.arguments)).toMatchObject([
+      { scope: { type: "ITEMS", itemIds: [item] }, pageSize: 4 },
+      { scope: { type: "ITEMS", itemIds: [item] }, pageSize: 4, nextPageToken: first.next },
+    ])
+    expect(fake.toolCalls[0]!.arguments).not.toHaveProperty("nextPageToken")
   })
 
   test("an item Wrike cannot read is an error with Wrike's words, a rate limit is rate_limited", async () => {
