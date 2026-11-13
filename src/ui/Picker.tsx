@@ -1,5 +1,5 @@
 import { fieldDefs, isMultiPicker, pickerOptions } from "../app/selectors"
-import type { ListPicker, PickerMode, State, TaskPicker, WorkPicker } from "../app/state"
+import type { BulkPicker, ListPicker, PickerMode, State, TaskPicker, WorkPicker } from "../app/state"
 import { fit } from "./format"
 import { Overlay } from "./Overlay"
 import { statusColor, useTheme } from "./theme"
@@ -22,14 +22,18 @@ const TITLES: Record<TaskPicker | ListPicker | WorkPicker, string> = {
 const MAX_ROWS = 12
 const WIDTH = 56
 
+const BULK_TITLES: Record<BulkPicker, string> = { status: "Status of", importance: "Importance of", assignees: "Assignees of", cancel: "Cancel" }
+
 function title(state: State, mode: PickerMode): string {
-  if (mode.field === "set-field") return "Set a field"
+  if (mode.field === "bulk") return `${BULK_TITLES[mode.change]} ${mode.tasks.length} marked ${mode.tasks.length === 1 ? "task" : "tasks"}`
+  if (mode.field === "set-field") return mode.taskIds.length > 1 ? `Set a field on ${mode.taskIds.length} tasks` : "Set a field"
   return mode.field === "custom" ? (fieldDefs(state.customFields).get(mode.edit.id)?.title ?? "Field") : TITLES[mode.field]
 }
 
 function emptyText(state: State, mode: PickerMode): string {
   if (mode.query !== "") return "Nothing matches the filter."
   if (mode.field === "custom") return "This field has no choices."
+  if (mode.field === "bulk") return mode.change === "assignees" ? "No people loaded." : "The marked tasks share no workflow."
   if (mode.field === "set-field") return state.customFields.state === "loading" ? "Loading the custom fields..." : "No custom field can be set here."
   if (mode.field === "status") {
     return state.spaceWorkflows === "loading" ? "Loading this task's workflow..." : "This task's workflow is not available."
@@ -46,7 +50,7 @@ export function Picker({ state, mode, screen }: { state: State; mode: PickerMode
   const first = Math.max(0, Math.min(mode.cursor - Math.floor(rows / 2), options.length - rows))
   const inner = Math.min(WIDTH, screen.width) - 2
   const multi = isMultiPicker(state, mode)
-  const dotted = mode.field === "status" || mode.field === "filter-status" || mode.field === "cancel"
+  const dotted = mode.field === "status" || mode.field === "filter-status" || mode.field === "cancel" || (mode.field === "bulk" && (mode.change === "status" || mode.change === "cancel"))
   return (
     <Overlay title={title(state, mode)} width={WIDTH} height={rows + 4} screen={screen}>
       <text wrapMode="none">

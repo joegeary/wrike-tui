@@ -79,7 +79,7 @@ export function deleteComment(state: State): Update {
   const comment = selectedComment(state)
   if (!comment) return [state, []]
   if (comment.authorId !== state.profile.userId) return [{ ...state, flash: info(notMine(state, comment)) }, []]
-  return [{ ...state, mode: { kind: "confirm-delete", target: { kind: "comment", id: comment.id } } }, []]
+  return [{ ...state, mode: { kind: "confirm", target: { kind: "comment", id: comment.id } } }, []]
 }
 
 /** `y` while asked about a comment: the comment is deleted. */

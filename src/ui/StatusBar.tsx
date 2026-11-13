@@ -1,7 +1,7 @@
 import { isOffered } from "../app/commands"
 import { activeContexts, boundCommands, keyLabel } from "../app/keymap"
 import { fieldDefs, isMultiPicker } from "../app/selectors"
-import type { DeleteTarget, State, TaskPlan } from "../app/state"
+import type { ConfirmTarget, State, TaskPlan } from "../app/state"
 import { fieldEditor } from "../domain/fields"
 import { fit } from "./format"
 import { useTheme, type Color, type Theme } from "./theme"
@@ -23,7 +23,7 @@ function message(state: State, theme: Theme): { text: string; color: Color } {
   const { mode } = state
   if ((mode.kind === "edit-text" || mode.kind === "new-task") && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
-  if (mode.kind === "confirm-delete") return { text: deleteQuestion(mode.target), color: theme.warning }
+  if (mode.kind === "confirm") return { text: question(mode.target), color: theme.warning }
   if (mode.kind === "new-task") return { text: planText(mode.plan), color: theme.dim }
   if (mode.kind === "picker" && isMultiPicker(state, mode) && mode.field === "custom") return { text: "Type to filter. With nothing chosen, Enter clears the field.", color: theme.dim }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
@@ -41,9 +41,16 @@ function message(state: State, theme: Theme): { text: string; color: Color } {
 
 const quoted = (title: string) => `"${title.length > 40 ? `${title.slice(0, 39)}…` : title}"`
 
-/** The question a delete confirm asks. */
-function deleteQuestion(target: DeleteTarget): string {
+const tasks = (n: number) => (n === 1 ? "1 task" : `${n} tasks`)
+
+/** The question a confirm asks. */
+function question(target: ConfirmTarget): string {
   if (target.kind === "comment") return "Delete this comment? y deletes, any other key keeps it"
+  if (target.kind === "delete-tasks") {
+    const n = target.tasks.length
+    return `Delete ${tasks(n)}? ${n === 1 ? "It goes" : "They go"} to the Recycle Bin. y deletes, any other key keeps ${n === 1 ? "it" : "them"}`
+  }
+  if (target.kind === "cancel-tasks") return `Cancel ${tasks(target.plan.length)}? y cancels, any other key leaves them`
   const subtasks =
     target.subtasks === 0 ? "" : target.subtasks === 1 ? " Its subtask stays as a top-level task." : ` Its ${target.subtasks} subtasks stay as top-level tasks.`
   return `Delete ${quoted(target.title)}? It goes to the Recycle Bin.${subtasks} y deletes, any other key keeps it`

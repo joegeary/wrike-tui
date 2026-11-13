@@ -42,6 +42,8 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("list", "list.completed", "x"),
   ...bind("list", "list.filter.text", "f"),
   ...bind("list", "inbox.read", "a"),
+  ...bind("list", "list.mark", "M"),
+  ...bind("list", "list.clear-marks", "esc"),
 
   ...bind("details", "details.down", "j", "down"),
   ...bind("details", "details.up", "k", "up"),
@@ -135,7 +137,7 @@ export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] 
       return ["text"]
     case "compose":
       return ["mention", "compose"]
-    case "confirm-delete":
+    case "confirm":
       return ["confirm"]
     case "edit":
       return ["edit"]

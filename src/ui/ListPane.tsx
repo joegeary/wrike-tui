@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { contactName, currentList, currentView, folderTitles, listCursor, listRows, statusOf, type PaneRow } from "../app/selectors"
+import { contactName, currentList, currentView, fieldDefs, folderTitles, listCursor, listRows, markedTasks, statusOf, typedInList, type PaneRow } from "../app/selectors"
 import type { State } from "../app/state"
 import type { ColumnKey, GroupKey } from "../domain/list"
 import { dueDay, permalinkId, startDay, type InboxEntry } from "../domain/model"
@@ -42,7 +42,9 @@ function paneTitle(state: State, room: number): string {
   const list = currentList(state)
   const { spec } = currentView(state)
   const loaded = list && (list.items.length > 0 || (list.loading === null && list.error === null))
+  const marked = markedTasks(state).length
   const parts = [
+    ...(marked > 0 ? [`${marked} marked`] : []),
     ...(spec.group === "none" ? [] : [GROUP_LABELS[spec.group]]),
     ...(spec.filters.length > 0 ? [`${spec.filters.length} ${spec.filters.length === 1 ? "filter" : "filters"}`] : []),
     ...(spec.completed && scope.kind !== "search" ? ["all statuses"] : []),
@@ -107,14 +109,17 @@ function EntryRow({ entry, state, width, selected, theme }: { entry: InboxEntry;
 
 type Cell = { text: string; fg: Color }
 
-function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns: ColumnKey[]; width: number; indent: number; nested: boolean; selected: boolean; theme: Theme }) {
+/** The column marks are drawn in, while the list has any. */
+const MARK_WIDTH = 2
+
+function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns: ColumnKey[]; width: number; indent: number; nested: boolean; marking: boolean; selected: boolean; theme: Theme }) {
   const { row, state, theme, selected } = props
   const { task } = row
   const dim = selected ? theme.selectedDim : theme.dim
   const due = dueDay(task.dates)
   const start = startDay(task.dates)
   const overdue = due !== null && due < state.clock.today && task.statusGroup === "Active"
-  const titleWidth = Math.max(0, props.width - props.indent - props.columns.reduce((sum, column) => sum + (column === "title" ? 0 : COLUMN_WIDTHS[column]), 0))
+  const titleWidth = Math.max(0, props.width - props.indent - (props.marking ? MARK_WIDTH : 0) - props.columns.reduce((sum, column) => sum + (column === "title" ? 0 : COLUMN_WIDTHS[column]), 0))
   const cell = (column: ColumnKey): Cell => {
     switch (column) {
       case "importance":
@@ -146,6 +151,7 @@ function TaskRow(props: { row: ListRow & { kind: "task" }; state: State; columns
   }
   return (
     <text wrapMode="none" bg={selected ? theme.selection : undefined}>
+      {props.marking ? <span fg={theme.accent}>{state.marks.has(task.id) ? "✓ " : "  "}</span> : null}
       {" ".repeat(props.indent)}
       {props.columns.map((column) => {
         const { text, fg } = cell(column)
@@ -178,11 +184,19 @@ export function ListPane(props: { state: State; width: number; height: number; o
   const inner = props.width - 2
   const { mode } = state
   const typing = mode.kind === "search-input" || mode.kind === "filter-input" || mode.kind === "new-task" ? mode : null
+  // A field typed for several marked tasks has no row in the details pane, so it is typed here.
+  const field = typedInList(state)
+  const fieldDef = field ? fieldDefs(state.customFields).get(field.edit.id) : undefined
+  const line = typing
+    ? { ...TYPING[typing.kind], draft: typing.draft }
+    : field
+      ? { lead: `${truncate(fieldDef?.title ?? "Field", 24)}: `, placeholder: `for ${field.edit.taskIds.length} marked tasks`, draft: field.draft }
+      : null
   const rows = listRows(state)
   const heights = rows.map(rowHeight)
   const cursor = listCursor(state)
   const failed = state.scope.kind === "inbox" ? state.inbox.state === "error" : Boolean(currentList(state)?.error)
-  const available = props.height - 2 - (typing ? 1 : 0) - (failed ? 2 : 0)
+  const available = props.height - 2 - (line ? 1 : 0) - (failed ? 2 : 0)
 
   const firstRow = useRef(0)
   const start = windowStart(heights, Math.max(0, cursor), available, firstRow.current)
@@ -190,15 +204,16 @@ export function ListPane(props: { state: State; width: number; height: number; o
   const visible = rows.slice(start, start + windowCount(heights, start, available))
   // Tasks under a subgroup sit one step in, under their subgroup's label.
   const indent = rows.some((row) => row.kind === "group" && row.depth === 1) ? 2 : 0
-  const columns = fittingColumns(currentView(state).spec.columns, inner - indent)
+  const marking = markedTasks(state).length > 0
+  const columns = fittingColumns(currentView(state).spec.columns, inner - indent - (marking ? MARK_WIDTH : 0))
   const nested = rows.some((row) => row.kind === "task" && (row.hasChildren || row.depth > 0))
 
   return (
     <Pane number={2} title={paneTitle(state, titleRoom(props.width))} width={props.width} focused={state.focus === "list" && state.mode.kind === "browse"}>
-      {typing ? (
+      {line ? (
         <box flexDirection="row" height={1}>
-          <text fg={theme.accent} flexShrink={0}>{TYPING[typing.kind].lead}</text>
-          <TextInput value={typing.draft} placeholder={TYPING[typing.kind].placeholder} onInput={props.onDraft} />
+          <text fg={theme.accent} flexShrink={0}>{line.lead}</text>
+          <TextInput value={line.draft} placeholder={line.placeholder} onInput={props.onDraft} />
         </box>
       ) : null}
       <Notice state={state} width={inner} theme={theme} empty={rows.length === 0} />
@@ -210,7 +225,7 @@ export function ListPane(props: { state: State; width: number; height: number; o
           case "entry":
             return <EntryRow key={row.id} entry={row.entry} state={state} width={inner} selected={selected} theme={theme} />
           case "task":
-            return <TaskRow key={row.id} row={row} state={state} columns={columns} width={inner} indent={indent} nested={nested} selected={selected} theme={theme} />
+            return <TaskRow key={row.id} row={row} state={state} columns={columns} width={inner} indent={indent} nested={nested} marking={marking} selected={selected} theme={theme} />
           case "more":
             return (
               <text key={row.id} wrapMode="none" bg={selected ? theme.selection : undefined} fg={selected ? theme.selectedDim : theme.dim}>

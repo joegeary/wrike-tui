@@ -1,7 +1,8 @@
 import { customFieldId } from "../../domain/ids"
 import { choicesOf, fieldEditor, inputText, parseInput, writeText, type CustomField, type FieldWrite } from "../../domain/fields"
-import { anySet, CHOICE, CLEAR_FIELD, editRows, fieldDefs, OTHER_VALUE, pickerOptions, sharedValue } from "../selectors"
+import { anySet, CHOICE, CLEAR_FIELD, editRows, fieldDefs, heldTask, OTHER_VALUE, pickerOptions, sharedValue } from "../selectors"
 import { EDIT_FIELDS, type EditField, type EditRow, type EditTextMode, type Effect, type FieldEdit, type Origin, type PickerMode, type State, type Update } from "../state"
+import { runBulk } from "./bulk"
 import { info } from "./core"
 
 const isEditField = (field: string): field is EditField => (EDIT_FIELDS as readonly string[]).includes(field)
@@ -91,8 +92,13 @@ function unchanged(state: State, edit: FieldEdit, value: FieldWrite): boolean {
 export function writeField(state: State, edit: FieldEdit, field: CustomField, value: FieldWrite): Update {
   if (unchanged(state, edit, value)) return [state, []]
   const done = value === null ? `${field.title} cleared` : `${field.title} set to ${writeText(field.kind, value)}`
+  const check = { id: field.id, title: field.title, value }
+  if (edit.taskIds.length > 1) {
+    const tasks = edit.taskIds.flatMap((id) => heldTask(state, id) ?? []).map((task) => ({ id: task.id, title: task.title }))
+    return runBulk(state, { kind: "update", tasks, patch: { field: "custom", id: field.id, value }, done, check })
+  }
   const effects = edit.taskIds.map(
-    (taskId): Effect => ({ kind: "update-task", taskId, patch: { field: "custom", id: field.id, value }, done, check: { id: field.id, title: field.title, value } }),
+    (taskId): Effect => ({ kind: "update-task", taskId, patch: { field: "custom", id: field.id, value }, done, check }),
   )
   return [{ ...state, flash: info("Saving...") }, effects]
 }

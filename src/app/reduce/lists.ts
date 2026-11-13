@@ -3,10 +3,22 @@ import { COLUMN_KEYS, DUE_RANGES, withFilter, withSort, type ColumnKey, type Fil
 import { IMPORTANCES } from "../../domain/model"
 import { taskScopeKind } from "../../domain/scope"
 import { groupRowId } from "../../domain/shape"
-import { ANY_DUE, currentList, currentView, listCursor, listRows, pickerOptions, selectedRow } from "../selectors"
+import { ANY_DUE, currentList, currentView, listCursor, listRows, markedTasks, pickerOptions, selectedRow, selectedTask } from "../selectors"
 import { LOAD_AHEAD, type ListPicker, type ListView, type Mode, type ScrollTo, type SpecChange, type State, type Update } from "../state"
 import { clamp, cursorAt, info, withView } from "./core"
 import { loadInbox, loadTasks, open, showScope } from "./load"
+
+/** `M` marks the task under the cursor, or unmarks it, and moves on to the next task, past group headings. */
+export function toggleMark(state: State): Update {
+  const task = selectedTask(state)
+  // A mark on a task that has left the list is dropped here too, so the count on screen is the count kept.
+  const marks = new Set(markedTasks(state).map((marked) => marked.id))
+  if (task && !marks.delete(task.id)) marks.add(task.id)
+  const rows = listRows(state)
+  const next = rows.findIndex((row, index) => index > listCursor(state) && row.kind === "task")
+  const marked: State = { ...state, marks }
+  return next < 0 ? [marked, []] : loadAhead(withView(marked, (view) => ({ ...view, cursor: cursorAt(state, next) })))
+}
 
 export function moveCursor(state: State, to: ScrollTo): Update {
   const count = listRows(state).length

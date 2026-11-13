@@ -5,10 +5,11 @@ import { dueDay, IMPORTANCES, permalinkId, startDay, type FolderRef, type Import
 import { assigneePatch, type TaskPatch } from "../../domain/patch"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
-import { editRows, isMultiPicker, openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
+import { bulkTargets, editRows, isMultiPicker, openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
 import { type Action, type EditTextMode, type Flash, type Mode, type OpenTarget, type Origin, type PickerMode, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
 import { closeEditor, openFieldEditor, submitFieldPicker, submitFieldText, submitSetField } from "./fields"
 import { withPreview } from "./attachments"
+import { actsOnMarks, onMarks } from "./bulk"
 import { newComment } from "./comments"
 import { clamp, failure, info, markMissing, putTask, retitle, save, then } from "./core"
 import { historyStale, isCurrent, loadHistory, needsHistory, open } from "./load"
@@ -72,6 +73,8 @@ function taskTarget(state: State): TaskTarget {
 }
 
 export function onTask(state: State, command: TaskCommand): Update {
+  const marked = bulkTargets(state)
+  if (marked.length > 0 && actsOnMarks(command)) return onMarks(state, command, marked)
   const target = taskTarget(state)
   switch (target.kind) {
     case "open":

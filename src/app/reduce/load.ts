@@ -1,5 +1,5 @@
 import type { HistoryEntry } from "../../domain/history"
-import { legacyItemId, type SpaceId } from "../../domain/ids"
+import { legacyItemId, type SpaceId, type TaskId } from "../../domain/ids"
 import { permalinkId, type Task, type Workflow } from "../../domain/model"
 import { scopeKey, type Scope, type ScopeKey, type TaskScope } from "../../domain/scope"
 import { classifyQuery } from "../../domain/search"
@@ -184,7 +184,9 @@ export function historyLoaded(state: State, action: Action & { type: "history-lo
 export function showScope(state: State, scope: Scope, focus: Pane): Update {
   const key = scopeKey(scope)
   const views = state.views.has(key) ? state.views : new Map(state.views).set(key, freshView(state, scope))
-  const next: State = { ...state, scope, focus, zoom: false, views, lastSearch: scope.kind === "search" ? scope.query : state.lastSearch }
+  // Marks belong to the list they were made in.
+  const marks = key === scopeKey(state.scope) ? state.marks : new Set<TaskId>()
+  const next: State = { ...state, scope, focus, zoom: false, views, marks, lastSearch: scope.kind === "search" ? scope.query : state.lastSearch }
   if (scope.kind === "inbox") return next.inbox.state === "idle" ? loadInbox(next) : [next, []]
   const list = next.lists.get(key)
   return list?.loading ? [putList(next, key, list), []] : loadTasks(next, scope, "first")

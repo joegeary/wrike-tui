@@ -5,17 +5,17 @@ import { taskRowId } from "../../domain/shape"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { currentKey, openTask, pickerOptions } from "../selectors"
-import { shown, type Action, type DeleteTarget, type Mode, type State, type TaskCommand, type TaskPlan, type Update, type WorkPicker } from "../state"
+import { shown, type Action, type ConfirmTarget, type Mode, type State, type TaskCommand, type TaskPlan, type Update, type WorkPicker } from "../state"
 import { failure, info, markMissing, putTask, save } from "./core"
 import { open, request } from "./load"
 
 /** In read-only mode every command here is refused before a picker, a prompt or a question opens. */
-const refuseReadOnly = (state: State): Update => [{ ...state, flash: failure(describeError({ kind: "read_only" })) }, []]
+export const refuseReadOnly = (state: State): Update => [{ ...state, flash: failure(describeError({ kind: "read_only" })) }, []]
 const LAST_FOLDER = "A task stays in at least one folder"
 
 const picker = (field: WorkPicker): Mode => ({ kind: "picker", field, query: "", cursor: 0, chosen: [], origin: "browse" })
 const titlePrompt = (plan: TaskPlan): Mode => ({ kind: "new-task", draft: "", plan })
-const short = (title: string) => (title.length > 40 ? `${title.slice(0, 39)}…` : title)
+export const short = (title: string) => (title.length > 40 ? `${title.slice(0, 39)}…` : title)
 
 /** Who a new task goes to: the user in My to-do, so it shows there, and nobody elsewhere. */
 const assigneesHere = (state: State) => (state.scope.kind === "todo" ? [state.profile.userId] : [])
@@ -113,10 +113,10 @@ export function taskCreated(state: State, action: Action & { type: "task-created
 
 /** `D` asks first, in the status bar, and says what happens to the task's subtasks. */
 function askDelete(state: State, task: Task): Update {
-  return [{ ...state, mode: { kind: "confirm-delete", target: { kind: "task", id: task.id, title: task.title, subtasks: task.subTaskIds.length } } }, []]
+  return [{ ...state, mode: { kind: "confirm", target: { kind: "task", id: task.id, title: task.title, subtasks: task.subTaskIds.length } } }, []]
 }
 
-export function confirmDeleteTask(state: State, target: DeleteTarget & { kind: "task" }): Update {
+export function confirmDeleteTask(state: State, target: ConfirmTarget & { kind: "task" }): Update {
   return [{ ...state, mode: { kind: "browse" }, flash: info("Deleting the task...") }, [{ kind: "delete-task", id: target.id, title: target.title }]]
 }
 
@@ -129,6 +129,12 @@ export function confirmDeleteTask(state: State, target: DeleteTarget & { kind: "
 export function taskDeleted(state: State, action: Action & { type: "task-deleted" }): Update {
   const { id, result } = action
   if (!result.ok) return [{ ...state, flash: failure(describeError(result.error)) }, []]
+  const text = result.value === "deleted" ? `Deleted "${short(action.title)}". It is in the Recycle Bin` : `"${short(action.title)}" was already deleted`
+  return [{ ...dropTask(state, id), flash: info(text) }, []]
+}
+
+/** Takes a deleted task out of every list and the details pane, and out of its relatives' subtasks and parents. */
+export function dropTask(state: State, id: TaskId): State {
   const lists = new Map(state.lists)
   for (const [key, list] of lists) {
     if (list.items.some((task) => task.id === id)) lists.set(key, { ...list, items: list.items.filter((task) => task.id !== id) })
@@ -148,9 +154,7 @@ export function taskDeleted(state: State, action: Action & { type: "task-deleted
   }
   const histories = new Map(next.histories)
   histories.delete(id)
-  next = markMissing({ ...next, histories }, [favoriteKey({ kind: "task", id })])
-  const text = result.value === "deleted" ? `Deleted "${short(action.title)}". It is in the Recycle Bin` : `"${short(action.title)}" was already deleted`
-  return [{ ...next, flash: info(text) }, []]
+  return markMissing({ ...next, histories }, [favoriteKey({ kind: "task", id })])
 }
 
 /** Cancel: the workflow's one Cancelled status, or a pick among several. */

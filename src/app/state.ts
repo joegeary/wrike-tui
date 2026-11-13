@@ -2,7 +2,7 @@ import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
 import type { CustomField, FieldWrite } from "../domain/fields"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
-import type { AttachmentId, CommentId, CustomFieldId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, CustomFieldId, CustomStatusId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
@@ -58,7 +58,10 @@ export type ListPicker = (typeof LIST_PICKERS)[number]
  */
 export const WORK_PICKERS = ["folder", "subtask-folder", "file", "unfile", "cancel"] as const
 export type WorkPicker = (typeof WORK_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker | WorkPicker | "set-field" | "custom"
+/** Changes picked once for every marked task. */
+export const BULK_PICKERS = ["status", "importance", "assignees", "cancel"] as const
+export type BulkPicker = (typeof BULK_PICKERS)[number]
+export type PickerField = TaskPicker | ListPicker | WorkPicker | "set-field" | "custom" | "bulk"
 
 /**
  * A custom field being changed and the tasks the value goes to. The details
@@ -76,7 +79,14 @@ export type EditTextMode = Typing & ({ field: TextField } | { field: "custom"; e
 
 type Picking = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin }
 /** A list of choices that filters as it is typed into. `set-field` lists the custom fields to give the tasks, and `custom` is one field's choices. */
-export type PickerMode = Picking & ({ field: TaskPicker | ListPicker | WorkPicker } | { field: "set-field"; taskIds: readonly TaskId[] } | { field: "custom"; edit: FieldEdit })
+export type PickerMode = Picking &
+  (
+    | { field: TaskPicker | ListPicker | WorkPicker }
+    | { field: "set-field"; taskIds: readonly TaskId[] }
+    | { field: "custom"; edit: FieldEdit }
+    /** A status, importance, assignees or Cancelled status for every marked task. `assigned` holds who was on all of them when it opened. */
+    | { field: "bulk"; change: BulkPicker; tasks: BulkTask[]; assigned: UserId[] }
+  )
 
 export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "set-field", "subtask", "delete", "file", "unfile", "cancel"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
@@ -95,16 +105,42 @@ export type Mode =
   | Compose
   /** The title of a new task, typed in the list pane. The plan says where it goes. */
   | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
-  /** Asks before a comment or a task is deleted. Only `y` deletes it. */
-  | { kind: "confirm-delete"; target: DeleteTarget }
+  /** Asks before a comment or tasks are deleted, or marked tasks cancelled. Only `y` goes ahead. */
+  | { kind: "confirm"; target: ConfirmTarget }
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
 
 /** Where a new task goes and who gets it. Only the title is still to come. */
 export type TaskPlan = { folder: FolderRef; parent: { id: TaskId; title: string } | null; assignees: UserId[] }
 
-/** What a delete confirm asks about. A task names how many subtasks it leaves behind. */
-export type DeleteTarget = { kind: "comment"; id: CommentId } | { kind: "task"; id: TaskId; title: string; subtasks: number }
+/** A task named in a change made to several at once. */
+export type BulkTask = { id: TaskId; title: string }
+
+/** What a confirm asks about. A task names how many subtasks it leaves behind. Marked tasks are deleted, or cancelled each to its own status. */
+export type ConfirmTarget =
+  | { kind: "comment"; id: CommentId }
+  | { kind: "task"; id: TaskId; title: string; subtasks: number }
+  | { kind: "delete-tasks"; tasks: BulkTask[] }
+  | { kind: "cancel-tasks"; plan: CancelPlan[] }
+
+/** A marked task and the Cancelled status of its workflow. */
+export type CancelPlan = BulkTask & { statusId: CustomStatusId }
+
+/**
+ * One change to several tasks. An update sends the same patch to each, in
+ * batches Wrike takes. Cancel and delete go one request per task.
+ */
+export type BulkJob =
+  | { kind: "update"; tasks: BulkTask[]; patch: TaskPatch; done: string; check?: FieldCheck }
+  | { kind: "cancel"; plan: CancelPlan[] }
+  | { kind: "delete"; tasks: BulkTask[] }
+
+/** What a bulk job did, task by task. */
+export type BulkOutcome = {
+  saved: Task[]
+  deleted: { task: BulkTask; result: "deleted" | "already-deleted" }[]
+  failed: { task: BulkTask; error: WrikeError }[]
+}
 
 /** The comment box, for a new comment or for an edit of one of mine. */
 export type Compose = {
@@ -176,6 +212,8 @@ export type State = {
   afterOpen: TaskCommand | null
   /** The latest request number per target. A response carrying an older number is dropped. */
   requests: ReadonlyMap<RequestKey, number>
+  /** Tasks marked in the current list. The status, assignee, importance, field, cancel and delete commands act on all of them. Cleared when the scope changes. */
+  marks: ReadonlySet<TaskId>
 }
 
 export const LIST_LIMIT = 8
@@ -209,6 +247,7 @@ export type Effect =
   /** `key` is the list the task was created from, which shows it. Null from the Inbox. */
   | { kind: "create-task"; key: ScopeKey | null; task: NewTask }
   | { kind: "delete-task"; id: TaskId; title: string }
+  | { kind: "bulk"; job: BulkJob }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
   | { kind: "edit-description"; task: Task }
@@ -251,6 +290,8 @@ export type Intent =
   | { type: "open" }
   | { type: "toggle-row" }
   | { type: "toggle-read" }
+  | { type: "mark" }
+  | { type: "clear-marks" }
   | { type: "filter-text" }
   | { type: "spec"; change: SpecChange }
   | { type: "pick"; field: ListPicker }
@@ -303,6 +344,7 @@ export type Action =
   | { type: "task-saved"; done: string; check?: FieldCheck; result: Result<Task>; folders?: FolderRef[] }
   | { type: "task-created"; key: ScopeKey | null; result: Result<Task> }
   | { type: "task-deleted"; id: TaskId; title: string; result: Result<"deleted" | "already-deleted"> }
+  | { type: "bulk-done"; job: BulkJob; outcome: BulkOutcome }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
@@ -373,6 +415,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     lastFolder: null,
     afterOpen: null,
     requests: new Map(),
+    marks: new Set(),
   }
   return boot.session ? restoreSession(fresh, boot.session) : fresh
 }

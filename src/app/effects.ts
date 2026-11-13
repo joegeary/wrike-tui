@@ -2,7 +2,7 @@ import { descriptionFromEdit, editableDescription } from "../domain/description"
 import type { Persistence } from "../persist/persistence"
 import type { TaskPage, WrikeClient } from "../wrike/client"
 import { describeError, toWrikeError, WrikeFailure } from "../wrike/errors"
-import { HISTORY_PAGE, type Action, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
+import { HISTORY_PAGE, type Action, type BulkJob, type BulkOutcome, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
 
 export type EffectDeps = {
   client: WrikeClient
@@ -47,6 +47,35 @@ async function loadTasks(client: WrikeClient, source: TaskSource, completed: boo
     }
     default:
       return client.tasks(source, { completed, ...(pageToken ? { pageToken } : {}) })
+  }
+}
+
+/** Runs a change to several tasks to the end. One failed request never stops the rest. */
+async function runBulk(client: WrikeClient, job: BulkJob): Promise<BulkOutcome> {
+  const outcome: BulkOutcome = { saved: [], deleted: [], failed: [] }
+  switch (job.kind) {
+    case "update": {
+      const { saved, failed } = await client.updateTasks(job.tasks.map((task) => task.id), job.patch)
+      outcome.saved.push(...saved)
+      for (const batch of failed) {
+        for (const task of job.tasks.filter((candidate) => batch.ids.includes(candidate.id))) outcome.failed.push({ task, error: batch.error })
+      }
+      return outcome
+    }
+    case "cancel":
+      for (const task of job.plan) {
+        const result = await attempt(() => client.updateTask(task.id, { field: "status", statusId: task.statusId }))
+        if (result.ok) outcome.saved.push(result.value)
+        else outcome.failed.push({ task, error: result.error })
+      }
+      return outcome
+    case "delete":
+      for (const task of job.tasks) {
+        const result = await attempt(() => client.deleteTask(task.id))
+        if (result.ok) outcome.deleted.push({ task, result: result.value })
+        else outcome.failed.push({ task, error: result.error })
+      }
+      return outcome
   }
 }
 
@@ -138,6 +167,8 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return dispatch({ type: "task-created", key: effect.key, result: await attempt(() => client.createTask(effect.task)) })
     case "delete-task":
       return dispatch({ type: "task-deleted", id: effect.id, title: effect.title, result: await attempt(() => client.deleteTask(effect.id)) })
+    case "bulk":
+      return dispatch({ type: "bulk-done", job: effect.job, outcome: await runBulk(client, effect.job) })
     case "save-comment": {
       const { taskId, editing, body } = effect
       const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))

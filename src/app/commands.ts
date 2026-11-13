@@ -1,6 +1,6 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, detailsItems, isMultiPicker, mentionSuggestions, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
+import { currentView, detailsItems, isMultiPicker, markedTasks, mentionSuggestions, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
 export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
@@ -100,6 +100,11 @@ export const COMMANDS: Command[] = [
     when: inTasks,
     keywords: ["cancelled", "deferred", "closed", "done"],
   }),
+  command("list.mark", "Mark or unmark the task", "List", ["list"], () => ({ type: "mark" }), {
+    when: inTasks,
+    keywords: ["select", "bulk", "several", "tag"],
+  }),
+  command("list.clear-marks", "Clear marks", "List", ["list"], () => ({ type: "clear-marks" }), { when: (state) => markedTasks(state).length > 0, hint: "clear marks", keywords: ["unmark", "bulk"] }),
   command("list.filter.text", "Filter by title", "List", ["list"], () => ({ type: "filter-text" }), { when: inTasks, hint: "filter" }),
   ...GROUP_KEYS.map((group) =>
     command(`list.group.${group}`, `Group by ${GROUP_LABELS[group]}`, "List", ["list"], () => ({ type: "spec", change: { set: "group", group } }), { when: inTasks }),
@@ -185,7 +190,9 @@ export const COMMANDS: Command[] = [
   command("compose.editor", "Write it in $EDITOR", "Task", ["compose"], () => ({ type: "compose-editor" }), { hint: "editor" }),
   command("compose.discard", "Discard", "Task", ["compose"], () => ({ type: "cancel" }), { when: (state) => !suggesting(state), hint: "discard" }),
 
-  command("confirm.yes", "Delete it", "Task", ["confirm"], () => ({ type: "confirm" }), { hint: "delete" }),
+  command("confirm.yes", "Go ahead", "Task", ["confirm"], () => ({ type: "confirm" }), {
+    hint: (state) => (state.mode.kind === "confirm" && state.mode.target.kind === "cancel-tasks" ? "cancel them" : "delete"),
+  }),
   command("confirm.no", "Keep it", "Task", ["confirm"], () => ({ type: "cancel" }), { hint: "keep" }),
 
   command("palette.down", "Move down", "App", ["palette"], () => ({ type: "choice-move", by: 1 })),
