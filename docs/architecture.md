@@ -12,7 +12,7 @@ Data flows one way. Each layer depends only on the layers under it.
                     and the terminal handoffs (editor, browser, clipboard)
     src/app/        the app state machine (reducer, with its handlers in
                     reduce/), the command registry, the keymap table, the nav
-                    rows, the palette, the session, effects
+                    rows, the palette, the session, effects, the clock ticker
     src/persist/    the files on disk: config, session, favorites, cache
     src/auth/       token resolution and storage, data-center probing
     src/wrike/      HTTP transport, REST client, MCP inbox client, zod schemas
@@ -62,7 +62,7 @@ These variables exist for development and tests.
 **Transport.** One `request()` builds `https://<host>/api/v4/<path>`, sends
 `Authorization: bearer <token>`, and encodes array and object query params as
 JSON strings the way Wrike expects (`responsibles=["KUAJ25LC"]`). Writes use
-`PUT` or `POST` with an `application/x-www-form-urlencoded` body.
+`PUT`, `POST` or `DELETE` with an `application/x-www-form-urlencoded` body.
 `requestPage()` is the same call and also returns `nextPageToken` as `next`.
 
 A 429 retries up to three times. It waits for the `Retry-After` header when
@@ -106,7 +106,9 @@ more:
 | `task(id)` | `GET /tasks/{id}` |
 | `updateTask(id, patch)` | `PUT /tasks/{id}` |
 | `comments(id)` | `GET /tasks/{id}/comments`, sorted oldest first |
-| `addComment(id, text)` | `POST /tasks/{id}/comments` with `plainText=true` |
+| `addComment(id, body)` | `POST /tasks/{id}/comments`, with `plainText=true` unless the comment holds a mention |
+| `updateComment(id, body)` | `PUT /comments/{id}`, the same parameters |
+| `deleteComment(id)` | `DELETE /comments/{id}` |
 | `folders(ids)` | `GET /folders/{ids}` for the titles of a task's parents |
 
 `tasks()` serves four queries, 200 tasks to a page.
@@ -147,6 +149,18 @@ client is built around them.
 - A first page of 200 tasks took 150 ms for a folder and 2.7 s for a space
   with over 100,000 active tasks. Later pages took 100 to 200 ms.
 
+These facts about comments come from probes against a production account.
+
+- `PUT /comments/{id}` with `text`, and `plainText=true` for plain text,
+  answers 200 with the comment. Wrike enforces no time limit, and
+  `updatedDate` does not change, so an edit leaves no trace.
+- `DELETE /comments/{id}` answers 200 with an empty `data`. A second delete
+  answers 404, `resource_not_found`.
+- A mention is stored as `<a class="stream-user-id avatar"
+  rel="KUAB6OAK">&#64;Joe Geary</a>`: the REST contact ID and `&#64;` with the
+  full name. HTML posted without `plainText` is stored as sent, so a comment
+  with a mention must go as HTML.
+
 `spaceWorkflows()` runs at most once per session. The reducer asks for it the
 first time a task in a list or in the details has a status that the account
 workflows do not hold.
@@ -170,6 +184,7 @@ type UserId = Brand<string, "UserId">
 type CustomStatusId = Brand<string, "CustomStatusId">
 type SpaceId = Brand<string, "SpaceId">
 type FolderId = Brand<string, "FolderId">
+type CommentId = Brand<string, "CommentId">
 
 type StatusGroup = "Active" | "Completed" | "Deferred" | "Cancelled"
 type Importance = "High" | "Normal" | "Low"
@@ -199,7 +214,7 @@ type Task = {
   updatedDate: string
 }
 
-type Comment = { id: string; authorId: UserId; text: string; createdDate: string }
+type Comment = { id: CommentId; authorId: UserId; text: string; createdDate: string }
 type Contact = { id: UserId; name: string; email: string | null }
 
 type InboxKind = "Mention" | "Assign" | "Comment" | "Status" | "Other"
@@ -269,8 +284,32 @@ open as markdown and come back with the same text, links and formatting, and
 40 open as raw HTML. The cases in `test/domain/description.test.ts` come from
 what that check found.
 
-Comments render as markdown through `htmlToMarkdown`, so a link reads as its
-label with the URL beside it.
+**Comments** render as markdown through `htmlToMarkdown`, so a link reads as
+its label with the URL beside it. `showMentions` first turns each mention
+anchor into a bold `@Full Name`, with the person's current name when the
+client knows them.
+
+```ts
+type Mention = { at: number; id: UserId; name: string }   // `@name` at offset `at` of the draft
+type CommentBody = { text: string; plainText: boolean }
+```
+
+`commentBody(draft, mentions)` is what reaches Wrike. A draft without a
+mention stays plain text with `plainText=true`, exactly as before mentions
+existed. A draft with one is escaped HTML, newlines become `<br />`, and each
+mention becomes Wrike's anchor. Only a mention picked from the list is an
+anchor, so an `@name` typed by hand stays text. `followEdit` moves the
+mentions with each edit of the draft, and drops one the edit touched.
+`refindMentions` finds them again, in order, in text that comes back from
+the editor.
+
+`editableComment(html)` gives a comment back as text to edit, with mentions as
+`@Full Name`. When the HTML holds anything but text, `<br />` and mentions, it
+gives null and the edit is refused, so a save never strips formatting.
+
+`editWindowLeft(createdDate, now)` counts down five minutes. Wrike's API takes
+an edit at any age and leaves no mark of it, so the client keeps the web
+app's rule and nobody reads a comment that changed long after they replied.
 
 ## Workspace
 
@@ -405,8 +444,11 @@ action. The handlers live in `src/app/reduce/`, split by what they change.
 `core.ts` has the helpers every handler shares. `load.ts` fetches and settles
 results, and shows a scope. `nav.ts` has the tree and the favorites. `lists.ts`
 has the list pane: the cursor, grouping, filters and the pickers that shape it.
-`task.ts` has the open task and its edits. The modules depend in one direction,
-`core` then `load`, then `nav`, `lists` and `task`, and `nav` calls into `lists`.
+`task.ts` has the open task and its edits. `comments.ts` has the selection in
+the details pane, the comment box, and the edits and deletes of comments. The
+modules depend in one direction, `core` then `load`, then `nav`, `lists`,
+`comments` and `task`, and `nav` calls into `lists` and `task` into
+`comments`.
 `reducer.ts` imports them all, and nothing in `reduce/` imports `reducer.ts`.
 
 ```ts
@@ -427,9 +469,22 @@ type Mode =
   | { kind: "edit"; field: number }
   | { kind: "edit-text"; field: "title" | "start" | "due"; draft: string; error?: string; origin: Origin }
   | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
-  | { kind: "compose"; draft: string }
+  | Compose
+  | { kind: "confirm-delete"; id: CommentId }   // only `y` deletes
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
+
+type Compose = {
+  kind: "compose"
+  draft: string
+  editing: CommentId | null      // the comment being edited, or null for a new one
+  mentions: Mention[]            // they follow the draft's edits
+  pick: number                   // the highlighted person while a mention is typed
+  dismissed: number | null       // the `@` whose list Esc closed
+}
+
+// What `]` and `[` step through, in the order the details pane draws it. Attachments join this union.
+type DetailsItem = { kind: "comment"; id: CommentId }
 
 type State = {
   profile: Profile
@@ -451,6 +506,7 @@ type State = {
   missing: Set<string>                        // favorites Wrike answered 404 for
   openTaskId: TaskId | null
   details: Loadable<{ task: Task; comments: Comment[]; folders: string[] }>
+  selected: DetailsItem | null                // kept by identity, cleared when another task opens
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
   spaceWorkflows: "unloaded" | "loading" | "loaded"
@@ -464,7 +520,12 @@ type State = {
 Four fields carry what the reducer needs to stay pure and correct.
 
 - `clock` is the time of the last list load. The due buckets and the relative
-  times read it, so the reducer never asks the system for the time.
+  times read it, so the reducer never asks the system for the time. While the
+  selected comment is mine and its edit window is open, `keepClock` in
+  `src/app/ticker.ts` dispatches a `clock` action at once and then every
+  second, so the countdown ticks and the refusal after five minutes is exact.
+  The clock only ever lags the real time, so a countdown that looks open
+  starts the ticker and the first tick corrects it.
 - `requests` holds the latest request number per target: `inbox`, `details`,
   `spaces`, `tree:<spaceId>` and `list:<scopeKey>`. A response that carries an
   older number is dropped, so a slow answer never overwrites a newer one, and
@@ -493,7 +554,22 @@ because every letter filters there.
 Editing the description and composing a long comment suspend the renderer and
 open `$VISUAL`, then `$EDITOR`, then `vi`, on a temp file. The effect resumes
 the renderer and reads the file. An unchanged file is a cancel, and so is an
-editor that exits with an error.
+editor that exits with an error. The comment box stays open while the editor
+runs, and the text that comes back goes through the same submit as `Enter`,
+for a new comment and for an edit.
+
+A comment is selected with `]` and `[`. `Enter` on it edits it and `d` deletes
+it, and both say why when the comment is someone else's. An edit opens the
+comment box on the comment's text and is refused after five minutes. A delete
+asks in the status bar and only `y` sends it. A 404 on a delete means the
+comment is already gone, and it leaves the thread with a neutral message. A
+404 on an edit does the same.
+
+Typing `@` and a letter at the end of the comment box lists up to five active
+people with a word of their name starting so. The list is derived from the
+draft, so it closes by itself once the mention is typed past. While it is
+open the `mention` context comes before `compose`, and `Enter` and `Esc` act
+on the list.
 
 `o` runs `$BROWSER` when it is set, and the platform opener otherwise. `y` and
 `Y` copy with the OSC 52 terminal sequence. Inside tmux the sequence is
@@ -506,7 +582,7 @@ One command registry, `src/app/commands.ts`, holds everything the client can
 do.
 
 ```ts
-type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "compose" | "palette" | "help"
+type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
 
 type Command = {
   id: string                     // stable, for example "list.group.status"
@@ -515,7 +591,7 @@ type Command = {
   keywords?: string[]
   contexts: Context[]
   when?: (state: State) => boolean
-  hint?: string                  // a short label for the status bar
+  hint?: string | ((state: State) => string)   // a short label for the status bar
   run: (state: State) => Action
 }
 
@@ -551,13 +627,15 @@ for its values.
 | Anywhere in browse | `1` `2` `3` focus a pane, `h` `l` or the arrows move between panes, `i` Inbox, `t` My to-do, `/` search, `:` commands, `r` refresh, `v` zoom details, `?` keys, `q` quit |
 | The navigation pane | `j` `k` move, `Enter` show the row in the list, `Space` open or close the row, `F` favorite, `J` `K` move a favorite |
 | A list | `j` `k` move, `g` `G` top and bottom, `Enter` open, `Space` open or close subtasks or a group, `x` completed on or off, `f` filter by title, `a` read notifications on or off (Inbox) |
-| The details pane | `j` `k` scroll, `g` `G` top and bottom |
+| The details pane | `j` `k` scroll, `g` `G` top and bottom, `]` `[` select a comment, and on a selected comment `Enter` edit, `d` delete, `Esc` clear |
 | A task (list or details) | `e` edit fields, `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite |
 | Edit mode | `j` `k` walk fields, `Enter` open the field, `Esc` leave |
 | Picker | arrows or `Ctrl+N` `Ctrl+P` move, typing filters, `Backspace` erases, `Space` toggles (assignees, filters, columns), `Enter` applies, `Esc` cancels |
 | Palette | typing filters, arrows or `Ctrl+N` `Ctrl+P` move, `Backspace` erases, `Enter` runs, `Esc` closes |
 | Text field | `Enter` saves, `Esc` discards |
-| Comment | `Enter` posts, `Ctrl+E` moves the draft to the editor, `Esc` discards |
+| Comment | `Enter` posts or saves the edit, `Ctrl+E` moves the draft to the editor, `Esc` discards |
+| Mention list | arrows or `Ctrl+N` `Ctrl+P` move, `Tab` or `Enter` writes the name, `Esc` closes the list |
+| Delete confirm | `y` deletes, any other key keeps the comment |
 | Legend | `j` `k` scroll, `Esc`, `?` or `q` closes |
 
 In a picker and in the palette every letter filters, so `j` and `k` do not
@@ -661,8 +739,11 @@ Three panes, left to right. Each title carries its number.
    is applied, and a long scope name gives way to the rest.
 3. **Details**, the other half. Title, a field block (status, importance,
    assignees, start, due, folders, permalink), the description as markdown,
-   then comments, oldest first, in one scrollbox. The comment box opens at the
-   bottom of the pane.
+   then comments, oldest first, in one scrollbox. The selected comment has a bar
+   on its left and scrolls into view, and when it is mine its header counts
+   down the edit window ("editable for 3:12"). The comment box opens at the
+   bottom of the pane, titled with the time left during an edit, and the list
+   of people to mention opens above it.
 
 Only the rows on screen are rendered, in the list and in the nav pane.
 
@@ -695,14 +776,17 @@ not include the terminal's own drawing.
 ## Testing
 
 - **Unit.** `bun run test` covers the domain functions, `shapeList` and the
-  cursor identity, `navRows`, the patch encoder, the HTML rules, the zod
+  cursor identity, `navRows`, the patch encoder, the HTML rules, the comment
+  rules (the body sent, the text to edit, mentions through edits), the zod
   parsers (fed the response shapes saved under `test/fixtures/`), the
   transport with paging, `Retry-After` and read-only mode, the files on disk,
   the auth commands, the reducer, the session, the palette's matching and
   scoping, and the registry and keymap tables.
 - **Fake Wrike.** `test/fake/wrike.ts` is one in-memory server with synthetic
   data. It serves the REST calls and a minimal MCP Streamable HTTP endpoint,
-  checks the token, records every write and can be told to fail. Its
+  checks the token, records every write and can be told to fail. It edits and
+  deletes comments with Wrike's answers, a 404 included, and stores mention
+  HTML as sent. A test can set the clock that stamps new comments. Its
   workspace has the shape measured on a real account: a space of 3,548
   folders, six levels deep, 18 of them under two parents, and a folder of
   1,040 active tasks that pages the way Wrike does, down to a follow-up page
@@ -712,11 +796,15 @@ not include the terminal's own drawing.
   app with the real client wired to the fake Wrike and the real files in a
   temp directory, and asserts on captured frames, on the recorded writes and
   on the files after scripted keys. A second app opened on the same directory
-  proves the session, the favorites and the cache come back.
+  proves the session, the favorites and the cache come back. A test can move
+  the clock forward, and the countdowns on screen follow it.
 - **End to end.** `bun run e2e` compiles the binary and drives it in a
   detached tmux session on a private socket against the fake Wrike on a port:
   login, every Phase 1 flow, every Phase 2 flow at 160 by 45 and at 80 by 24,
-  restarts, logout. It saves every screen to `$WRIKE_TUI_E2E_CAPTURES`.
+  the comment flows of Phase 3 on the real clock, restarts, logout. It saves
+  every screen to `$WRIKE_TUI_E2E_CAPTURES`. The binary runs in the time zone
+  of the test process, because `bun test` runs in UTC and the fake lays its
+  dates out there.
 - **Live.** The same binary runs against real Wrike with `WRIKE_TOKEN` and
   `WRIKE_TUI_READ_ONLY=1` in a detached tmux session. This has been done by
   hand for every Phase 2 flow and is not part of the test suite.

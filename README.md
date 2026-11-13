@@ -29,6 +29,9 @@ projects, and shapes any list of tasks the way you want to read it.
   `high-contrast`.
 - **Editing.** Title, status, importance, assignees, dates, the description in
   your editor, and comments.
+- **Comments.** `]` and `[` select a comment. Your own comment can be edited
+  in the five minutes after you post it, as in Wrike's web app, and deleted at
+  any time. Type `@` and a few letters to mention someone.
 
 [docs/roadmap.md](docs/roadmap.md) says what is planned.
 [docs/architecture.md](docs/architecture.md) says how the code is laid out.
@@ -108,6 +111,10 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `f` | Filter by title. An empty filter clears it. |
 | | `a` | Show or hide read notifications (Inbox) |
 | Details pane | `j` `k` `g` `G` | Scroll |
+| | `]` `[` | Select the next or previous comment |
+| | `Enter` | Edit the selected comment, when it is yours and under five minutes old |
+| | `d` | Delete the selected comment, when it is yours. Only `y` confirms. |
+| | `Esc` | Clear the selection |
 | A task, in the list or the details | `e` | Edit fields |
 | | `s` | Change the status |
 | | `p` | Change the importance |
@@ -133,9 +140,13 @@ Press `?` in the client to see the keys for the pane you are in.
 | | `Esc` | Close |
 | Text field | `Enter` | Save |
 | | `Esc` | Discard |
-| Comment | `Enter` | Post |
+| Comment | `Enter` | Post, or save an edit |
 | | `Ctrl+E` | Finish the comment in `$EDITOR` |
 | | `Esc` | Discard |
+| | `@` and letters | Offer people to mention |
+| Mention list | the down and up arrows, or `Ctrl+N` `Ctrl+P` | Move |
+| | `Tab` or `Enter` | Write the person's name as a mention |
+| | `Esc` | Close the list and keep writing |
 
 Dates are typed as `YYYY-MM-DD`. An empty date clears it.
 
