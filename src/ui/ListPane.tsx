@@ -197,7 +197,7 @@ export function ListPane(props: { state: State; width: number; height: number; o
     <Pane number={2} title={paneTitle(state, titleRoom(props.width))} width={props.width} focused={state.focus === "list" && state.mode.kind === "browse"}>
       {typing ? (
         <box flexDirection="row" height={1}>
-          <text fg={theme.accent}>{TYPING[typing.kind].lead}</text>
+          <text fg={theme.accent} flexShrink={0}>{TYPING[typing.kind].lead}</text>
           <TextInput value={typing.draft} placeholder={TYPING[typing.kind].placeholder} onInput={props.onDraft} />
         </box>
       ) : null}

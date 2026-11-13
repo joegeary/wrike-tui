@@ -7,6 +7,8 @@ export function TextInput(props: { value: string; placeholder?: string; onInput:
     <input
       focused
       flexGrow={1}
+      flexShrink={1}
+      minWidth={0}
       value={props.value}
       placeholder={props.placeholder ?? ""}
       onInput={props.onInput}

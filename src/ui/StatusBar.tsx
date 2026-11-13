@@ -64,7 +64,8 @@ export function StatusBar({ state, width }: { state: State; width: number }) {
   }
   return (
     <box height={1} width={width} flexDirection="row" backgroundColor={theme.panel}>
-      <text wrapMode="none" fg={color}>{` ${fit(text, Math.max(0, width - used - mark.length - 2))}`}</text>
+      {/* Two columns always part the message from the keys, so a long one never runs into them. */}
+      <text wrapMode="none" fg={color}>{` ${fit(text, Math.max(0, width - used - mark.length - 4))}  `}</text>
       <text wrapMode="none">
         {fitting.map((hint) => (
           <span key={hint.key + hint.text}>
