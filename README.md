@@ -29,6 +29,12 @@ projects, and shapes any list of tasks the way you want to read it.
   `high-contrast`.
 - **Editing.** Title, status, importance, assignees, dates, the description in
   your editor, and comments.
+- **Custom fields.** The details pane lists a task's custom fields under
+  Fields, each value drawn by its type. `e` walks on into them, and `Enter`
+  opens the editor the type takes. "Set a field" in the `:` palette gives the
+  task a field it does not have yet, with the fields the list's tasks use
+  first. When Wrike accepts a write but does not keep it, because the field
+  does not apply to the task, the status bar says so.
 - **Comments.** `]` and `[` select a comment. Your own comment can be edited
   in the five minutes after you post it, as in Wrike's web app, and deleted at
   any time. Type `@` and a few letters to mention someone.
@@ -159,6 +165,15 @@ Press `?` in the client to see the keys for the pane you are in.
 
 Dates are typed as `YYYY-MM-DD`. An empty date clears it.
 
+Custom fields are edited by type. A drop-down picks one choice, and offers
+"Other value..." when the field allows one. A multi-select toggles choices
+with `Space`. A checkbox flips on `Enter`. Text, numbers, dates and durations
+are typed in place: a number with no more decimal places than the field
+allows, a date as `YYYY-MM-DD`, a duration in hours and minutes like `2h 30m`.
+Every field clears: "Clear the field", nothing chosen, an empty input, or a
+checkbox flipped off. Read-only and calculated fields say why they cannot be
+edited.
+
 ## Shape a list
 
 Press `:` in a list and type part of a command.
@@ -187,7 +202,7 @@ more.
 | `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, and the default shaping of lists |
 | `$XDG_STATE_HOME/wrike-tui/<account>/session.json` | Where you were, restored at the next start |
 | `$XDG_STATE_HOME/wrike-tui/<account>/favorites.json` | Your favorites |
-| `$XDG_CACHE_HOME/wrike-tui/<account>/` | The spaces and folder trees, so the navigation pane draws at once |
+| `$XDG_CACHE_HOME/wrike-tui/<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
 
 The directories default to `~/.config`, `~/.local/state` and `~/.cache`. A
 file that cannot be read is renamed to `<name>.bad` and the defaults load.
