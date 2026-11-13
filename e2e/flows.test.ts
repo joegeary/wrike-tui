@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { join } from "node:path"
-import { ME, STATUS, TASK } from "../test/fake/data"
+import { ME, TASK } from "../test/fake/data"
 import type { FakeWrike } from "../test/fake/wrike"
 import { BINARY, startE2e, TOKEN, WIDE, type E2e } from "./session"
 import type { TmuxSession } from "./tmux"
 
 /**
  * Drives the compiled binary in a detached tmux session against the fake
- * Wrike, through login and every Phase 1 flow. Run it with `bun run e2e`,
- * which builds first. Every screen is saved to $WRIKE_TUI_E2E_CAPTURES for a
+ * Wrike, through login, the keyring, the $EDITOR, browser and clipboard
+ * handoffs, the cursor row's escape codes and a resize. Run it with
+ * `bun run e2e`, which builds first. Every screen is saved to $WRIKE_TUI_E2E_CAPTURES for a
  * person to read. The tests share one session and run in order.
  */
 const KEYRING_SERVICE = `wrike-tui-e2e-${process.pid}`
@@ -104,128 +105,10 @@ describe("the client", () => {
     await tmux.keys("k")
   })
 
-  test("Enter opens the task behind a notification", async () => {
-    await tmux.keys("Enter")
-    const details = await tmux.see("inbox-open-task", "Register the sandbox as a service provider", "Comments (3)")
-    expect(details).toMatch(/Status\s+● In Progress/)
-    expect(details).toMatch(/Assignees\s+Sam Sample, Pat Example/)
-    expect(details).toMatch(/Folders\s+Platform, Q4 Launch/)
-    expect(details).toContain("overdue")
-  })
-
-  test("j scrolls the details and v zooms them", async () => {
-    await tmux.keys("G")
-    await tmux.see("details-scrolled", "can we run trainings in the sandbox?", "Riley Demo")
-    await tmux.keys("g", "v")
-    const zoomed = await tmux.see("details-zoomed", "3 Details", "Register the sandbox")
-    expect(zoomed).not.toContain("2 Inbox")
-    await tmux.keys("v", "h")
-  })
-
-  test("a shows read notifications and a project notification opens in the browser", async () => {
-    await tmux.keys("a")
-    await tmux.see("inbox-with-read", "2 Inbox (with read)", "Added the escalation matrix.")
-    await tmux.keys("a")
-    await tmux.see("inbox-unread-again", "Showing unread notifications only")
-    await tmux.keys("G", "Enter")
-    await tmux.see("inbox-project-in-browser", "Opening the project in the browser")
-    await tmux.keys("k", "Enter")
-    await tmux.see("inbox-nothing-to-open", "This notification has nothing to open")
-    expect((await Bun.file(join(work, "opened-urls")).text()).trim()).toBe("https://www.wrike.com/open.htm?id=4598459002")
-  })
-
-  test("t shows My to-do in its buckets", async () => {
-    await tmux.keys("t")
-    const todo = await tmux.see("todo", "2 My to-do", "Overdue 1", "Today 1", "Later 2", "No date 1")
-    expect(todo.indexOf("Overdue 1")).toBeLessThan(todo.indexOf("Today 1"))
-    expect(todo.indexOf("Later 2")).toBeLessThan(todo.indexOf("No date 1"))
-    expect(todo).toMatch(/! Enable SSO on sandbox/)
-  })
-
-  test("/ searches titles", async () => {
-    await tmux.keys("/")
-    await tmux.see("search-input", "title, permalink or task ID")
-    await tmux.type("fix")
-    await tmux.see("search-typing", "/ fix")
-    await tmux.keys("Enter")
-    await tmux.see("search-results", "2 Search: fix", "Fix login redirect loop", "Fix flaky export test")
-  })
-
-  test("/ with a permalink opens that task, and a numeric ID does too", async () => {
-    await tmux.keys("/")
-    await tmux.type("https://www.wrike.com/open.htm?id=4598459107")
-    await tmux.keys("Enter")
-    await tmux.see("search-permalink", "The session cookie is dropped", "Comments (1)")
-    await tmux.keys("/")
-    await tmux.type("4598459105")
-    await tmux.keys("Enter")
-    await tmux.see("search-numeric-id", "Clean up stale feature flags", "No description.", "No comments yet.")
-    await tmux.keys("/")
-    await tmux.type("no such task anywhere")
-    await tmux.keys("Enter")
-    await tmux.see("search-empty", 'No task matches "no such task anywhere".')
-  })
-
-  test("m assigns a task to me", async () => {
-    await tmux.keys("/")
-    await tmux.type("login")
-    await tmux.keys("Enter")
-    await tmux.see("search-login", "Fix login redirect loop")
-    await tmux.keys("m")
-    const taken = await tmux.see("assign-to-me", "Assigned to you", /Assignees\s+Pat Example, Sam Sample/, /My to-do\s+7 /)
-    expect(taken).toContain("3 Details")
-    expect(lastWrite()).toEqual({ method: "PUT", path: `/tasks/${TASK.login}`, params: { addResponsibles: `["${ME}"]` } })
-  })
-
-  test("s changes the status through the picker", async () => {
-    await tmux.keys("t", "Enter")
-    await tmux.see("todo-open-task", "Comments (3)")
-    await tmux.keys("s")
-    await tmux.see("status-picker", "─ Status ─", /▸ ● In Progress/, "On Hold")
-    await tmux.type("rev")
-    await tmux.see("status-picker-filtered", "Filter: rev", /▸ ● In Review/)
-    await tmux.keys("Enter")
-    await tmux.see("status-saved", "Status set to In Review", /Status\s+● In Review/)
-    expect(lastWrite()).toEqual({ method: "PUT", path: `/tasks/${TASK.sso}`, params: { customStatus: STATUS.inReview } })
-  })
-
-  test("e walks the fields: title, importance, assignees and dates", async () => {
-    await tmux.keys("e")
-    await tmux.see("edit-mode", "Edit mode", /▸ Enable SSO on sandbox/, "Enter opens it in $EDITOR")
-    await tmux.keys("Enter")
-    await tmux.type(" for staff")
-    await tmux.see("edit-title-typing", "Enable SSO on sandbox for staff")
-    await tmux.keys("Enter")
-    await tmux.see("edit-title-saved", "Title saved", /▸ Enable SSO on sandbox for staff/)
-    expect(lastWrite()?.params).toEqual({ title: "Enable SSO on sandbox for staff" })
-
-    await tmux.keys("j", "j", "Enter")
-    await tmux.see("importance-picker", "─ Importance ─", /▸ High/)
-    await tmux.keys("Down", "Enter")
-    await tmux.see("importance-saved", "Importance set to Normal", /▸ Importance\s+Normal/)
-
-    await tmux.keys("j", "Enter")
-    await tmux.see("assignees-picker", "─ Assignees ─", /\[x\] Pat Example/, /\[ \] Riley Demo/)
-    await tmux.type("riley")
-    await tmux.keys("Space")
-    await tmux.see("assignees-picker-toggled", /\[x\] Riley Demo/)
-    await tmux.keys("Enter")
-    await tmux.see("assignees-saved", "Assignees updated", /Assignees\s+Sam Sample, Pat Example, Riley Demo/)
-    expect(lastWrite()?.params).toEqual({ addResponsibles: '["KUAAAA03"]' })
-
-    await tmux.keys("j", "j", "Enter", "C-u")
-    await tmux.type("tomorrow")
-    await tmux.keys("Enter")
-    await tmux.see("due-date-refused", "Use YYYY-MM-DD, or leave it empty to clear")
-    await tmux.keys("C-u")
-    await tmux.type("2027-01-15")
-    await tmux.keys("Enter")
-    await tmux.see("due-date-saved", "Due date set to 2027-01-15", /Due\s+2027-01-15 {2}Jan 15 2027/)
-    expect(JSON.parse(lastWrite()!.params.dates!)).toMatchObject({ type: "Planned", due: "2027-01-15" })
-  })
-
   test("the description opens in $EDITOR as markdown and is saved as HTML", async () => {
-    await tmux.keys("j", "Enter")
+    await tmux.keys("Enter")
+    await tmux.see("inbox-open-task", "Register the sandbox as a service provider", "Comments (3)")
+    await tmux.keys("e", "j", "j", "j", "j", "j", "j", "Enter")
     await tmux.see("description-saved", "Description saved from markdown", "Edited in the e2e editor.")
     expect(lastWrite()?.params.description).toEndWith("for the certificate rotation notes.<br /><br />Edited in the e2e editor.")
     await tmux.keys("Escape")
@@ -263,31 +146,12 @@ describe("the client", () => {
     expect((await Bun.file(join(work, "opened-urls")).text()).trim().split("\n").at(-1)).toBe("https://www.wrike.com/open.htm?id=4598459101")
   })
 
-  test("? shows the keys for the focused pane", async () => {
-    await tmux.keys("?")
-    await tmux.see("legend-details", "─ Keys ─", "Scroll down", "Change the status", "Zoom the details pane")
-    await tmux.keys("Escape")
-    await tmux.see("legend-closed", /^(?![\s\S]*─ Keys ─)/)
-    await tmux.keys("i", "?")
-    await tmux.see("legend-inbox", "─ Keys ─", "Toggle read notifications")
-    await tmux.keys("q")
-    await tmux.see("legend-closed-again", /^(?![\s\S]*─ Keys ─)/, "2 Inbox")
-  })
-
-  test("a failed load shows the error and r recovers", async () => {
-    fake.fail({ path: "/api/v4/tasks", status: 500 })
-    await tmux.keys("t")
-    await tmux.see("list-error", "Wrike failed with 500: Injected failure", "retry.")
-    await tmux.keys("r")
-    await tmux.see("list-recovered", /^(?![\s\S]*Wrike failed)/, "Today 1")
-  })
-
   test("at 80 columns the navigation pane hides and everything still fits", async () => {
     await tmux.resize(80, 24)
-    const narrow = await tmux.see("narrow-todo", "2 My to-do", "3 Details", /^(?![\s\S]*1 Wrike)/)
+    const narrow = await tmux.see("narrow-inbox", "2 Inbox", "3 Details", /^(?![\s\S]*1 Wrike)/)
     for (const line of narrow.split("\n")) expect(Bun.stringWidth(line)).toBeLessThanOrEqual(80)
     await tmux.keys("i", "g", "Enter")
-    await tmux.see("narrow-inbox-task", "2 Inbox", /│ Enable SSO on sandbox for staff/, "Description")
+    await tmux.see("narrow-inbox-task", "2 Inbox", /│ Enable SSO on sandbox/, "Description")
     await tmux.keys("l", "G")
     await tmux.see("narrow-details-scrolled", "Longer note.", "Edited in the e2e editor.", /^(?![\s\S]*Importance)/)
     await tmux.keys("g")

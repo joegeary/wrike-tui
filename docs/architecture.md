@@ -1159,11 +1159,13 @@ not include the terminal's own drawing.
   proves the session, the favorites and the cache come back. A test can move
   the clock forward, and the countdowns on screen follow it.
 - **End to end.** `bun run e2e` compiles the binary and drives it in a
-  detached tmux session on a private socket against the fake Wrike on a port:
-  login, every Phase 1 flow, every Phase 2 flow at 160 by 45 and at 80 by 24,
-  the comment flows of Phase 3 on the real clock, field history and
-  attachments (`e2e/activity.test.ts`), creating, filing, cancelling and
-  deleting tasks (`e2e/work.test.ts`), restarts, logout. It saves
+  detached tmux session on a private socket against the fake Wrike on a port.
+  It covers only what needs a real terminal or a real launch: login and the
+  OS keyring, the token sources, logout, the handoffs to `$EDITOR`, the
+  browser and the clipboard, escape codes for the cursor row, bold mentions
+  and the themes, Alt+Enter, resizing and the panes at 80 by 24, and restarts
+  with the launch variables. Every flow a screen test can drive stays in the
+  screen tests. It saves
   every screen to `$WRIKE_TUI_E2E_CAPTURES`. The binary runs in the time zone
   of the test process, because `bun test` runs in UTC and the fake lays its
   dates out there.

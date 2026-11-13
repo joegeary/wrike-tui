@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { ME, PAT, TASK } from "../test/fake/data"
+import { PAT, TASK } from "../test/fake/data"
 import { BINARY, startE2e, TOKEN, WIDE, type E2e } from "./session"
 import type { TmuxSession } from "./tmux"
 
 /**
- * Drives the compiled binary through the Phase 3 comment flows against the
- * fake Wrike, on the real clock: selecting comments, editing inside and
- * outside the five minutes, deleting with a confirm and after someone else
- * did, and picking a mention. The tests share one session and run in order.
+ * Drives the compiled binary through the comment flows that need a real
+ * terminal, against the fake Wrike on the real clock: a picked mention drawn
+ * bold through the terminal's escape codes, and Alt+Enter as the terminal
+ * sends it. The tests share one session and run in order.
  */
 setDefaultTimeout(60_000)
 
@@ -25,7 +25,6 @@ beforeAll(async () => {
 afterAll(() => e2e.stop())
 
 const lastWrite = () => e2e.fake.writes.at(-1)
-const myOldComment = () => e2e.fake.data.comments.find((comment) => comment.taskId === TASK.sso && comment.authorId === ME && comment.text.startsWith("Pilot"))
 
 /** Whether the first character of `text` is drawn bold, from the SGR sequences on its line of the styled screen. */
 async function isBold(text: string): Promise<boolean> {
@@ -53,28 +52,11 @@ async function isBold(text: string): Promise<boolean> {
 }
 
 describe("comments", () => {
-  test("] and [ select a comment, and Esc clears it", async () => {
+  test("@ offers people, Tab picks one, and the comment posts Wrike's mention anchor", async () => {
     await tmux.run(BINARY)
     await tmux.see("inbox", "2 Inbox", "Enable SSO on sandbox")
     await tmux.keys("Enter")
     await tmux.see("task-open", "Register the sandbox as a service provider", "Comments (3)")
-    await tmux.keys("]")
-    const first = await tmux.see("select-first", /┃Riley Demo/, /┃The identity provider team needs the entity ID by Friday\./, "Esc unselect")
-    expect(first).toMatch(/ Sam Sample\s+\w{3} \d+ \d\d:\d\d/)
-    await tmux.keys("Escape")
-    await tmux.see("select-cleared", absent("┃"))
-  })
-
-  test("Enter on someone else's comment says so, and on my day-old one names the window", async () => {
-    await tmux.keys("[", "Enter")
-    await tmux.see("edit-not-mine", /┃Pat Example/, "This is Pat Example's comment, not yours")
-    await tmux.keys("[", "Enter")
-    await tmux.see("edit-too-late", /┃Sam Sample/, "Comments can only be edited in the 5 minutes after posting")
-    expect(e2e.fake.writes).toEqual([])
-    await tmux.keys("Escape")
-  })
-
-  test("@ offers people, Tab picks one, and the comment posts Wrike's mention anchor", async () => {
     await tmux.keys("c")
     await tmux.type("@pa")
     await tmux.see("mention-offered", "─ Mention ─", "▸ Pat Example  pat.example@example.test", "Tab mention")
@@ -88,28 +70,16 @@ describe("comments", () => {
     expect(await isBold(" the sandbox is ready")).toBe(false)
   })
 
-  test("Enter edits my new comment inside its five minutes, mention kept", async () => {
-    await tmux.keys("[")
-    await tmux.see("edit-countdown", /┃Sam Sample\s+\w{3} \d+ \d\d:\d\d\s+editable for [45]:\d\d/)
-    await tmux.keys("Enter")
-    await tmux.see("edit-open", /─ Edit comment, [45]:\d\d left ─/, "│@Pat Example the sandbox is ready", "Enter save")
-    await tmux.type(" for trainings.")
-    await tmux.keys("Enter")
-    await tmux.see("edit-saved", "Comment saved", "@Pat Example the sandbox is ready for trainings.")
-    const posted = e2e.fake.data.comments[0]!
-    expect(lastWrite()).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: `${PAT_MENTION} the sandbox is ready for trainings.` } })
-  })
-
   test("Alt+Enter starts a line, and an edit saved after one keystroke changes exactly that keystroke", async () => {
     const posted = e2e.fake.data.comments[0]!
-    await tmux.keys("Enter")
+    await tmux.keys("[", "Enter")
     await tmux.see("lines-open", /─ Edit comment, [45]:\d\d left ─/, "Alt+Enter new line")
     await tmux.keys("M-Enter")
     await tmux.type("Second line.")
-    await tmux.see("lines-typed", /│@Pat Example the sandbox is ready for trainings\. +│+\n.*│Second line\. +│/)
+    await tmux.see("lines-typed", /│@Pat Example the sandbox is ready +│+\n.*│Second line\. +│/)
     await tmux.keys("Enter")
     await tmux.see("lines-saved", "Comment saved", "Second line.")
-    const twoLines = `${PAT_MENTION} the sandbox is ready for trainings.<br />Second line.`
+    const twoLines = `${PAT_MENTION} the sandbox is ready<br />Second line.`
     expect(lastWrite()).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: twoLines } })
     await tmux.keys("Enter")
     await tmux.see("lines-reopened", /─ Edit comment, [45]:\d\d left ─/, /│Second line\. +│/)
@@ -117,32 +87,5 @@ describe("comments", () => {
     await tmux.keys("Enter")
     await tmux.see("lines-resaved", "Comment saved", "Second line.!")
     expect(lastWrite()).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: `${twoLines}!` } })
-  })
-
-  test("d asks, another key keeps the comment, and y deletes it", async () => {
-    const posted = e2e.fake.data.comments[0]!
-    await tmux.keys("d")
-    await tmux.see("delete-asked", "Delete this comment? y deletes, any other key keeps it", "y delete  n keep")
-    await tmux.keys("x")
-    await tmux.see("delete-kept", "Kept the comment", "Comments (4)")
-    await tmux.keys("d", "y")
-    await tmux.see("delete-done", "Comment deleted", "Comments (3)", absent("for trainings."))
-    expect(lastWrite()).toEqual({ method: "DELETE", path: `/comments/${posted.id}`, params: {} })
-  })
-
-  test("a comment deleted elsewhere goes away with a neutral message", async () => {
-    await tmux.keys("]", "]")
-    await tmux.see("delete-gone-selected", /┃Sam Sample/, /┃Pilot accounts are created in PR 7/)
-    const gone = myOldComment()!
-    e2e.fake.data.comments.splice(e2e.fake.data.comments.indexOf(gone), 1)
-    await tmux.keys("d", "y")
-    await tmux.see("delete-already-gone", "The comment was already deleted", "Comments (2)", absent("Pilot accounts"))
-    expect(lastWrite()).toEqual({ method: "DELETE", path: `/comments/${gone.id}`, params: {} })
-  })
-
-  test("q quits", async () => {
-    await tmux.keys("q")
-    await tmux.run("print back-in-the-shell")
-    await tmux.see("quit", /^back-in-the-shell$/m)
   })
 })
