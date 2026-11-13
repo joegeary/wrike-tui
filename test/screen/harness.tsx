@@ -92,6 +92,7 @@ export async function openApp(size: { width: number; height: number } = { width:
 
   const KEYS: Record<string, () => void> = {
     enter: () => screen.mockInput.pressEnter(),
+    "alt+enter": () => screen.mockInput.pressEnter({ meta: true }),
     esc: () => screen.mockInput.pressEscape(),
     backspace: () => screen.mockInput.pressBackspace(),
     up: () => screen.mockInput.pressArrow("up"),
@@ -101,6 +102,7 @@ export async function openApp(size: { width: number; height: number } = { width:
     space: () => screen.mockInput.pressKey(" "),
     tab: () => screen.mockInput.pressTab(),
     "ctrl+e": () => screen.mockInput.pressKey("e", { ctrl: true }),
+    "ctrl+j": () => screen.mockInput.pressKey("j", { ctrl: true }),
     "ctrl+n": () => screen.mockInput.pressKey("n", { ctrl: true }),
     "ctrl+p": () => screen.mockInput.pressKey("p", { ctrl: true }),
     "ctrl+u": () => screen.mockInput.pressKey("u", { ctrl: true }),
