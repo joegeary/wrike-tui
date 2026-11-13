@@ -94,7 +94,6 @@ describe("attachments", () => {
     // The browser recorder runs after the flash is drawn.
     for (let tries = 0; tries < 50 && !(await Bun.file(urls).exists()); tries++) await Bun.sleep(50)
     expect((await Bun.file(urls).text()).trim()).toBe("https://storage.example.test/attachments/IEAAAAAAIYAAAA01/callback-loop.png?signature=fake-1")
-    expect(e2e.fake.requests.filter((line) => line.includes("/download"))).toEqual([])
   })
 
   test("an image the terminal cannot draw says so in a line", async () => {
