@@ -42,14 +42,33 @@ describe("selecting attachments", () => {
     expect(play(state, "[").state.selected).toEqual({ kind: "comment", id: older.id })
   })
 
-  test("an image's thumbnail is fetched the first time it is selected, and again only after a failure", () => {
+  test("an image's thumbnail is fetched the first time it is selected, and a failed one waits for r", () => {
     const state = openWith([], overdue, [shot, log])
     const first = play(state, "]")
     expect(first.effects).toEqual([{ kind: "load-preview", id: shot.id }])
     expect(play(first.state, "]", "[").effects).toEqual([])
     const failed = play(first.state, { type: "preview-loaded", id: shot.id, result: { ok: false, error: { kind: "rate_limited" } } }, "]", "[")
-    expect(failed.effects).toEqual([{ kind: "load-preview", id: shot.id }])
+    expect(failed.effects).toEqual([])
+    const refreshed = play(failed.state, "r")
+    const reloaded = play(refreshed.state, { type: "details-loaded", request: requestOf(refreshed.effects, "load-details"), result: { ok: true, value: { task: overdue, attachments: [shot, log], comments: [], folders: [] } } })
+    expect(reloaded.effects).toContainEqual({ kind: "load-preview", id: shot.id })
     expect(play(state, "]", "]").effects).toEqual([{ kind: "load-preview", id: shot.id }])
+  })
+
+  test("at most 20 thumbnails are kept, the least recently selected dropped first", () => {
+    const images = Array.from({ length: 21 }, (_, n) => file(`I${n}`, `shot-${n}.png`, "image/png"))
+    let state = openWith([], overdue, images)
+    const png = new Uint8Array([137, 80, 78, 71])
+    for (const image of images) state = play(state, "]", { type: "preview-loaded", id: image.id, result: { ok: true, value: png } }).state
+    expect(state.previews.size).toBe(20)
+    expect(state.previews.has(images[0]!.id)).toBe(false)
+    expect(play(state, "esc", "]").effects).toEqual([{ kind: "load-preview", id: images[0]!.id }])
+    const walked = play(state, ...Array.from({ length: 19 }, () => "[")).state
+    expect(walked.selected).toEqual({ kind: "attachment", id: images[1]!.id })
+    const reloaded = play(walked, "esc", "]", { type: "preview-loaded", id: images[0]!.id, result: { ok: true, value: png } }).state
+    expect(reloaded.previews.size).toBe(20)
+    expect(reloaded.previews.has(images[20]!.id)).toBe(false)
+    expect(reloaded.previews.has(images[1]!.id)).toBe(true)
   })
 
   test("Enter opens the selected file through a signed link, and d leaves it alone", () => {

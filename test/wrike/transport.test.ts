@@ -168,14 +168,24 @@ describe("read-only mode", () => {
 describe("bytes", () => {
   test("a file comes back as its bytes, with the token sent and a 429 waited out", async () => {
     const { transport, calls, sleeps } = transportWith([failure(429), new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } })])
-    expect([...(await transport.bytes("/attachments/A1/preview"))]).toEqual([137, 80, 78, 71])
+    expect([...(await transport.bytes("/attachments/A1/preview", 1024))!]).toEqual([137, 80, 78, 71])
     expect(calls.map((call) => call.url)).toEqual(["https://www.wrike.com/api/v4/attachments/A1/preview", "https://www.wrike.com/api/v4/attachments/A1/preview"])
     expect(calls[1]!.init.headers).toMatchObject({ Authorization: "bearer secret" })
     expect(sleeps).toHaveLength(1)
   })
 
+  test("a body over the limit is null, whether its length is declared or only found while reading", async () => {
+    const big = new Uint8Array(2048)
+    const declared = new Response(big, { headers: { "Content-Length": "2048" } })
+    const streamed = new Response(new ReadableStream({ pull: (controller) => controller.enqueue(new Uint8Array(512)) }))
+    const { transport } = transportWith([declared, streamed, new Response(new Uint8Array(1024))])
+    expect(await transport.bytes("/attachments/A1/preview", 1024)).toBeNull()
+    expect(await transport.bytes("/attachments/A1/preview", 1024)).toBeNull()
+    expect(await transport.bytes("/attachments/A1/preview", 1024)).toHaveLength(1024)
+  })
+
   test("a failed download is the same error as any other call", async () => {
     const { transport } = transportWith([failure(404, { error: "resource_not_found", errorDescription: "Attachment not found" })])
-    expect(await errorOf(transport.bytes("/attachments/A1/preview"))).toEqual({ kind: "not_found" })
+    expect(await errorOf(transport.bytes("/attachments/A1/preview", 1024))).toEqual({ kind: "not_found" })
   })
 })

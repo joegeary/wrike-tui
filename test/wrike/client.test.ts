@@ -4,7 +4,7 @@ import { describeChange } from "../../src/domain/history"
 import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
 import { createMcpClient } from "../../src/wrike/mcp"
-import { createTransport } from "../../src/wrike/transport"
+import { createTransport, type Fetch } from "../../src/wrike/transport"
 import { ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
 import { BIG_FOLDER, FOLDER, SPACE } from "../fake/workspace"
 import { createFakeWrike, type FakeWrike } from "../fake/wrike"
@@ -16,6 +16,13 @@ function clientFor(token: string): WrikeClient {
   return createWrikeClient(
     createTransport({ baseUrl: "http://fake.test/api/v4", token, fetch: fake.fetch, sleep: async () => {} }),
     createMcpClient({ url: "http://fake.test/mcp", token, fetch: fake.fetch }),
+  )
+}
+
+function clientWithFetch(fetch: Fetch): WrikeClient {
+  return createWrikeClient(
+    createTransport({ baseUrl: "http://fake.test/api/v4", token: "good-token", fetch, sleep: async () => {} }),
+    createMcpClient({ url: "http://fake.test/mcp", token: "good-token", fetch }),
   )
 }
 
@@ -308,6 +315,15 @@ describe("attachments", () => {
     ])
     expect(files[0]).toMatchObject({ id: "IEAAAAAAIYAAAA01", authorId: PAT })
     expect(await client.attachments(taskId(TASK.sso))).toEqual([])
+  })
+
+  test("a preview over 1 MB is refused with a reason", async () => {
+    const fetch = fake.fetch
+    const big = clientWithFetch(async (input, init) => {
+      const request = new Request(input, init)
+      return request.url.endsWith("/preview") ? new Response(new Uint8Array(1024 * 1024 + 1)) : fetch(request)
+    })
+    await expect(big.attachmentPreview(attachmentId("IEAAAAAAIYAAAA01"))).rejects.toMatchObject({ error: { kind: "invalid", message: "The preview is larger than 1 MB" } })
   })
 
   test("a link that is not an absolute https URL is an invalid response", async () => {
