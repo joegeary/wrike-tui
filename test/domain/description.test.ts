@@ -94,7 +94,6 @@ describe("editableDescription", () => {
     ["underline", "plain <u>under</u>"],
     ["highlight", 'a <span style="color:#ff0000">red</span> word'],
     ["image", '<img src="https://example.test/a.png">'],
-    ["table", "<table><tr><td>a</td></tr></table>"],
     ["mention anchor", '<a class="stream-user-id" rel="KUAAAA01">@Sam</a>'],
   ])("%s opens as raw HTML and saves untouched", (_name, html) => {
     expect(editableDescription(html)).toEqual({ format: "html", text: html })
@@ -142,5 +141,24 @@ describe("checklists", () => {
     const html = `${CHECKLIST}${item("a")}</ul><br />${CHECKLIST}${item("b")}</ul>`
     expect(editableDescription(html).text).toBe("- [ ] a\n\n\n* [ ] b")
     expect(roundTrip(html)).toBe(html)
+  })
+})
+
+describe("tables", () => {
+  const roundTrip = (html: string) => descriptionFromEdit(editableDescription(html))
+
+  test("open as a pipe table whose first row is the header, and save back as Wrike wrote them", () => {
+    const html = "<table><tr><td><b>Env</b></td><td><b>Owner</b></td></tr><tr><td>sandbox</td><td></td></tr><tr><td>a | b</td><td>one<br />two</td></tr></table>"
+    expect(editableDescription(html)).toMatchObject({
+      format: "markdown",
+      text: ["| **Env** | **Owner** |", "| --- | --- |", "| sandbox |  |", "| a \\| b | one<br>two |"].join("\n"),
+    })
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("a row shorter than the header stays in HTML, since markdown would pad it", () => {
+    expect(editableDescription("<table><tr><td>a</td><td>b</td></tr><tr><td>c</td></tr></table>").format).toBe("html")
+  })
+  test("a table typed in the editor saves without header cells", () => {
+    expect(markdownToHtml("| a | b |\n| --- | --- |\n| c | d |")).toBe("<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>")
   })
 })

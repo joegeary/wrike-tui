@@ -89,10 +89,19 @@ function render(token: Token): string {
       if (!ordered) return tag("ul", html)
       return token.start === 1 ? tag("ol", html) : `<ol start="${token.start}">${html}</ol>`
     }
+    case "table": {
+      const { header, rows } = token as Tokens.Table
+      const row = (cells: Tokens.TableCell[]) => tag("tr", cells.map((cell) => tag("td", tableCell(cell.tokens))).join(""))
+      return tag("table", [header, ...rows].map(row).join(""))
+    }
     default:
       return parser.parse([token]).replace(/\n/g, "")
   }
 }
+
+/** A table cell has no lines, so a <br> written in one is the break Wrike keeps there. */
+const tableCell = (tokens: Token[]) =>
+  tokens.map((token) => (token.type === "html" && /^<br\s*\/?>$/i.test(token.raw) ? "<br />" : inline([token]))).join("")
 
 /** A task list item is a Wrike checklist item: a checkbox and the item's text inside a label. */
 function listItem(item: Tokens.ListItem): string {

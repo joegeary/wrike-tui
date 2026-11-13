@@ -82,16 +82,18 @@ function fenced(code: string): string {
   return `${fence}\n${code.replace(/\n$/, "")}\n${fence}`
 }
 
-// Readable only: a table goes back to Wrike as written, since its cells are text.
+/** A GFM table. Wrike has no header cells, so its first row is the header. A break in a cell is written <br>. */
 function table(element: Element): string {
   const rows = Array.from(element.querySelectorAll("tr") as ArrayLike<Element>, (row) =>
-    Array.from(row.querySelectorAll("td, th") as ArrayLike<Element>, (cell) => (cell.textContent ?? "").trim().replace(/\s+/g, " ")),
+    childrenOf(row)
+      .filter((cell) => cell.nodeName === "TD" || cell.nodeName === "TH")
+      .map((cell) => keepEdgeSpace(childrenOf(cell).map((child) => (child.nodeName === "BR" ? "<br>" : inline(child))).join("")).replace(/\|/g, "\\|")),
   )
   const width = Math.max(0, ...rows.map((row) => row.length))
   if (width === 0) return ""
   const line = (cells: string[]) => `| ${Array.from({ length: width }, (_, i) => cells[i] ?? "").join(" | ")} |`
   const [head, ...body] = rows
-  return [line(head ?? []), line(Array(width).fill("---")), ...body.map(line)].join("\n")
+  return [line(head!), line(Array(width).fill("---")), ...body.map(line)].join("\n")
 }
 
 const inlineChildren = (element: Element) => childrenOf(element).map(inline).join("")
