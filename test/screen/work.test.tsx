@@ -65,6 +65,17 @@ describe("n creates a task", () => {
     expect(await selectedUrl()).toBe(created().permalink)
   })
 
+  test("a title longer than the field scrolls inside it, behind the + lead and within the pane", async () => {
+    app = await openApp({ width: 100, height: 26 })
+    await app.see("Engineering")
+    await app.press("1", "j", "j", "j", "j", "space")
+    await app.see("▸ Platform")
+    await app.press("j", "enter", "l", "n")
+    await app.type("A long title for a narrow terminal")
+    const line = (await app.frame()).split("\n")[1]!
+    expect(line).toMatch(/││\+ [^│]*terminal\s+││/)
+  })
+
   test("Esc discards the title and nothing is sent", async () => {
     await inPlatform()
     await app.press("n")
@@ -246,6 +257,16 @@ describe("D deletes a task", () => {
     await app.see('"Fix login redirect loop" was already deleted', "2 Platform  7 · status")
   })
 
+  test("a question longer than the status bar's room is cut short of the keys", async () => {
+    app = await openApp({ width: 100, height: 26 })
+    await app.see("Engineering")
+    await app.press("1", "j", "j", "j", "j", "space")
+    await app.see("▸ Platform")
+    await app.press("j", "enter", "l", "G", "D")
+    const bar = (await app.see("y delete  n keep")).split("\n").at(-2)!
+    expect(bar).toMatch(/^ Delete "Fix login redirect loop"\? It goes to the Recycle Bin\. .*…  y delete  n keep\s*$/)
+  })
+
   test("a task without subtasks says nothing of them, and Esc keeps it", async () => {
     await inPlatform()
     await app.press("j", "D")
@@ -260,5 +281,40 @@ describe("D deletes a task", () => {
     const frame = await app.see("read-only mode: not saved")
     expect(frame).not.toContain("Recycle Bin")
     expect(app.fake.writes).toEqual([])
+  })
+})
+
+describe("Folders", () => {
+  test("L files the task in another folder, and Take out of a folder removes one but never the last", async () => {
+    await inPlatform()
+    await app.press("enter")
+    await app.see(/Folders\s+Platform\s/, "Rotate before the audit")
+    await app.press("L")
+    const picker = await app.see("─ File in another folder ─", "Q4 Launch")
+    expect(picker).not.toMatch(/│ {3}Platform\s+Engineering│/)
+    expect(picker).not.toMatch(/Engineering\s+space│/)
+    await app.type("launch")
+    await app.press("enter")
+    await app.see("Filed in Q4 Launch", /Folders\s+Platform, Q4 Launch/)
+    expect(app.fake.writes).toEqual([{ method: "PUT", path: `/tasks/${TASK.keys}`, params: { addParents: `["${FOLDER.launch}"]` } }])
+
+    await palette("take out of a folder")
+    const out = await app.see("─ Take out of a folder ─")
+    expect(out).toMatch(/▸ Platform/)
+    expect(out).toContain("Q4 Launch")
+    await app.press("enter")
+    await app.see("Taken out of Platform", /Folders\s+Q4 Launch/)
+    expect(app.fake.writes.at(-1)).toEqual({ method: "PUT", path: `/tasks/${TASK.keys}`, params: { removeParents: `["${FOLDER.platform}"]` } })
+
+    await palette("take out of a folder")
+    await app.see("A task stays in at least one folder")
+    expect(app.fake.writes).toHaveLength(2)
+  })
+
+  test("read-only mode refuses filing before the picker opens", async () => {
+    await inPlatform({ readOnly: true })
+    await app.press("j", "L")
+    const frame = await app.see("read-only mode: not saved")
+    expect(frame).not.toContain("File in another folder")
   })
 })
