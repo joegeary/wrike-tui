@@ -358,7 +358,9 @@ type CommentBody = { text: string; plainText: boolean }
 `commentBody(draft, mentions)` is what reaches Wrike. A draft without a
 mention stays plain text with `plainText=true`, exactly as before mentions
 existed. A draft with one is escaped HTML, newlines become `<br />`, and each
-mention becomes Wrike's anchor. Only a mention picked from the list is an
+mention becomes Wrike's anchor. HTML collapses runs of spaces, so every other
+space of a run, and every space that starts a line, is `&nbsp;`, and reading
+the comment back turns them into spaces again. Only a mention picked from the list is an
 anchor, so an `@name` typed by hand stays text. `followEdit` moves the
 mentions with each edit of the draft, and drops one the edit touched.
 `refindMentions` finds them again in text that comes back from the editor:

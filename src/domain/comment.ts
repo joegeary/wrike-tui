@@ -41,8 +41,16 @@ export function commentBody(draft: string, mentions: Mention[]): CommentBody {
     from = at + mentionText(mention).length
   }
   html += escapeHtml(text.slice(from))
-  return { text: html.replace(/\n/g, "<br />"), plainText: false }
+  return { text: keepSpaces(html.replace(/\n/g, "<br />")), plainText: false }
 }
+
+/**
+ * HTML collapses a run of spaces into one and drops spaces at the start of a
+ * line, so those are written the way Wrike's editor writes them: every other
+ * space of a run non-breaking, and every space that starts a line.
+ */
+const keepSpaces = (html: string) =>
+  html.replace(/(^|<br \/>)( +)/g, (_whole, line: string, run: string) => line + "&nbsp;".repeat(run.length)).replace(/ {2,}/g, (run) => run.replace(/ {2}/g, " &nbsp;"))
 
 /** The comment's HTML parsed the way a browser reads it, with every character reference decoded. */
 function parse(html: string): HTMLElement {
@@ -84,9 +92,10 @@ const atLineEdge = (node: Node | null) => node === null || node.nodeName === "BR
 /**
  * A text node as a browser shows it: a newline in the source, with the
  * spaces around it, is one space, and none at all at the start or end of a line.
+ * A non-breaking space is a space to type, and keepSpaces writes it back.
  */
 function shownText(node: Node): string {
-  let text = node.nodeValue ?? ""
+  let text = (node.nodeValue ?? "").replace(/\u00a0/g, " ")
   if (atLineEdge(node.previousSibling)) text = text.replace(/^[ \t\r]*\n[ \t\r\n]*/, "")
   if (atLineEdge(node.nextSibling)) text = text.replace(/[ \t\r]*\n[ \t\r\n]*$/, "")
   return text.replace(SOURCE_NEWLINE, " ")
