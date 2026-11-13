@@ -1,6 +1,6 @@
 import { isOffered } from "../app/commands"
 import { activeContexts, boundCommands, keyLabel } from "../app/keymap"
-import { fieldDefs, isMultiPicker } from "../app/selectors"
+import { currentStep, fieldDefs, isMultiPicker } from "../app/selectors"
 import type { ConfirmTarget, State, TaskPlan } from "../app/state"
 import { fieldEditor } from "../domain/fields"
 import { fit } from "./format"
@@ -22,11 +22,14 @@ function hints(state: State): Hint[] {
 function message(state: State, theme: Theme): { text: string; color: Color } {
   const { mode } = state
   if ((mode.kind === "edit-text" || mode.kind === "new-task") && mode.error) return { text: mode.error, color: theme.error }
+  if (mode.kind === "form" && mode.phase === "filling" && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
   if (mode.kind === "confirm") return { text: question(mode.target), color: theme.warning }
   if (mode.kind === "new-task") return { text: planText(mode.plan), color: theme.dim }
   if (mode.kind === "picker" && isMultiPicker(state, mode) && mode.field === "custom") return { text: "Type to filter. With nothing chosen, Enter clears the field.", color: theme.dim }
+  if (mode.kind === "picker" && mode.field === "request-form") return { text: "Type to search, Enter opens the form", color: theme.dim }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
+  if (mode.kind === "form") return { text: mode.phase === "filling" && currentStep(mode) ? "* is required" : "", color: theme.dim }
   if (mode.kind === "palette") return { text: "Type to find a command", color: theme.dim }
   if (mode.kind === "filter-input") return { text: "Shows tasks whose title contains this. Empty clears it.", color: theme.dim }
   if (mode.kind === "edit") return { text: "Edit mode", color: theme.heading }

@@ -1,5 +1,6 @@
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
 import { choicesOf, fieldText, isWritable, kindLabel, type CustomField } from "../domain/fields"
+import { formSteps, type FormStep } from "../domain/forms"
 import type { HistoryEntry } from "../domain/history"
 import type { CustomFieldId, CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
@@ -16,6 +17,8 @@ import {
   type DetailsItem,
   type EditRow,
   type EditTextMode,
+  type FormFilling,
+  type FormMode,
   type FieldEdit,
   type ListView,
   type Loadable,
@@ -125,6 +128,11 @@ const markedIn = memo((list: Paged<Task> | undefined, marks: State["marks"]): Ta
 /** The marked tasks of the current list, in list order. A mark on a task that left the list counts no more. */
 export function markedTasks(state: State): Task[] {
   return state.scope.kind === "inbox" || state.marks.size === 0 ? [] : markedIn(currentList(state), state.marks)
+}
+
+/** The form field `at` names, or null on the review after the last one. */
+export function currentStep(mode: FormMode & FormFilling): FormStep | null {
+  return formSteps(mode.definition, mode.answers)[mode.at] ?? null
 }
 
 /** A custom field typed for tasks other than just the open one, which the list pane takes instead of the details pane. */
@@ -515,6 +523,9 @@ export function pickerOptions(state: State, mode: PickerMode): PickerOption[] {
     }
     case "bulk":
       return bulkOptions(state, mode, matches, people)
+    case "request-form":
+      // Wrike's search already matched the text, on the description and the fields too, so nothing is filtered again here.
+      return mode.query.trim() === "" ? [] : (shown(state.forms) ?? []).map((form) => ({ id: form.id, label: form.title, ...(form.description ? { detail: form.description } : {}) }))
     case "set-field":
       return settableFields(state, mode, matches)
     case "custom":

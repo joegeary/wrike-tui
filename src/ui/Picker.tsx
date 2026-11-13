@@ -26,13 +26,18 @@ const BULK_TITLES: Record<BulkPicker, string> = { status: "Status of", importanc
 
 function title(state: State, mode: PickerMode): string {
   if (mode.field === "bulk") return `${BULK_TITLES[mode.change]} ${mode.tasks.length} marked ${mode.tasks.length === 1 ? "task" : "tasks"}`
+  if (mode.field === "request-form") return "Submit a request form"
   if (mode.field === "set-field") return mode.taskIds.length > 1 ? `Set a field on ${mode.taskIds.length} tasks` : "Set a field"
   return mode.field === "custom" ? (fieldDefs(state.customFields).get(mode.edit.id)?.title ?? "Field") : TITLES[mode.field]
 }
 
 function emptyText(state: State, mode: PickerMode): string {
-  if (mode.query !== "") return "Nothing matches the filter."
+  if (mode.query !== "" && mode.field !== "request-form") return "Nothing matches the filter."
   if (mode.field === "custom") return "This field has no choices."
+  if (mode.field === "request-form") {
+    if (mode.query.trim() === "") return "Type to search Wrike's request forms."
+    return state.forms.state === "loading" ? "Searching..." : state.forms.state === "error" ? "The search failed. Type to try again." : "No request form matches."
+  }
   if (mode.field === "bulk") return mode.change === "assignees" ? "No people loaded." : "The marked tasks share no workflow."
   if (mode.field === "set-field") return state.customFields.state === "loading" ? "Loading the custom fields..." : "No custom field can be set here."
   if (mode.field === "status") {
@@ -54,7 +59,7 @@ export function Picker({ state, mode, screen }: { state: State; mode: PickerMode
   return (
     <Overlay title={title(state, mode)} width={WIDTH} height={rows + 4} screen={screen}>
       <text wrapMode="none">
-        <span fg={theme.dim}> Filter: </span>
+        <span fg={theme.dim}>{mode.field === "request-form" ? " Search: " : " Filter: "}</span>
         <span fg={theme.text}>{mode.query}</span>
         <span fg={theme.accent}>▏</span>
       </text>

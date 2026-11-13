@@ -3,7 +3,7 @@ import { BROWSE_CONTEXTS, COMMAND_GROUPS, commandById, COMMANDS, isOffered, type
 import { activeContexts, boundCommands, CONTEXT_TITLES, KEYMAP, keysFor, MAX_LABEL, normalizeKey, resolveKey } from "../../src/app/keymap"
 import { reduce } from "../../src/app/reducer"
 import { PANES, type Mode, type State } from "../../src/app/state"
-import { commentId, folderId, taskId } from "../../src/domain/ids"
+import { commentId, folderId, requestFormId, taskId } from "../../src/domain/ids"
 import { inTodo, loaded, play, withTree } from "../support/app"
 
 const MODES: Mode[] = [
@@ -22,6 +22,9 @@ const MODES: Mode[] = [
   { kind: "picker", field: "folder", query: "", cursor: 0, chosen: [], origin: "browse" },
   { kind: "palette", query: "", cursor: 0 },
   { kind: "help" },
+  { kind: "confirm", target: { kind: "delete-tasks", tasks: [{ id: taskId("T1"), title: "Overdue task" }] } },
+  { kind: "form", form: { id: requestFormId("w:rf:1"), title: "Access request", description: "" }, phase: "loading" },
+  { kind: "form", form: { id: requestFormId("w:rf:1"), title: "Access request", description: "" }, phase: "failed", error: { kind: "unavailable", message: "Retry later." } },
 ]
 
 /** Every mode in every pane, in the Inbox, in My to-do, and in the nav pane on a favorite. */

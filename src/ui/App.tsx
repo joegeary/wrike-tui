@@ -10,6 +10,7 @@ import { ListPane } from "./ListPane"
 import { NavPane } from "./NavPane"
 import { Palette } from "./Palette"
 import { Picker } from "./Picker"
+import { RequestForm } from "./RequestForm"
 import { StatusBar } from "./StatusBar"
 import { ThemeProvider, THEMES } from "./theme"
 
@@ -49,6 +50,7 @@ export function App({ store, bridge }: { store: Store; bridge: UiBridge }) {
         {mode.kind === "picker" ? <Picker state={state} mode={mode} screen={screen} /> : null}
         {mode.kind === "palette" ? <Palette state={state} mode={mode} screen={screen} /> : null}
         {mode.kind === "help" ? <Help state={state} screen={screen} bridge={bridge} /> : null}
+        {mode.kind === "form" ? <RequestForm state={state} mode={mode} screen={screen} onDraft={onDraft} /> : null}
       </box>
     </ThemeProvider>
   )
