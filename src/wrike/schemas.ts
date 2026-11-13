@@ -1,5 +1,22 @@
 import { z } from "zod"
-import { attachmentId, commentId, customFieldId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
+import {
+  attachmentId,
+  commentId,
+  customFieldId,
+  customStatusId,
+  folderId,
+  formFieldId,
+  formOptionId,
+  formPageId,
+  legacyItemId,
+  requestFormId,
+  spaceId,
+  taskId,
+  userId,
+  type FolderId,
+  type FormPageId,
+  type SpaceId,
+} from "../domain/ids"
 import {
   IMPORTANCES,
   STATUS_GROUPS,
@@ -13,6 +30,7 @@ import {
   type Workflow,
 } from "../domain/model"
 import type { CustomField, FieldKind, FieldValue } from "../domain/fields"
+import type { Condition, FormField, FormFieldKind, FormOption, FormSummary, PageVisibility, Submission } from "../domain/forms"
 import type { HistoryChange, HistoryEntry } from "../domain/history"
 import { SPACE_ACCESS, type FolderNode, type Space, type SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
@@ -418,3 +436,133 @@ export function parseAll<T>(schema: z.ZodType<T>, items: unknown[], what: string
   const where = issue ? ` (${issue.path.join(".")}: ${issue.message})` : ""
   throw new WrikeFailure({ kind: "invalid", message: `Unexpected ${what} from Wrike${where}` })
 }
+
+/*
+ * Request forms, from the published schemas of Wrike's MCP tools. None of
+ * these shapes was measured live: the one probe of `get_requestform` answered
+ * with a server error. Names that the schemas leave open (an option's title,
+ * a condition's parts) are read from any of the likely keys.
+ */
+
+const FormSummarySchema = z
+  .object({ id: z.string(), title: z.string(), description: z.string().nullish() })
+  .transform((wire): FormSummary => ({ id: requestFormId(wire.id), title: wire.title, description: wire.description ?? "" }))
+
+export const FormSearchSchema = z.object({
+  forms: z.array(z.unknown()).transform((forms) => parseEach(FormSummarySchema, forms)),
+  truncated: z.boolean().optional(),
+  nextPageToken: z.string().nullish(),
+})
+
+const named = z.object({ title: z.string().optional(), name: z.string().optional(), text: z.string().optional() })
+const nameOf = (wire: z.infer<typeof named>) => wire.title ?? wire.name ?? wire.text ?? ""
+
+const ConditionSchema = z.union([
+  z.string().transform((value): Condition => (value.startsWith("w:rfopt:") ? { option: formOptionId(value), title: null } : { option: null, title: value })),
+  z
+    .object({ option: z.unknown(), optionId: z.string().optional(), id: z.string().optional(), optionTitle: z.string().optional() })
+    .passthrough()
+    .transform((wire): Condition => {
+      const option = typeof wire.option === "string" ? wire.option : z.object({ id: z.string() }).safeParse(wire.option).data?.id
+      const optionTitle = wire.optionTitle ?? z.object({ title: z.string() }).safeParse(wire.option).data?.title ?? null
+      const id = option ?? wire.optionId ?? (wire.id?.startsWith("w:rfopt:") ? wire.id : undefined)
+      return { option: id ? formOptionId(id) : null, title: optionTitle }
+    }),
+])
+const Conditions = z
+  .array(z.unknown())
+  .nullish()
+  .transform((entries) => parseEach(ConditionSchema, entries ?? []).filter((condition) => condition.option !== null || condition.title !== null))
+
+const OptionSchema = z
+  .object({ id: z.string() })
+  .and(named)
+  .transform((wire): FormOption => ({ id: formOptionId(wire.id), title: nameOf(wire) || wire.id }))
+
+function formFieldKind(type: string, options: FormOption[]): FormFieldKind {
+  switch (type.toUpperCase().replace(/[^A-Z]/g, "")) {
+    case "TEXTFIELD":
+    case "TEXT":
+      return { type: "text", lines: "one" }
+    case "TEXTAREA":
+      return { type: "text", lines: "many" }
+    case "COMBOBOX":
+    case "IMPORTANCE":
+      return { type: "choice", options, multi: false }
+    case "CHECKBOX":
+      return { type: "choice", options, multi: true }
+    case "DATE":
+      return { type: "date" }
+    case "NUMBER":
+      return { type: "number" }
+    case "ATTACHMENT":
+      return { type: "attachment" }
+    default:
+      return { type: "unsupported", wireType: type }
+  }
+}
+
+const FormFieldSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    type: z.string(),
+    mandatory: z.boolean().default(false),
+    helperText: z.string().nullish(),
+    options: z.array(z.unknown()).nullish(),
+    visibleWhenAny: Conditions,
+  })
+  .transform(
+    (wire): FormField => ({
+      id: formFieldId(wire.id),
+      title: wire.title,
+      mandatory: wire.mandatory,
+      helperText: wire.helperText ?? "",
+      kind: formFieldKind(wire.type, parseEach(OptionSchema, wire.options ?? [])),
+      visibleWhenAny: wire.visibleWhenAny,
+    }),
+  )
+
+const PageIndexSchema = z
+  .object({ id: z.string(), title: z.string().default(""), visibility: z.string(), afterPages: z.array(z.string()).nullish(), visibleWhenAny: Conditions })
+  .transform((wire): { id: FormPageId; title: string; visibility: PageVisibility } => {
+    const after = (wire.afterPages ?? []).map(formPageId)
+    const visibility: PageVisibility =
+      wire.visibility === "ENTRY"
+        ? { kind: "entry" }
+        : wire.visibility === "AFTER_PAGE"
+          ? { kind: "after", pages: after }
+          : wire.visibility === "ON_CONDITION"
+            ? { kind: "condition", after, when: wire.visibleWhenAny }
+            : { kind: "orphan" }
+    return { id: formPageId(wire.id), title: wire.title, visibility }
+  })
+
+export const FormIndexSchema = z.object({ pageIndex: z.array(z.unknown()).transform((pages) => parseEach(PageIndexSchema, pages)) })
+
+export const FormPagesSchema = z.object({
+  pages: z.array(z.object({ id: z.string(), fields: z.array(z.unknown()).default([]) }).transform((wire) => ({ id: formPageId(wire.id), fields: parseEach(FormFieldSchema, wire.fields) }))),
+})
+
+const itemOf = (raw: string) => {
+  const item = legacyItemId(raw)
+  if (!item) throw new WrikeFailure({ kind: "invalid", message: `Wrike named the request ${raw}, which is not an item ID` })
+  return item
+}
+
+/** `submit_requestform`'s answer, and `get_asyncjob`'s for a submission that was still processing. */
+export const SubmissionSchema = z.union([
+  z.object({ status: z.literal("COMPLETED"), itemId: z.string() }).transform((wire): Submission => ({ kind: "completed", item: itemOf(wire.itemId) })),
+  z.object({ status: z.literal("PROCESSING"), submissionId: z.string() }).transform((wire): Submission => ({ kind: "processing", submission: wire.submissionId })),
+])
+
+export const AsyncJobSchema = z
+  .object({ status: z.string(), itemId: z.string().nullish(), errorMessage: z.string().nullish() })
+  .transform((wire): Submission | { kind: "waiting" } => {
+    if (wire.status === "COMPLETED" && wire.itemId) return { kind: "completed", item: itemOf(wire.itemId) }
+    if (wire.status === "FAILED") return { kind: "refused", message: wire.errorMessage ?? "Wrike could not create the request", retrySafe: false }
+    return { kind: "waiting" }
+  })
+
+/** How `submit_requestform` reports an error: what to fix, and whether sending again is safe. */
+export const SubmitErrorSchema = z.object({ message: z.string(), retrySafe: z.boolean().default(false) })

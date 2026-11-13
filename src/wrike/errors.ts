@@ -6,6 +6,8 @@ export type WrikeError =
   | { kind: "invalid"; message: string }
   | { kind: "network"; message: string }
   | { kind: "server"; status: number; message: string }
+  /** Wrike's MCP server said in plain text that it failed and to retry later. */
+  | { kind: "unavailable"; message: string }
 
 /** The one exception the wire layer throws. Callers above it read `error`. */
 export class WrikeFailure extends Error {
@@ -36,6 +38,8 @@ export function describeError(error: WrikeError): string {
       return `Could not reach Wrike: ${error.message}`
     case "server":
       return `Wrike failed with ${error.status}: ${error.message}`
+    case "unavailable":
+      return `Wrike could not answer: ${error.message}`
   }
 }
 

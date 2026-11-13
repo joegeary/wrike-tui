@@ -1,7 +1,8 @@
 import type { CommentBody } from "../domain/comment"
 import type { CustomField } from "../domain/fields"
+import type { FormAnswer, FormDefinition, FormSummary, Submission } from "../domain/forms"
 import type { HistoryPage } from "../domain/history"
-import type { AttachmentId, CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, FolderId, LegacyItemId, RequestFormId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { folderId, taskId, userId } from "../domain/ids"
 import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import { patchParams, type Params, type TaskPatch } from "../domain/patch"
@@ -68,6 +69,14 @@ export type WrikeClient = {
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
   /** One page of an item's field history, newest first. */
   history(item: LegacyItemId, page: { pageSize: number; pageToken?: string }): Promise<HistoryPage>
+  /** Up to 10 request forms that match the text, best first. */
+  requestForms(text: string): Promise<FormSummary[]>
+  /** A form's index and every page that is not an orphan, with their fields. */
+  requestForm(form: FormSummary): Promise<FormDefinition>
+  /** Sends the answers. A `processing` answer is followed with `submission`, never by sending again. */
+  submitRequestForm(form: RequestFormId, answers: FormAnswer[]): Promise<Submission>
+  /** How a submission Wrike was still processing went, or `waiting` while it still is. */
+  submission(job: string): Promise<Submission | { kind: "waiting" }>
 }
 
 export type TaskQuery =
@@ -88,7 +97,7 @@ export const PAGE_SIZE = 200
 const PREVIEW_LIMIT = 1024 * 1024
 
 /** The calls that go to Wrike's MCP server, and the end of its session. */
-export type McpClient = Pick<WrikeClient, "inbox" | "history"> & { close(): Promise<void> }
+export type McpClient = Pick<WrikeClient, "inbox" | "history" | "requestForms" | "requestForm" | "submitRequestForm" | "submission"> & { close(): Promise<void> }
 
 // A task list omits these unless asked, and the app's Task always carries them.
 const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds", "customFields"]
@@ -276,6 +285,10 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
 
     inbox: (options) => mcp.inbox(options),
     history: (item, page) => mcp.history(item, page),
+    requestForms: (text) => mcp.requestForms(text),
+    requestForm: (form) => mcp.requestForm(form),
+    submitRequestForm: (form, answers) => mcp.submitRequestForm(form, answers),
+    submission: (job) => mcp.submission(job),
   }
 }
 

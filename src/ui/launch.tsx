@@ -28,7 +28,7 @@ function systemClock(): Clock {
 export async function launch(session: Session, env: Env): Promise<void> {
   const { token } = session.token
   const readOnly = isReadOnly(env)
-  const mcp = createMcpClient({ url: session.endpoints.mcpUrl, token })
+  const mcp = createMcpClient({ url: session.endpoints.mcpUrl, token, readOnly })
   const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token, readOnly }), mcp)
   const persistence = createPersistence(persistencePaths(env, session.profile.accountId))
   const boot = await loadBoot(persistence, { readOnly, restore: !skipsRestore(env) })
