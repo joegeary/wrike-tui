@@ -178,8 +178,8 @@ workflows do not hold.
 token through `@modelcontextprotocol/sdk` (`StreamableHTTPClientTransport`).
 Each call takes the JSON from the tool result's text content and parses it
 with zod. The connection is opened on the first call and shared by every
-call after it. A failed call drops the connection, so the next call connects
-again.
+call after it. A failed call drops and closes the connection it used, unless
+another call has already replaced it, so the next call connects again.
 
 | Method | Tool |
 | --- | --- |
@@ -188,9 +188,10 @@ again.
 
 `N` is the number in the task's permalink. `requestedChanges` asks for title,
 assignees, parents, status, start and due dates, duration, attachments and
-custom fields. Changes come newest first. An item Wrike could not read comes
-back with `success: false` and an error, which becomes `invalid` with
-Wrike's words. REST's `GET /tasks/{id}/tasks_history` was probed first and
+custom fields. Changes come newest first, and only of those types. Wrike
+leaves out an item with no change of them (`{"taskChanges":[]}`), which is
+an empty page. An item Wrike could not read comes back with
+`success: false` and an error, which becomes `invalid` with Wrike's words. REST's `GET /tasks/{id}/tasks_history` was probed first and
 answers with nothing but the task's ID.
 
 ## Domain
@@ -241,17 +242,20 @@ type Contact = { id: UserId; name: string; email: string | null }
 // storage is "Wrike" for an upload, or the service of a linked file ("Google", "Box").
 type Attachment = { id: AttachmentId; name: string; storage: string; contentType: string | null; size: number | null; authorId: UserId; createdDate: string }
 
+// `from` is null when Wrike sent no old value, and `to` is null only for a cleared field.
 type HistoryChange =
   | { kind: "title"; from: string | null; to: string }
   | { kind: "status"; from: string | null; to: string }
   | { kind: "assignees"; added: string[]; removed: string[] }
   | { kind: "parents"; added: string[]; removed: string[] }
-  | { kind: "start"; day: string | null }
-  | { kind: "due"; day: string | null }
-  | { kind: "duration"; minutes: number | null }
-  | { kind: "field"; name: string; value: string | null }   // a custom field
+  | { kind: "attachments"; added: string[]; removed: string[] }
+  | { kind: "start"; from: string | null; to: string | null }
+  | { kind: "due"; from: string | null; to: string | null }
+  | { kind: "duration"; from: number | null; to: number | null }
+  | { kind: "field"; name: string; from: string | null; to: string | null }   // a custom field
   | { kind: "other"; type: string; action: string }
-type HistoryEntry = { at: string; author: string | null; change: HistoryChange }
+// `at` is null when Wrike's timestamp is not a time.
+type HistoryEntry = { at: string | null; author: string | null; change: HistoryChange }
 type HistoryPage = { entries: HistoryEntry[]; next: string | null }
 
 type InboxKind = "Mention" | "Assign" | "Comment" | "Status" | "Other"
@@ -273,15 +277,20 @@ Wrike notification type never fails the parse. A
 notification whose item has no ID, no permalink or another base type (a
 report, a dashboard, an approval) has `item: null` and nothing to open.
 
-**History.** `HistorySchema` reads each change through a table keyed by its
-`type`, one payload schema per type. A type missing from the table, or a
-payload that does not match its schema, becomes `other` and is still drawn by
-its type and action ("effort changed"), so a change Wrike adds later never
-fails the parse or goes missing. An author is a name, because history names
+**History.** `HistorySchema` reads each change through a `Map` keyed by its
+type and action (`DUE_DATE UPDATE`, `ATTACHMENTS ADD`), one payload reader per
+entry, in the shapes measured on real tasks. A pair missing from the map, or
+a payload that does not match its reader, becomes `other` and is still drawn
+by its type and action ("custom fields changed"), so a change Wrike adds
+later never fails the parse or goes missing. A field reads as cleared only
+when the payload names an old value and no new one. A missing key is an
+unknown shape, not a clear. A multi-select field is drawn by its new choices. An author is a name, because history names
 people by their MCP ID (`w:usr:N`), which the REST contacts do not carry.
 `describeChange` writes the line the stream shows: `status Active → On Hold`,
-`assigned Pat Example`, `due 2026-11-20`, `moved into Q4 Launch`,
-`Work Type: DB`.
+`assigned Pat Example`, `due 2026-11-12 → 2026-11-20`, `moved into Q4 Launch`,
+`attached notes.txt`, `Work Type: DB`, `Labels: auth, sso`. A change whose
+timestamp is not a time is drawn without one, after its neighbour on Wrike's
+page.
 
 **Edits** are one union, and one function, `patchParams`, turns a patch into
 `PUT` params:
@@ -604,10 +613,10 @@ type State = {
   favorites: Favorite[]
   missing: Set<string>                        // favorites Wrike answered 404 for
   openTaskId: TaskId | null
-  details: Loadable<{ task: Task; attachments: Attachment[]; comments: Comment[]; folders: string[] }>
+  details: Loadable<{ task: Task; attachments: Attachment[]; attachmentsError?: WrikeError; comments: Comment[]; folders: string[] }>
   selected: DetailsItem | null                // kept by identity, cleared when another task opens
   histories: Map<TaskId, Paged<HistoryEntry>> // field history per task, kept for the session
-  previews: Map<AttachmentId, Loadable<Uint8Array>>   // thumbnails, in memory only
+  previews: Map<AttachmentId, Loadable<Uint8Array>>   // up to 20 thumbnails, in memory only
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
   spaceWorkflows: "unloaded" | "loading" | "loaded"
@@ -651,8 +660,11 @@ history while history is shown.
 **History** is fetched after the details arrive, because the MCP call needs
 the number in the task's permalink. Opening a task makes that one MCP call,
 for the newest 50 changes, only while history is shown and only when the
-session holds no history for the task, or holds only a failed try. Reopening
-the task costs nothing. `H` turns history off and on, and turning it on
+session holds no history for the task. Reopening the task costs nothing, and
+after a failed try only `r` asks again. While `r` or a reopen reloads the
+task, the held history stays drawn. A save made in the app asks again for the
+drawn task's history, and drops what is held for any other task, so its next
+view asks once. `H` turns history off and on, and turning it on
 fetches the open task's history if it was never fetched. Older pages load
 only from the palette's "Load older changes". A failed or rate-limited load
 keeps the comments and says so in one line above them. `settings.history`
@@ -660,11 +672,15 @@ holds the toggle, so the config sets it at launch and "Save as default"
 writes it, the way the theme works.
 
 **Attachments** load with the task, in parallel with the task and its
-comments. `Enter` on a selected file asks Wrike for a signed link
-(`GET /attachments/{id}/url`) and hands it to the browser, the same handoff
-as `o`. The client never downloads a file. Selecting an image Wrike stores
-fetches its preview once into `previews`, and a failed fetch is tried again
-the next time it is selected.
+comments. They are decoration like the folder titles: a failed call leaves
+the task drawn and says so under "Attachments", and a file in a shape this
+version cannot read is left out of the list. `Enter` on a selected file asks
+Wrike for a signed link (`GET /attachments/{id}/url`) and hands it to the
+browser, the same handoff as `o`. A link that is not an absolute https URL is
+an invalid response and is never launched. The client never downloads a
+file. Selecting an image Wrike stores fetches its preview once into
+`previews`, refused past 1 MB. The 20 most recently selected are kept. A
+failed fetch waits for `r`, and the reload fetches the selected image again.
 
 Text is typed into OpenTUI's `<input>`, which gives cursor movement and line
 editing. The input reports each change as a `draft` action, so the draft still
@@ -693,7 +709,10 @@ draft, so it closes by itself once the mention is typed past. While it is
 open the `mention` context comes before `compose`, and `Enter` and `Esc` act
 on the list.
 
-`o` runs `$BROWSER` when it is set, and the platform opener otherwise. `y` and
+`o` runs `$BROWSER` when it is set, and the platform opener otherwise:
+`xdg-open` on Linux and `open` on macOS. Windows has no opener that takes a
+URL as a plain argument (`cmd /c start` splits it at `&`), so there `o`
+asks for `BROWSER`. `y` and
 `Y` copy with the OSC 52 terminal sequence. Inside tmux the sequence is
 written plain, which tmux reads itself. OpenTUI's own call wraps it in a tmux
 passthrough, and tmux drops that unless `allow-passthrough` is on.
