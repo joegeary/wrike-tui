@@ -98,8 +98,33 @@ token in the keyring of your operating system. It stores your name and host in
 | --- | --- |
 | `wrike-tui` | Opens the client. |
 | `wrike-tui auth login` | Stores a token. |
-| `wrike-tui auth status` | Shows who is logged in and where the token comes from. |
-| `wrike-tui auth logout` | Removes the stored token and profile. |
+| `wrike-tui auth login --oauth` | Signs in through the browser with OAuth. |
+| `wrike-tui auth status` | Shows who is logged in, how, and when an OAuth access token expires. |
+| `wrike-tui auth logout` | Removes the stored login, the OAuth client secret and the profile. |
+
+### Log in with OAuth
+
+OAuth signs in through the browser with an app you register, and renews its
+access token by itself. `WRIKE_TOKEN` still wins over it when set.
+
+1. Open Wrike's [App Console](https://www.wrike.com/appconsole.htm?#/api) and
+   create an app.
+2. Add the redirect URI `http://localhost:8765/callback`.
+3. Run `wrike-tui auth login --oauth`. It asks for the client ID, which goes to
+   `config.json`, and the client secret, which goes to the keyring without
+   echo. Sign in in the browser that opens.
+
+When no browser opens, open the printed address yourself. When the browser
+cannot reach wrike-tui after you sign in, paste the address it landed on at the
+prompt. A different port goes in `config.json` as `oauth.port`, and the
+redirect URI must name the same port. If Wrike accepts only an HTTPS redirect,
+register `https://localhost:8765/callback`, set it as `oauth.redirectUri`, and
+paste the address the browser lands on.
+
+Two things are not confirmed yet. Wrike's docs ask for an HTTPS redirect URI,
+so it may refuse the plain `http://localhost` one. And Wrike's MCP server, which
+serves the Inbox and field history, may refuse an OAuth access token. If it
+does, those panes say so, and a permanent token is the way to have them.
 
 ### Environment
 
@@ -241,7 +266,7 @@ more.
 
 | File | Holds |
 | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, and the default shaping of lists |
+| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, the default shaping of lists, and the OAuth app's client ID |
 | `$XDG_STATE_HOME/wrike-tui/<account>/session.json` | Where you were, restored at the next start |
 | `$XDG_STATE_HOME/wrike-tui/<account>/favorites.json` | Your favorites |
 | `$XDG_CACHE_HOME/wrike-tui/<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
@@ -267,6 +292,8 @@ An example `config.json`. Every part is optional.
 `theme` is `terminal`, `dark`, `light` or `high-contrast`. `history` shows
 field history among the comments, and is true unless you set it false.
 `lists` takes the kinds `todo`, `search`, `space`, `folder` and `project`.
+`oauth` holds `clientId`, `port` (default 8765) and `redirectUri` (default
+`http://localhost:<port>/callback`) for `auth login --oauth`.
 
 A description opens in your editor as markdown when saving it unchanged would
 write back the same HTML. Otherwise it opens as raw HTML, so that saving never
