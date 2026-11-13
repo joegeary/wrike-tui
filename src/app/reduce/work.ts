@@ -1,16 +1,16 @@
 import { customStatusId, folderId, type TaskId } from "../../domain/ids"
-import { cancelStatuses, findStatus, type FolderRef, type Task } from "../../domain/model"
+import { cancelStatuses, type FolderRef, type Task } from "../../domain/model"
 import { scopeKey, type ScopeKey } from "../../domain/scope"
 import { taskRowId } from "../../domain/shape"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { currentKey, openTask, pickerOptions } from "../selectors"
-import { shown, type Action, type DeleteTarget, type Mode, type State, type TaskPlan, type Update, type WorkPicker } from "../state"
+import { shown, type Action, type DeleteTarget, type Mode, type State, type TaskCommand, type TaskPlan, type Update, type WorkPicker } from "../state"
 import { failure, info, markMissing, putTask, save } from "./core"
-import { open } from "./load"
+import { open, request } from "./load"
 
-/** What every write here says in read-only mode, before anything is asked or typed. */
-const READ_ONLY = describeError({ kind: "read_only" })
+/** In read-only mode every command here is refused before a picker, a prompt or a question opens. */
+const refuseReadOnly = (state: State): Update => [{ ...state, flash: failure(describeError({ kind: "read_only" })) }, []]
 const LAST_FOLDER = "A task stays in at least one folder"
 
 const picker = (field: WorkPicker): Mode => ({ kind: "picker", field, query: "", cursor: 0, chosen: [], origin: "browse" })
@@ -22,7 +22,7 @@ const assigneesHere = (state: State) => (state.scope.kind === "todo" ? [state.pr
 
 /** `n`: in a space, folder or project the task goes there. Anywhere else the folder is picked first. */
 export function newTask(state: State): Update {
-  if (state.readOnly) return [{ ...state, flash: failure(READ_ONLY) }, []]
+  if (state.readOnly) return refuseReadOnly(state)
   const { scope } = state
   const ready: State = { ...state, zoom: false }
   if (scope.kind === "space" || scope.kind === "folder") {
@@ -33,7 +33,6 @@ export function newTask(state: State): Update {
 
 /** `N` on a task: a subtask in the parent's first folder, else where the list is scoped, else in a folder picked first. */
 function newSubtask(state: State, task: Task): Update {
-  if (state.readOnly) return [{ ...state, flash: failure(READ_ONLY) }, []]
   const ready: State = { ...state, zoom: false }
   const parent = { id: task.id, title: task.title }
   const named = shown(state.details)?.folders.find((folder) => folder.id === task.parentIds[0])
@@ -114,7 +113,6 @@ export function taskCreated(state: State, action: Action & { type: "task-created
 
 /** `D` asks first, in the status bar, and says what happens to the task's subtasks. */
 function askDelete(state: State, task: Task): Update {
-  if (state.readOnly) return [{ ...state, flash: failure(READ_ONLY) }, []]
   return [{ ...state, mode: { kind: "confirm-delete", target: { kind: "task", id: task.id, title: task.title, subtasks: task.subTaskIds.length } } }, []]
 }
 
@@ -144,7 +142,9 @@ export function taskDeleted(state: State, action: Action & { type: "task-deleted
     subTaskIds: task.subTaskIds.filter((other) => other !== id),
   }))
   if (state.openTaskId === id || opened?.id === id) {
-    next = { ...next, openTaskId: null, details: { state: "idle" }, selected: null, afterOpen: null, focus: next.focus === "details" ? "list" : next.focus }
+    // A details load still on its way for the task is dropped when it answers.
+    const [closed] = request(next, "details")
+    next = { ...closed, openTaskId: null, details: { state: "idle" }, selected: null, afterOpen: null, focus: next.focus === "details" ? "list" : next.focus }
   }
   const histories = new Map(next.histories)
   histories.delete(id)
@@ -155,8 +155,7 @@ export function taskDeleted(state: State, action: Action & { type: "task-deleted
 
 /** Cancel: the workflow's one Cancelled status, or a pick among several. */
 function cancelTask(state: State, task: Task): Update {
-  if (state.readOnly) return [{ ...state, flash: failure(READ_ONLY) }, []]
-  if (findStatus(state.workflows, task.statusId)?.group === "Cancelled" || task.statusGroup === "Cancelled") return [{ ...state, flash: info("This task is already cancelled") }, []]
+  if (task.statusGroup === "Cancelled") return [{ ...state, flash: info("This task is already cancelled") }, []]
   const choices = cancelStatuses(state.workflows, task.statusId)
   if (choices.length === 0) {
     const why = state.spaceWorkflows === "loading" ? "This task's workflow is still loading. Try again in a moment" : "This task's workflow has no Cancelled status"
@@ -166,30 +165,24 @@ function cancelTask(state: State, task: Task): Update {
   return [{ ...state, mode: picker("cancel") }, []]
 }
 
-/** `L` files the task in one more folder. */
-function fileTask(state: State): Update {
-  if (state.readOnly) return [{ ...state, flash: failure(READ_ONLY) }, []]
-  return [{ ...state, mode: picker("file") }, []]
-}
-
 /** Takes the task out of one of its folders. The last one stays, because Wrike would move the task to the account root. */
 function unfileTask(state: State, task: Task): Update {
-  if (state.readOnly) return [{ ...state, flash: failure(READ_ONLY) }, []]
   if (task.parentIds.length <= 1) return [{ ...state, flash: info(LAST_FOLDER) }, []]
   return [{ ...state, mode: picker("unfile") }, []]
 }
 
-export type WorkCommand = "subtask" | "delete" | "file" | "unfile" | "cancel"
+export type WorkCommand = Extract<TaskCommand, "subtask" | "delete" | "file" | "unfile" | "cancel">
 
 /** The task commands that create, file, cancel or delete, on the open task. */
 export function workCommand(state: State, command: WorkCommand, task: Task): Update {
+  if (state.readOnly) return refuseReadOnly(state)
   switch (command) {
     case "subtask":
       return newSubtask(state, task)
     case "delete":
       return askDelete(state, task)
     case "file":
-      return fileTask(state)
+      return [{ ...state, mode: picker("file") }, []]
     case "unfile":
       return unfileTask(state, task)
     case "cancel":
