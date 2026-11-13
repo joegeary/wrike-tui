@@ -101,11 +101,43 @@ describe("refindMentions", () => {
       { at: 0, id: JOE, name: "Joe Geary" },
       { at: 15, id: PAT, name: "Pat Example" },
     ]
-    expect(refindMentions("New first line\n@Joe Geary and @Pat Example", mentions)).toEqual([
-      { at: 15, id: JOE, name: "Joe Geary" },
-      { at: 30, id: PAT, name: "Pat Example" },
+    expect(refindMentions("New first line\n@Joe Geary and @Pat Example", mentions)).toEqual({
+      mentions: [
+        { at: 15, id: JOE, name: "Joe Geary" },
+        { at: 30, id: PAT, name: "Pat Example" },
+      ],
+      unsure: [],
+    })
+    expect(refindMentions("@Pat Example only", mentions)).toEqual({ mentions: [{ at: 0, id: PAT, name: "Pat Example" }], unsure: [] })
+  })
+
+  test("a name that runs on into a longer word is no longer the mention", () => {
+    const mentions: Mention[] = [{ at: 0, id: PAT, name: "Pat Example" }]
+    expect(refindMentions("@Pat Examples are here", mentions)).toEqual({ mentions: [], unsure: [] })
+    expect(refindMentions("@Pat Example's notes, and @Pat Example.", mentions).mentions).toEqual([{ at: 0, id: PAT, name: "Pat Example" }])
+  })
+
+  test("a shorter name does not take a mention of a longer one", () => {
+    const mentions: Mention[] = [
+      { at: 0, id: JOE, name: "Pat Example" },
+      { at: 15, id: PAT, name: "Pat" },
+    ]
+    expect(refindMentions("@Pat and @Pat Example", mentions).mentions).toEqual([
+      { at: 0, id: PAT, name: "Pat" },
+      { at: 9, id: JOE, name: "Pat Example" },
     ])
-    expect(refindMentions("@Pat Example only", mentions)).toEqual([{ at: 0, id: PAT, name: "Pat Example" }])
+  })
+
+  test("two people with one name stay mentions in order while both remain, and neither is guessed once one is gone", () => {
+    const mentions: Mention[] = [
+      { at: 3, id: JOE, name: "John Smith" },
+      { at: 30, id: PAT, name: "John Smith" },
+    ]
+    expect(refindMentions("Hi @John Smith from sales, @John Smith from ops", mentions).mentions).toEqual([
+      { at: 3, id: JOE, name: "John Smith" },
+      { at: 27, id: PAT, name: "John Smith" },
+    ])
+    expect(refindMentions("@John Smith from ops", mentions)).toEqual({ mentions: [], unsure: ["John Smith"] })
   })
 })
 

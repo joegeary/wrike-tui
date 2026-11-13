@@ -229,6 +229,20 @@ describe("mentions in the comment box", () => {
     ])
   })
 
+  test("when the editor leaves fewer mentions of a name two people share, the box stays open and says so", () => {
+    const JOHN_A = userId("JOHNA")
+    const JOHN_B = userId("JOHNB")
+    const opened = openWith([older])
+    const contacts = new Map(opened.contacts).set(JOHN_A, { id: JOHN_A, name: "John Smith", email: null, active: true }).set(JOHN_B, { id: JOHN_B, name: "John Smith", email: "b@example.test", active: true })
+    const draft = "@John Smith and @John Smith "
+    const composing = play({ ...opened, contacts }, "c", { type: "draft", text: "@jo" }, "tab", { type: "draft", text: "@John Smith and @jo" }, "down", "tab").state
+    expect(composing.mode).toMatchObject({ draft, mentions: [{ at: 0, id: JOHN_A }, { at: 16, id: JOHN_B }] })
+    const back = play(composing, "ctrl+e", { type: "composed", text: "@John Smith only" })
+    expect(back.effects.map((effect) => effect.kind)).toEqual(["compose-in-editor"])
+    expect(back.state.mode).toMatchObject({ kind: "compose", draft: "@John Smith only", mentions: [] })
+    expect(back.state.flash?.text).toBe("More than one person named John Smith was mentioned and the editor removed one, so it is plain text now. Type @ to pick the person again")
+  })
+
   test("typing over a picked mention makes it plain text again", () => {
     const { effects } = play(typing("@pa"), "tab", { type: "draft", text: "@Pat Exampl " }, "enter")
     expect(effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: null, body: { text: "@Pat Exampl", plainText: true } }])
