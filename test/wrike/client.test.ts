@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { customStatusId, folderId, legacyItemId, spaceId, taskId, userId } from "../../src/domain/ids"
+import { commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId } from "../../src/domain/ids"
 import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
 import { createInboxSource } from "../../src/wrike/inbox"
@@ -169,8 +169,8 @@ describe("reads", () => {
   })
 
   test("comments posted in the same second keep the order they were written in", async () => {
-    await client.addComment(taskId(TASK.flags), "first")
-    await client.addComment(taskId(TASK.flags), "second")
+    await client.addComment(taskId(TASK.flags), { text: "first", plainText: true })
+    await client.addComment(taskId(TASK.flags), { text: "second", plainText: true })
     const [first, second] = fake.data.comments.filter((comment) => comment.taskId === TASK.flags).reverse()
     second!.createdDate = first!.createdDate
     expect((await client.comments(taskId(TASK.flags))).map((comment) => comment.text)).toEqual(["first", "second"])
@@ -211,10 +211,28 @@ describe("writes", () => {
   })
 
   test("addComment posts plain text and returns the comment", async () => {
-    const comment = await client.addComment(taskId(TASK.flags), "Removed 4 <flags>")
+    const comment = await client.addComment(taskId(TASK.flags), { text: "Removed 4 <flags>", plainText: true })
     expect(comment).toMatchObject({ authorId: ME, text: "Removed 4 &lt;flags&gt;" })
     expect(fake.writes).toEqual([{ method: "POST", path: `/tasks/${TASK.flags}/comments`, params: { text: "Removed 4 <flags>", plainText: "true" } }])
     expect(await client.comments(taskId(TASK.flags))).toHaveLength(1)
+  })
+
+  test("addComment posts HTML as it is, without plainText", async () => {
+    const html = `<a class="stream-user-id avatar" rel="${PAT}">&#64;Pat Example</a> ready`
+    expect(await client.addComment(taskId(TASK.flags), { text: html, plainText: false })).toMatchObject({ text: html })
+    expect(fake.writes).toEqual([{ method: "POST", path: `/tasks/${TASK.flags}/comments`, params: { text: html } }])
+  })
+
+  test("updateComment sends a PUT to the comment and keeps its dates", async () => {
+    const [original] = fake.data.comments.filter((comment) => comment.authorId === ME)
+    const updated = await client.updateComment(commentId(original!.id), { text: "Pilot accounts are ready", plainText: true })
+    expect(updated).toEqual({ id: commentId(original!.id), authorId: userId(ME), text: "Pilot accounts are ready", createdDate: original!.createdDate })
+    expect(fake.writes).toEqual([{ method: "PUT", path: `/comments/${original!.id}`, params: { text: "Pilot accounts are ready", plainText: "true" } }])
+    expect(original!.updatedDate).toBe(original!.createdDate)
+  })
+
+  test("updating a comment that is gone is not_found", async () => {
+    await expect(client.updateComment(commentId("IEAAAAAAIMNOPE01"), { text: "x", plainText: true })).rejects.toMatchObject({ error: { kind: "not_found" } })
   })
 })
 

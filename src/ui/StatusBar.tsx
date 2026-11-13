@@ -9,7 +9,10 @@ type Hint = { key: string; text: string }
 /** The commands with a hint that a key runs here, read from the keymap and the registry. */
 function hints(state: State): Hint[] {
   return activeContexts(state).flatMap((context) =>
-    boundCommands(context).flatMap(({ command, keys }) => (command.hint && isOffered(command, state) ? [{ key: keyLabel(keys[0]!), text: command.hint }] : [])),
+    boundCommands(context).flatMap(({ command, keys }) => {
+      if (!command.hint || !isOffered(command, state)) return []
+      return [{ key: keyLabel(keys[0]!), text: typeof command.hint === "string" ? command.hint : command.hint(state) }]
+    }),
   )
 }
 

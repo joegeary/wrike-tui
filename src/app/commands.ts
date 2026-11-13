@@ -22,7 +22,7 @@ export type Command = {
   /** The command is offered only while this holds. */
   when?: (state: State) => boolean
   /** A short label. A command with one is offered in the status bar. */
-  hint?: string
+  hint?: string | ((state: State) => string)
   run: (state: State) => Action
 }
 
@@ -34,6 +34,7 @@ const inTasks = (state: State) => state.scope.kind !== "inbox"
 const inInbox = (state: State) => state.scope.kind === "inbox"
 const onFavorite = (state: State) => navCursorRow(state)?.kind === "favorite"
 const selecting = (state: State) => selectedComment(state) !== null
+const editingComment = (state: State) => state.mode.kind === "compose" && state.mode.editing !== null
 const multi = (state: State) => state.mode.kind === "picker" && MULTI_PICKERS.has(state.mode.field)
 
 const command = (id: string, title: string, group: CommandGroup, contexts: Context[], run: Command["run"], extra: Partial<Command> = {}): Command => ({
@@ -74,6 +75,7 @@ export const COMMANDS: Command[] = [
   command("details.next", "Select the next comment", "Navigate", ["details"], () => ({ type: "select", by: 1 }), { keywords: ["comments"] }),
   command("details.previous", "Select the previous comment", "Navigate", ["details"], () => ({ type: "select", by: -1 }), { keywords: ["comments"] }),
   command("details.unselect", "Clear the selection", "Navigate", ["details"], () => ({ type: "unselect" }), { when: selecting, hint: "unselect" }),
+  command("comment.edit", "Edit the comment", "Task", ["details"], () => ({ type: "edit-comment" }), { when: selecting, hint: "edit comment" }),
 
   command("inbox.read", "Toggle read notifications", "List", ["list"], () => ({ type: "toggle-read" }), { when: inInbox, hint: "read" }),
   command("list.toggle", "Open or close the row", "List", ["list"], () => ({ type: "toggle-row" }), { when: inTasks, keywords: ["subtasks", "group", "expand", "collapse"] }),
@@ -145,7 +147,7 @@ export const COMMANDS: Command[] = [
   command("text.save", "Save", "App", ["text"], () => ({ type: "submit" }), { hint: "save" }),
   command("text.discard", "Discard", "App", ["text"], () => ({ type: "cancel" }), { hint: "discard" }),
 
-  command("compose.post", "Post the comment", "Task", ["compose"], () => ({ type: "submit" }), { hint: "post" }),
+  command("compose.post", "Post the comment", "Task", ["compose"], () => ({ type: "submit" }), { hint: (state) => (editingComment(state) ? "save" : "post") }),
   command("compose.editor", "Write it in $EDITOR", "Task", ["compose"], () => ({ type: "compose-editor" }), { hint: "editor" }),
   command("compose.discard", "Discard", "Task", ["compose"], () => ({ type: "cancel" }), { hint: "discard" }),
 

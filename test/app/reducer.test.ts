@@ -781,18 +781,30 @@ describe("results of writes", () => {
     const composing = play(withOpen(), "c")
     expect(play(composing.state, "enter")).toMatchObject({ effects: [], state: { mode: { kind: "compose" }, flash: { tone: "error" } } })
     const sent = play(composing.state, { type: "draft", text: "On it" }, "enter")
-    expect(sent.effects).toEqual([{ kind: "add-comment", taskId: overdue.id, text: "On it" }])
+    expect(sent.effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: null, body: { text: "On it", plainText: true } }])
     const comment = { id: commentId("C1"), authorId: ME, text: "On it", createdDate: "2026-11-12T16:01:00Z" }
-    const { state, effects } = play(sent.state, { type: "comment-added", taskId: overdue.id, result: { ok: true, value: comment } })
+    const { state, effects } = play(sent.state, { type: "comment-saved", taskId: overdue.id, editing: null, result: { ok: true, value: comment } })
     expect(state.details).toMatchObject({ value: { comments: [comment] } })
     expect(state.flash?.text).toBe("Comment posted")
     expect(effects).toEqual([{ kind: "scroll", pane: "details", to: "bottom" }])
   })
 
-  test("Ctrl+E moves a comment draft to the editor", () => {
-    const { state, effects } = play(withOpen(), "c", { type: "draft", text: "Long" }, "ctrl+e")
-    expect(effects).toEqual([{ kind: "compose-in-editor", taskId: overdue.id, draft: "Long" }])
+  test("Ctrl+E moves a comment draft to the editor, and what comes back is posted", () => {
+    const handed = play(withOpen(), "c", { type: "draft", text: "Long" }, "ctrl+e")
+    expect(handed.effects).toEqual([{ kind: "compose-in-editor", draft: "Long" }])
+    const { state, effects } = play(handed.state, { type: "composed", text: "Long\nand longer" })
+    expect(effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: null, body: { text: "Long\nand longer", plainText: true } }])
     expect(state.mode).toEqual({ kind: "browse" })
+  })
+
+  test("an unchanged or emptied editor file discards the comment", () => {
+    const handed = play(withOpen(), "c", { type: "draft", text: "Long" }, "ctrl+e").state
+    for (const text of [null, "  "]) {
+      const { state, effects } = play(handed, { type: "composed", text })
+      expect(effects).toEqual([])
+      expect(state.mode).toEqual({ kind: "browse" })
+      expect(state.flash?.text).toBe("Comment discarded")
+    }
   })
 })
 

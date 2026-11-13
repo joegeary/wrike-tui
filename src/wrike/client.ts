@@ -1,4 +1,5 @@
-import type { FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { CommentBody } from "../domain/comment"
+import type { CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { taskId, userId } from "../domain/ids"
 import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
 import { patchParams, type Params, type TaskPatch } from "../domain/patch"
@@ -36,7 +37,8 @@ export type WrikeClient = {
   task(id: TaskId): Promise<Task>
   updateTask(id: TaskId, patch: TaskPatch): Promise<Task>
   comments(id: TaskId): Promise<Comment[]>
-  addComment(id: TaskId, text: string): Promise<Comment>
+  addComment(id: TaskId, body: CommentBody): Promise<Comment>
+  updateComment(id: CommentId, body: CommentBody): Promise<Comment>
   folders(ids: string[]): Promise<string[]>
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
 }
@@ -69,6 +71,8 @@ function listCall(query: TaskQuery): { path: string; params: Params } {
       return { path: `/folders/${query.id}/tasks`, params: { descendants: true, subTasks: true } }
   }
 }
+
+const commentParams = (body: CommentBody): Params => (body.plainText ? { text: body.text, plainText: true } : { text: body.text })
 
 export async function fetchMe(transport: Transport): Promise<Me> {
   const [contact] = parseAll(ContactSchema, await transport.request("GET", "/contacts", { me: true }), "contact")
@@ -156,9 +160,12 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
       return comments.reverse().sort((a, b) => a.createdDate.localeCompare(b.createdDate))
     },
 
-    async addComment(id, text) {
-      const created = await transport.request("POST", `/tasks/${id}/comments`, { text, plainText: true })
-      return one(parseAll(CommentSchema, created, "comment"))
+    async addComment(id, body) {
+      return one(parseAll(CommentSchema, await transport.request("POST", `/tasks/${id}/comments`, commentParams(body)), "comment"))
+    },
+
+    async updateComment(id, body) {
+      return one(parseAll(CommentSchema, await transport.request("PUT", `/comments/${id}`, commentParams(body)), "comment"))
     },
 
     async folders(ids) {

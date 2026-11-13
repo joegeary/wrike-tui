@@ -319,6 +319,67 @@ describe("Selecting comments", () => {
   })
 })
 
+describe("Editing my comment", () => {
+  test("Enter edits my newest comment in its five minutes, with the time left ticking", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.type("The sandbox is ready")
+    await app.press("enter")
+    await app.see("Comment posted", "Comments (4)")
+    const posted = app.fake.data.comments[0]!
+    await app.press("[")
+    await app.see(/┃Sam Sample\s+\w{3} \d+ \d\d:\d\d\s+editable for 5:00/)
+    app.advance(108)
+    await app.see(/┃Sam Sample\s+\w{3} \d+ \d\d:\d\d\s+editable for 3:12/)
+    await app.press("enter")
+    await app.see("─ Edit comment, 3:12 left ─", "The sandbox is ready", "Enter save  Ctrl+E editor  Esc discard")
+    await app.type(" for trainings.")
+    await app.press("enter")
+    const saved = await app.see("Comment saved", "The sandbox is ready for trainings.")
+    expect(saved).toContain("Comments (4)")
+    expect(app.fake.writes.at(-1)).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: "The sandbox is ready for trainings.", plainText: "true" } })
+
+    app.advance(200)
+    const closed = await app.see(/┃Sam Sample\s+\w{3} \d+ \d\d:\d\d\s+│/)
+    expect(closed).not.toContain("editable for")
+    await app.press("enter")
+    await app.see("Comments can only be edited in the 5 minutes after posting")
+    expect(app.fake.writes).toHaveLength(2)
+  })
+
+  test("Enter on someone else's comment says so, and an old one of mine names the window", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("[", "enter")
+    await app.see("This is Pat Example's comment, not yours")
+    await app.press("[", "enter")
+    await app.see("Comments can only be edited in the 5 minutes after posting")
+    expect(app.fake.writes).toEqual([])
+  })
+
+  test("Ctrl+E takes an edit to the editor and saves what comes back", async () => {
+    app = await openApp(WIDE)
+    app.outside.editor = (initial) => `${initial}\nSecond line from the editor.\n`
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.type("First line.")
+    await app.press("enter")
+    await app.see("Comment posted")
+    await app.press("[", "enter")
+    await app.see("─ Edit comment, 5:00 left ─")
+    await app.press("ctrl+e")
+    await app.see("Comment saved", "Second line from the editor.")
+    expect(app.fake.writes.at(-1)).toMatchObject({ method: "PUT", params: { text: "First line.\nSecond line from the editor.", plainText: "true" } })
+  })
+})
+
 describe("Keys and panes", () => {
   test("? shows the legend for the focused pane, straight from the keymap", async () => {
     app = await openApp(WIDE)

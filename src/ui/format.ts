@@ -67,3 +67,9 @@ export function stamp(ts: string): string {
   const pad = (n: number) => String(n).padStart(2, "0")
   return `${MONTHS[date.getMonth()]} ${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
+
+/** Time left as `m:ss`, rounded up so it reads `0:01` until the very end. */
+export function countdown(ms: number): string {
+  const seconds = Math.max(0, Math.ceil(ms / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+}

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { EffectDeps } from "../../src/app/effects"
 import { initialState } from "../../src/app/state"
 import { createStore } from "../../src/app/store"
+import { keepClock } from "../../src/app/ticker"
 import { userId } from "../../src/domain/ids"
 import { App } from "../../src/ui/App"
 import { createBridge } from "../../src/ui/bridge"
@@ -20,6 +21,7 @@ const TOKEN = "screen-test-token"
 const CLOCK = { now: "2026-11-12T16:00:00Z", today: "2026-11-12" }
 
 const ESC_PAUSE_MS = 120
+const CLOCK_TICK_MS = 20
 
 export type Editor = (initial: string, extension: string) => string | null
 
@@ -35,7 +37,9 @@ export type AppOptions = {
 
 /** The whole app in a test renderer, wired to the real client over an in-process fake Wrike. */
 export async function openApp(size: { width: number; height: number } = { width: 160, height: 45 }, options: AppOptions = {}) {
-  const fake = options.fake ?? createFakeWrike({ token: TOKEN, ...CLOCK })
+  // The app's clock and the fake's stamps on new comments move together, and only when a test moves them.
+  let clock = { ...CLOCK }
+  const fake = options.fake ?? createFakeWrike({ token: TOKEN, ...CLOCK, stamp: () => clock.now })
   const home = options.home ?? (await mkdtemp(join(tmpdir(), "wrike-tui-screen-")))
   const paths = persistencePaths({ XDG_CONFIG_HOME: join(home, "config"), XDG_STATE_HOME: join(home, "state"), XDG_CACHE_HOME: join(home, "cache") }, "IEAAAAAA")
   const persistence = createPersistence(paths)
@@ -48,7 +52,7 @@ export async function openApp(size: { width: number; height: number } = { width:
   const outside = { opened: [] as string[], copied: [] as string[], quit: false, editor: ((initial) => initial) as Editor, edited: [] as { initial: string; extension: string }[] }
   const deps: EffectDeps = {
     client,
-    clock: () => CLOCK,
+    clock: () => clock,
     editor: async (initial, extension) => {
       outside.edited.push({ initial, extension })
       const result = outside.editor(initial, extension)
@@ -65,6 +69,7 @@ export async function openApp(size: { width: number; height: number } = { width:
   const store = createStore(initialState(profile, CLOCK, boot), deps)
   const saveSession = sessionSaver(store.getState, persistence)
   const screen = await testRender(<App store={store} bridge={bridge} />, size)
+  const stopClock = keepClock(store, () => clock, CLOCK_TICK_MS)
   // The app updates state from timers and promises, outside any act() scope.
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
 
@@ -128,8 +133,13 @@ export async function openApp(size: { width: number; height: number } = { width:
     press,
     type,
     resize: (width: number, height: number) => screen.resize(width, height),
+    /** Moves the clock forward. The countdowns on screen catch up within a tick. */
+    advance(seconds: number) {
+      clock = { ...clock, now: new Date(new Date(clock.now).getTime() + seconds * 1000).toISOString().replace(/\.\d+Z$/, "Z") }
+    },
     /** Ends the app the way quitting does, session written. The directory is kept when the caller passed one, so a second app can open on it. */
     async close() {
+      stopClock()
       await store.idle()
       await saveSession()
       await screen.dispose()

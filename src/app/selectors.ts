@@ -1,3 +1,4 @@
+import { editWindowLeft } from "../domain/comment"
 import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
 import { findStatus, IMPORTANCES, statusChoices, type Comment, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
@@ -125,6 +126,19 @@ export function selectedComment(state: State): Comment | null {
   if (selected?.kind !== "comment" || state.details.state !== "ready") return null
   return state.details.value.comments.find((comment) => comment.id === selected.id) ?? null
 }
+
+/** Milliseconds left to edit the selected comment when it is mine, zero or less once its window has closed. Null otherwise. */
+export function editTimeLeft(state: State): number | null {
+  const comment = selectedComment(state)
+  if (!comment || comment.authorId !== state.profile.userId) return null
+  return editWindowLeft(comment.createdDate, state.clock.now)
+}
+
+/** True while the screen counts an edit window down, which is when the clock must keep moving. */
+export const countingDown = (state: State) => (editTimeLeft(state) ?? 0) > 0
+
+/** A contact's name as the comment box writes it, for a mention. */
+export const mentionName = (state: State) => (id: UserId) => state.contacts.get(id)?.name
 
 export function statusOf(state: State, task: Task): CustomStatus | null {
   return findStatus(state.workflows, task.statusId)

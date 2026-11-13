@@ -1,4 +1,5 @@
 import type { Profile } from "../auth/profile"
+import type { CommentBody, Mention } from "../domain/comment"
 import type { CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
@@ -64,9 +65,19 @@ export type Mode =
   | { kind: "edit"; field: number }
   | { kind: "edit-text"; field: TextField; draft: string; error?: string; origin: Origin }
   | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
-  | { kind: "compose"; draft: string }
+  | Compose
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
+
+/** The comment box, for a new comment or for an edit of one of mine. */
+export type Compose = {
+  kind: "compose"
+  draft: string
+  /** The comment being edited, or null for a new one. */
+  editing: CommentId | null
+  /** The mentions in the draft. They move with its edits, and one the user types over becomes plain text. */
+  mentions: Mention[]
+}
 
 export type Details = { task: Task; comments: Comment[]; folders: string[] }
 
@@ -137,9 +148,9 @@ export type Effect =
   | { kind: "load-tree"; request: number; space: SpaceId; cached: boolean }
   | { kind: "load-details"; request: number; target: OpenTarget }
   | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
-  | { kind: "add-comment"; taskId: TaskId; text: string }
+  | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "edit-description"; task: Task }
-  | { kind: "compose-in-editor"; taskId: TaskId; draft: string }
+  | { kind: "compose-in-editor"; draft: string }
   | { kind: "open-url"; url: string }
   | { kind: "copy"; text: string }
   | { kind: "scroll"; pane: "details" | "help"; to: ScrollTo }
@@ -185,6 +196,7 @@ export type Intent =
   | { type: "scroll"; pane: "details" | "help"; to: ScrollTo }
   | { type: "select"; by: 1 | -1 }
   | { type: "unselect" }
+  | { type: "edit-comment" }
   | { type: "task"; command: TaskCommand }
   | { type: "link"; act: "browser" | "copy-url" | "copy-id" }
   | { type: "field-move"; by: number }
@@ -203,6 +215,9 @@ export type Action =
   | { type: "key"; key: string }
   | { type: "draft"; text: string }
   | { type: "flash"; flash: Flash }
+  | { type: "clock"; clock: Clock }
+  /** The text the editor gave back for the comment box, or null when the file came back unchanged. */
+  | { type: "composed"; text: string | null }
   | { type: "reference-loaded"; result: Result<{ contacts: Contact[]; workflows: Workflow[] }> }
   | { type: "space-workflows-loaded"; result: Result<Workflow[]> }
   | { type: "inbox-loaded"; request: number; clock: Clock; result: Result<InboxEntry[]> }
@@ -211,7 +226,7 @@ export type Action =
   | { type: "tree-loaded"; space: SpaceId; request: number; from: "cache" | "wrike"; result: Result<SpaceTree> }
   | { type: "details-loaded"; request: number; result: Result<Details> }
   | { type: "task-saved"; done: string; result: Result<Task> }
-  | { type: "comment-added"; taskId: TaskId; result: Result<Comment> }
+  | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
 
 export type Update = [State, Effect[]]
 

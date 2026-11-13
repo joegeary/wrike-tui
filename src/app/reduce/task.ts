@@ -6,6 +6,7 @@ import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { openTask, pickerOptions, selectedEntry, selectedTask } from "../selectors"
 import { EDIT_FIELDS, type Action, type Mode, type OpenTarget, type Origin, type PickerField, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
+import { newComment } from "./comments"
 import { failure, info, markMissing, retitle, TODO, then } from "./core"
 import { isCurrent, open } from "./load"
 
@@ -26,14 +27,6 @@ export function taskSaved(state: State, action: Action & { type: "task-saved" })
   if (!action.result.ok) return [{ ...state, flash: failure(describeError(action.result.error)) }, []]
   const task = action.result.value
   return retitle({ ...replaceTask(state, task), flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
-}
-
-export function commentAdded(state: State, action: Action & { type: "comment-added" }): Update {
-  if (!action.result.ok) return [{ ...state, flash: failure(describeError(action.result.error)) }, []]
-  const flashed = { ...state, flash: info("Comment posted") }
-  if (state.details.state !== "ready" || state.details.value.task.id !== action.taskId) return [flashed, []]
-  const details = { ...state.details.value, comments: [...state.details.value.comments, action.result.value] }
-  return [{ ...flashed, details: { state: "ready", value: details } }, [{ kind: "scroll", pane: "details", to: "bottom" }]]
 }
 
 /** Puts a saved task everywhere it is listed. A list of active tasks loses one that is closed, and My to-do gains one that became mine. */
@@ -115,7 +108,7 @@ function taskCommand(state: State, command: TaskCommand, task: Task, origin: Ori
       if (task.assigneeIds.includes(state.profile.userId)) return [{ ...state, flash: info("Already assigned to you") }, []]
       return save(state, task.id, { field: "assignees", add: [state.profile.userId], remove: [] }, "Assigned to you")
     case "comment":
-      return [{ ...state, mode: { kind: "compose", draft: "" } }, []]
+      return [{ ...state, mode: newComment() }, []]
     case "description":
       return [state, [{ kind: "edit-description", task }]]
   }
@@ -163,20 +156,6 @@ export function choiceToggle(state: State): Update {
   if (!option) return [state, []]
   const chosen = mode.chosen.includes(option.id) ? mode.chosen.filter((id) => id !== option.id) : [...mode.chosen, option.id]
   return [{ ...state, mode: { ...mode, chosen } }, []]
-}
-
-export function composeEditor(state: State): Update {
-  const task = openTask(state)
-  if (state.mode.kind !== "compose" || !task) return [state, []]
-  return [{ ...state, mode: { kind: "browse" } }, [{ kind: "compose-in-editor", taskId: task.id, draft: state.mode.draft }]]
-}
-
-export function submitCompose(state: State, mode: Mode & { kind: "compose" }): Update {
-  const task = openTask(state)
-  const text = mode.draft.trim()
-  if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
-  if (text === "") return [{ ...state, flash: failure("Write the comment first, or press Esc to discard") }, []]
-  return [{ ...state, mode: { kind: "browse" }, flash: info("Posting the comment...") }, [{ kind: "add-comment", taskId: task.id, text }]]
 }
 
 export function submitEditText(state: State, mode: Mode & { kind: "edit-text" }): Update {

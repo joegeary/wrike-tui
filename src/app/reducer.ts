@@ -1,3 +1,4 @@
+import { followEdit } from "../domain/comment"
 import { findStatus } from "../domain/model"
 import { resolveKey } from "./keymap"
 import { stepCursor } from "./nav"
@@ -15,9 +16,9 @@ import {
   tasksLoaded,
   treeLoaded,
 } from "./reduce/load"
-import { selectItem } from "./reduce/comments"
+import { commentSaved, composed, composeEditor, editComment, selectItem, submitCompose } from "./reduce/comments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
-import { choiceToggle, closeEditor, commentAdded, composeEditor, detailsLoaded, onLink, onTask, openField, submitCompose, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
+import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
 import { currentList, navRowsOf, openTask, pickerOptions } from "./selectors"
 import { EDIT_FIELDS, PANES, type Action, type State, type Update } from "./state"
 
@@ -50,12 +51,19 @@ function step(state: State, action: Action): Update {
         const { error: _cleared, ...rest } = mode
         return [{ ...state, mode: { ...rest, draft: action.text } }, []]
       }
-      if (mode.kind === "search-input" || mode.kind === "filter-input" || mode.kind === "compose") return [{ ...state, mode: { ...mode, draft: action.text } }, []]
+      if (mode.kind === "compose") return [{ ...state, mode: { ...mode, draft: action.text, mentions: followEdit(mode.draft, action.text, mode.mentions) } }, []]
+      if (mode.kind === "search-input" || mode.kind === "filter-input") return [{ ...state, mode: { ...mode, draft: action.text } }, []]
       return [state, []]
     }
 
     case "flash":
       return [{ ...state, flash: action.flash }, []]
+
+    case "clock":
+      return [{ ...state, clock: action.clock }, []]
+
+    case "composed":
+      return composed(state, action.text)
 
     case "reference-loaded":
       return referenceLoaded(state, action)
@@ -81,8 +89,8 @@ function step(state: State, action: Action): Update {
     case "task-saved":
       return taskSaved(state, action)
 
-    case "comment-added":
-      return commentAdded(state, action)
+    case "comment-saved":
+      return commentSaved(state, action)
 
     case "focus":
       return focusPane(state, action.pane === "left" ? PANES.indexOf(state.focus) - 1 : action.pane === "right" ? PANES.indexOf(state.focus) + 1 : PANES.indexOf(action.pane))
@@ -137,6 +145,8 @@ function step(state: State, action: Action): Update {
       return selectItem(state, action.by)
     case "unselect":
       return [{ ...state, selected: null }, []]
+    case "edit-comment":
+      return editComment(state)
     case "task":
       return onTask(state, action.command)
     case "link":

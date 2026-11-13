@@ -7,7 +7,7 @@ import { htmlToMarkdown } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
-import { Comments, itemAnchor } from "./Comments"
+import { Comments, ComposeBox, itemAnchor } from "./Comments"
 import { shortDay } from "./format"
 import { Pane } from "./Pane"
 import { scrollBox } from "./scroll"
@@ -187,11 +187,7 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
           <Body state={state} details={shownDetails} onDraft={props.onDraft} />
         </scrollbox>
       ) : null}
-      {state.mode.kind === "compose" ? (
-        <box border borderStyle="rounded" borderColor={theme.accent} title=" New comment " titleColor={theme.accent} height={3} flexShrink={0} flexDirection="row">
-          <TextInput value={state.mode.draft} placeholder="Write a comment" onInput={props.onDraft} />
-        </box>
-      ) : null}
+      {state.mode.kind === "compose" ? <ComposeBox state={state} mode={state.mode} onDraft={props.onDraft} /> : null}
     </Pane>
   )
 }

@@ -116,8 +116,11 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return dispatch({ type: "details-loaded", request: effect.request, result: await attempt(() => loadDetails(client, effect.target)) })
     case "update-task":
       return dispatch({ type: "task-saved", done: effect.done, result: await attempt(() => client.updateTask(effect.taskId, effect.patch)) })
-    case "add-comment":
-      return dispatch({ type: "comment-added", taskId: effect.taskId, result: await attempt(() => client.addComment(effect.taskId, effect.text)) })
+    case "save-comment": {
+      const { taskId, editing, body } = effect
+      const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))
+      return dispatch({ type: "comment-saved", taskId, editing, result })
+    }
     case "edit-description": {
       const editable = editableDescription(effect.task.descriptionHtml)
       const edited = await edit(deps, dispatch, editable.text, editable.format === "markdown" ? "md" : "html")
@@ -129,10 +132,7 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
     }
     case "compose-in-editor": {
       const edited = await edit(deps, dispatch, effect.draft, "txt")
-      if (edited === undefined) return
-      const text = edited?.trim()
-      if (!text) return dispatch({ type: "flash", flash: { tone: "info", text: "Comment discarded" } })
-      return dispatch({ type: "comment-added", taskId: effect.taskId, result: await attempt(() => client.addComment(effect.taskId, text)) })
+      return edited === undefined ? undefined : dispatch({ type: "composed", text: edited })
     }
     case "open-url":
       return deps.openUrl(effect.url).catch((thrown) =>

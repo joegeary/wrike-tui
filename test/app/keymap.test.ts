@@ -13,7 +13,7 @@ const MODES: Mode[] = [
   { kind: "edit-text", field: "title", draft: "", origin: "browse" },
   { kind: "picker", field: "status", query: "", cursor: 0, chosen: [], origin: "browse" },
   { kind: "picker", field: "assignees", query: "", cursor: 0, chosen: [], origin: "browse" },
-  { kind: "compose", draft: "" },
+  { kind: "compose", draft: "", editing: null, mentions: [] },
   { kind: "palette", query: "", cursor: 0 },
   { kind: "help" },
 ]

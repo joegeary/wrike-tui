@@ -27,12 +27,29 @@ const json = (body: unknown, status = 200) => Response.json(body, { status })
 const wrikeError = (status: number, error: string, errorDescription: string) => json({ error, errorDescription }, status)
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
-export function createFakeWrike(options: { token: string; today: string; now: string }): FakeWrike {
+export type FakeOptions = {
+  token: string
+  today: string
+  /** The time the seed data is laid out around. */
+  now: string
+  /** The time a new comment is stamped with. Real time unless a test sets a clock of its own. */
+  stamp?: () => string
+}
+
+const realTime = () => new Date().toISOString().replace(/\.\d+Z$/, "Z")
+const commentNotFound = () => wrikeError(404, "resource_not_found", "Comment not found or access denied")
+
+export function createFakeWrike(options: FakeOptions): FakeWrike {
   const data = seed(options.today, options.now)
   const writes: RecordedWrite[] = []
   const requests: string[] = []
   const failures: Failure[] = []
   let sequence = 0
+  const stamp = options.stamp ?? realTime
+  const storedText = (form: URLSearchParams) => {
+    const text = form.get("text") ?? ""
+    return form.get("plainText") === "true" ? escapeHtml(text).replace(/\n/g, "<br />") : text
+  }
 
   const authorized = (request: Request) =>
     request.headers.get("authorization")?.toLowerCase() === `bearer ${options.token}`.toLowerCase()
@@ -204,22 +221,30 @@ export function createFakeWrike(options: { token: string; today: string; now: st
       } else {
         if (method === "GET") return json({ kind: "comments", data: data.comments.filter((comment) => comment.taskId === task.id) })
         if (method === "POST") {
-          const text = form.get("text") ?? ""
-          if (text.trim() === "") return wrikeError(400, "invalid_parameter", "Parameter 'text' value is invalid")
+          if ((form.get("text") ?? "").trim() === "") return wrikeError(400, "invalid_parameter", "Parameter 'text' value is invalid")
           sequence += 1
-          const stamp = new Date().toISOString().replace(/\.\d+Z$/, "Z")
+          const now = stamp()
           const comment = {
             id: `IEAAAAAAIMAAAN${String(sequence).padStart(2, "0")}`,
             authorId: ME,
-            text: form.get("plainText") === "true" ? escapeHtml(text).replace(/\n/g, "<br />") : text,
-            createdDate: stamp,
-            updatedDate: stamp,
+            text: storedText(form),
+            createdDate: now,
+            updatedDate: now,
             taskId: task.id,
           }
           data.comments.unshift(comment)
           return json({ kind: "comments", data: [comment] })
         }
       }
+    }
+    const commentPath = /^\/comments\/([^/]+)$/.exec(path)
+    if (commentPath && method === "PUT") {
+      const comment = data.comments.find((candidate) => candidate.id === commentPath[1])
+      if (!comment) return commentNotFound()
+      if ((form.get("text") ?? "").trim() === "") return wrikeError(400, "invalid_parameter", "Parameter 'text' value is invalid")
+      // Wrike keeps updatedDate as it was, so an edit leaves no trace.
+      comment.text = storedText(form)
+      return json({ kind: "comments", data: [comment] })
     }
     return wrikeError(404, "method_not_found", `No fake route for ${method} ${path}`)
   }

@@ -62,3 +62,73 @@ describe("selecting comments", () => {
     expect(other.selected).toBeNull()
   })
 })
+
+describe("editing my comment", () => {
+  const stale = comment("C4", ME, "Yesterday's note", "2026-11-11T10:00:00Z")
+  const linked = comment("C5", ME, 'See <a href="https://example.test/pull/7">PR 7</a>', "2026-11-12T15:59:30Z")
+  const moved = (now: string) => ({ type: "clock", clock: { now, today: "2026-11-12" } }) as const
+  /** The thread with `mine` selected: posted at 15:58, with the clock at 16:00. */
+  const onMine = () => play(openWith([older, mine, newest, stale]), "]", "]").state
+
+  test("Enter opens the comment box on it, prefilled", () => {
+    const { state } = play(onMine(), "enter")
+    expect(state.mode).toEqual({ kind: "compose", draft: "On it.", editing: mine.id, mentions: [] })
+  })
+
+  test("Enter on someone else's comment says it is not mine", () => {
+    const { state } = play(openWith([older, mine]), "]", "enter")
+    expect(state.mode).toEqual({ kind: "browse" })
+    expect(state.flash).toEqual({ tone: "info", text: "This is Pat Example's comment, not yours" })
+  })
+
+  test("Enter after the five minutes says why it cannot edit", () => {
+    expect(play(openWith([stale]), "]", "enter").state.flash?.text).toBe("Comments can only be edited in the 5 minutes after posting")
+    expect(play(onMine(), moved("2026-11-12T16:03:00Z"), "enter").state.flash?.text).toBe("Comments can only be edited in the 5 minutes after posting")
+  })
+
+  test("a comment with formatting is not opened as text", () => {
+    const { state } = play(openWith([linked]), "]", "enter")
+    expect(state.mode).toEqual({ kind: "browse" })
+    expect(state.flash?.text).toBe("This comment has formatting the client cannot edit. Press o to edit it in Wrike")
+  })
+
+  test("Enter saves the edit through the comment, and an unchanged one sends nothing", () => {
+    const editing = play(onMine(), "enter").state
+    const saved = play(editing, { type: "draft", text: "On it, done by Friday." }, "enter")
+    expect(saved.effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: mine.id, body: { text: "On it, done by Friday.", plainText: true } }])
+    expect(saved.state.flash?.text).toBe("Saving the comment...")
+    const unchanged = play(editing, "enter")
+    expect(unchanged.effects).toEqual([])
+    expect(unchanged.state.flash?.text).toBe("Comment unchanged")
+  })
+
+  test("a window that closes while typing keeps the draft and says so", () => {
+    const { state, effects } = play(onMine(), "enter", { type: "draft", text: "Too late" }, moved("2026-11-12T16:03:01Z"), "enter")
+    expect(effects).toEqual([])
+    expect(state.mode).toMatchObject({ kind: "compose", draft: "Too late" })
+    expect(state.flash).toEqual({ tone: "error", text: "The 5-minute edit window has closed. Esc discards the edit" })
+  })
+
+  test("the saved comment replaces the old one in place", () => {
+    const edited = { ...mine, text: "On it, done by Friday." }
+    const { state } = play(onMine(), { type: "comment-saved", taskId: overdue.id, editing: mine.id, result: { ok: true, value: edited } })
+    expect(state.details).toMatchObject({ value: { comments: [older, edited, newest, stale] } })
+    expect(state.flash?.text).toBe("Comment saved")
+    expect(state.selected).toEqual({ kind: "comment", id: mine.id })
+  })
+
+  test("an edit of a comment deleted in Wrike drops it here", () => {
+    const { state } = play(onMine(), { type: "comment-saved", taskId: overdue.id, editing: mine.id, result: { ok: false, error: { kind: "not_found" } } })
+    expect(state.details).toMatchObject({ value: { comments: [older, newest, stale] } })
+    expect(state.selected).toBeNull()
+    expect(state.flash).toEqual({ tone: "info", text: "That comment was deleted in Wrike" })
+  })
+
+  test("Ctrl+E edits in the editor and saves what comes back", () => {
+    const handed = play(onMine(), "enter", "ctrl+e")
+    expect(handed.effects).toEqual([{ kind: "compose-in-editor", draft: "On it." }])
+    const back = play(handed.state, { type: "composed", text: "On it.\nShipped." })
+    expect(back.effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: mine.id, body: { text: "On it.\nShipped.", plainText: true } }])
+    expect(play(handed.state, { type: "composed", text: null }).state.flash?.text).toBe("Comment unchanged")
+  })
+})
