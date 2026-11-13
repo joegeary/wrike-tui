@@ -21,6 +21,8 @@ export type FakeWrike = {
   failTool(failure: { tool: string; text: string; isError?: boolean; times?: number }): void
   /** Drops every failure still waiting, so the fake answers normally again. */
   heal(): void
+  /** Makes the next request whose path starts with `path` wait until the returned function is called. */
+  hold(path: string): () => void
 }
 
 const OPTIONAL_LIST_FIELDS = [
@@ -51,6 +53,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
   const toolCalls: FakeWrike["toolCalls"] = []
   const failures: Failure[] = []
   const toolFailures: ToolFailure[] = []
+  const holds: { path: string; released: Promise<void> }[] = []
   let sequence = 0
   const stamp = options.stamp ?? realTime
   const storedText = (form: URLSearchParams) => {
@@ -347,6 +350,8 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
   async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url)
     requests.push(`${request.method} ${url.pathname}${url.search}`)
+    const held = holds.findIndex((candidate) => url.pathname.startsWith(candidate.path))
+    if (held >= 0) await holds.splice(held, 1)[0]!.released
     const failure = failures.find(
       (candidate) => url.pathname.startsWith(candidate.path) && (!candidate.method || candidate.method === request.method),
     )
@@ -375,6 +380,11 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     heal: () => {
       failures.splice(0)
       toolFailures.splice(0)
+    },
+    hold(path) {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      holds.push({ path, released: promise })
+      return () => resolve()
     },
   }
 }

@@ -35,6 +35,16 @@ describe("field history", () => {
     expect(titles(again.state)).toEqual(["B", "A"])
   })
 
+  test("what is held stays shown while r or Enter loads the open task again", () => {
+    const first = open(inTodo(), overdue)
+    const shown = play(first.state, answer(loads(first.effects)[0]!, page([change("2026-11-12T10:00:00Z", "B")]))).state
+    for (const key of ["r", "enter"]) {
+      const reloading = play({ ...shown, focus: "list" }, key).state
+      expect(reloading.details.state).toBe("loading")
+      expect(titles(reloading)).toEqual(["B"])
+    }
+  })
+
   test("a failed load is not asked again by an open or by H, only by r", () => {
     const first = open(inTodo(), overdue)
     const failed = play(first.state, answer(loads(first.effects)[0]!, { ok: false, error: { kind: "rate_limited" } })).state

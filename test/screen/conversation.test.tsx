@@ -111,6 +111,21 @@ describe("Field history", () => {
     expect(historyCalls()).toHaveLength(2)
   })
 
+  test("stays drawn in the frames while r reloads the open task", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    await app.see("Comments (1) · 16 changes", "Work Type: DB")
+    const release = app.fake.hold(`/api/v4/tasks/${TASK.login}`)
+    app.store.dispatch({ type: "key", key: "r" })
+    const reloading = await app.peek()
+    release()
+    expect(reloading).toContain("Details (refreshing)")
+    expect(reloading).toContain("Comments (1) · 16 changes")
+    expect(reloading).toMatch(/Pat Example {2}\w{3} \d+ \d\d:\d\d {2}Work Type: DB/)
+    await app.see("Comments (1) · 16 changes", "Work Type: DB")
+    expect(historyCalls()).toHaveLength(2)
+  })
+
   test("older changes load only when asked for, a page at a time", async () => {
     app = await openApp(WIDE)
     const login = app.fake.data.history[TASK.login]!

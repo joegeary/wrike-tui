@@ -79,6 +79,12 @@ export async function openApp(size: { width: number; height: number } = { width:
     return screen.captureCharFrame()
   }
 
+  /** The frame as drawn now, without waiting for the effects still running, for a check while a request is held. */
+  async function peek(): Promise<string> {
+    await screen.renderOnce()
+    return screen.captureCharFrame()
+  }
+
   /** Resolves with the first frame that satisfies every expectation. */
   async function see(...expected: (string | RegExp)[]): Promise<string> {
     let last = ""
@@ -136,6 +142,7 @@ export async function openApp(size: { width: number; height: number } = { width:
     store,
     outside,
     frame,
+    peek,
     see,
     spans,
     press,
