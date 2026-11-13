@@ -1,6 +1,6 @@
 import type { SyntaxStyle } from "@opentui/core"
 import { useMemo } from "react"
-import { commentStream, contactName, editTimeLeft, mentionName, mentionSuggestions, sameItem } from "../app/selectors"
+import { commentStream, contactName, editedComment, editTimeLeft, mentionName, mentionSuggestions, sameItem, selectedComment } from "../app/selectors"
 import type { Compose, DetailsItem, Paged, State } from "../app/state"
 import { showMentions } from "../domain/comment"
 import { displayMarkdown } from "../domain/description"
@@ -8,7 +8,7 @@ import { describeChange, type HistoryEntry } from "../domain/history"
 import type { Comment } from "../domain/model"
 import { describeError } from "../wrike/errors"
 import { countdown, fit, fitAfter, stamp } from "./format"
-import { TextInput } from "./TextInput"
+import { TextArea } from "./TextArea"
 import { useTheme } from "./theme"
 
 /** The renderable ID a details item is drawn under, which scrolling into view looks for. */
@@ -40,7 +40,7 @@ function historyNotices(history: Paged<HistoryEntry> | null): Notice[] {
 /** The thread and the field history by time, oldest first. A change is one dim line. The selected comment carries a bar on its left. */
 export function Comments({ state, comments, history, style }: { state: State; comments: Comment[]; history: Paged<HistoryEntry> | null; style: SyntaxStyle }) {
   const theme = useTheme()
-  const left = editTimeLeft(state)
+  const left = editTimeLeft(state, selectedComment(state))
   const deleting = state.mode.kind === "confirm-delete"
   const changes = history?.items
   const stream = useMemo(() => commentStream(comments, changes ?? []), [comments, changes])
@@ -92,10 +92,13 @@ export function Comments({ state, comments, history, style }: { state: State; co
   )
 }
 
+/** The comment box grows with its lines up to this many, then scrolls. */
+const COMPOSE_LINES = 8
+
 /** The comment box at the bottom of the details pane, with the people offered for a mention above it. An edit names the time left in its window. */
 export function ComposeBox({ state, mode, width, onDraft }: { state: State; mode: Compose; width: number; onDraft: (text: string) => void }) {
   const theme = useTheme()
-  const left = mode.editing ? editTimeLeft(state) : null
+  const left = editTimeLeft(state, editedComment(state))
   const title = mode.editing === null ? " New comment " : left !== null && left > 0 ? ` Edit comment, ${countdown(left)} left ` : " Edit comment, the window has closed "
   const suggestions = mentionSuggestions(state)
   // The pane's border and the list's own.
@@ -117,8 +120,19 @@ export function ComposeBox({ state, mode, width, onDraft }: { state: State; mode
           })}
         </box>
       ) : null}
-      <box border borderStyle="rounded" borderColor={theme.accent} title={title} titleColor={theme.accent} height={3} flexShrink={0} flexDirection="row">
-        <TextInput value={mode.draft} placeholder="Write a comment, @ mentions someone" onInput={onDraft} />
+      <box
+        border
+        borderStyle="rounded"
+        borderColor={theme.accent}
+        title={title}
+        titleColor={theme.accent}
+        bottomTitle=" Alt+Enter new line "
+        bottomTitleAlignment="right"
+        maxHeight={COMPOSE_LINES + 2}
+        flexShrink={0}
+        flexDirection="row"
+      >
+        <TextArea value={mode.draft} placeholder="Write a comment, @ mentions someone" onInput={onDraft} />
       </box>
     </>
   )

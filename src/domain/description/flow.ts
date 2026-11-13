@@ -10,19 +10,28 @@
  * | text and text  | 1     | a hard break inside one paragraph            |
  * | text and text  | n ≥ 2 | n newlines                                   |
  * | text and block | 0     | one newline                                  |
- * | text and block | 1     | a hard break (two spaces), then one newline  |
+ * | text and block | 1     | a hard break, then one newline               |
  * | text and block | n ≥ 2 | n newlines                                   |
  * | block and any  | n     | n + 2 newlines                               |
  *
  * A <br> just before a block draws nothing in a browser, so text-and-block with
- * zero or one <br> look alike in Wrike and differ only by invisible spaces here.
+ * zero or one <br> look alike in Wrike and differ only by the backslash here.
  * A block ends at a blank line, since a line right after a list would join its
  * last item; each blank line after that one is a <br>.
  */
 export type Part = "text" | "block"
 
+/**
+ * A backslash before the newline, which markdown reads as a <br> like two
+ * trailing spaces do. Editors that strip trailing whitespace on save keep it.
+ */
+export const HARD_BREAK = "\\\n"
+
+/** A line ending in a hard break: an odd number of backslashes, since an even run is escaped backslashes. */
+export const ENDS_IN_HARD_BREAK = /(?<!\\)(?:\\\\)*\\\n*$/
+
 export function separator(before: Part, after: Part, breaks: number): string {
-  if (before === "text" && after === "block" && breaks < 2) return breaks === 1 ? "  \n" : "\n"
+  if (before === "text" && after === "block" && breaks < 2) return breaks === 1 ? HARD_BREAK : "\n"
   return "\n".repeat(before === "block" ? breaks + 2 : breaks)
 }
 

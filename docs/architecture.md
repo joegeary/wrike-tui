@@ -359,11 +359,20 @@ The dialect:
 
 Wrike separates lines and blocks with runs of `<br>`, and the count shows on
 screen. `flow.ts` holds the one table both directions use. A single `<br>`
-inside text is a hard break. Two or more between lines are that many newlines,
-so each blank line in the editor is a blank line in Wrike. A block ends at a
-blank line, and each further blank line after it is a `<br>`. A `<br>` just
-before a block draws nothing, so it is spelled with the two trailing spaces of
-a hard break.
+inside text is a hard break, a backslash at the end of the line. Markdown
+also reads two trailing spaces as one, but many editors strip trailing
+whitespace on save, so the client never writes them; a test strips it from
+every corpus description and expects the same HTML back. Two or more `<br>`
+between lines are that many newlines, so each blank line in the editor is a
+blank line in Wrike. A block ends at a blank line, and each further blank line
+after it is a `<br>`. A `<br>` just before a block draws nothing, so it is
+spelled with the backslash of a hard break.
+
+`==` and `++` work like markdown's `_`: they open only where no letter or
+digit runs into them and close only before something that is not one, so
+typed prose like `a==b==c` or `i++; j++` stays text. Wrike colors parts of
+words, so `{color:...}` may touch a word, and like the others it takes no space
+just inside either tag.
 
 Text that would read as markup is escaped, but only where markdown would read
 it: `snake_case` and `2 * 3` stay as written, `2\*3\*4` does not. A space
@@ -405,15 +414,24 @@ type CommentBody = { text: string; plainText: boolean }
 `commentBody(draft, mentions)` is what reaches Wrike. A draft without a
 mention stays plain text with `plainText=true`, exactly as before mentions
 existed. A draft with one is escaped HTML, newlines become `<br />`, and each
-mention becomes Wrike's anchor. Only a mention picked from the list is an
+mention becomes Wrike's anchor. HTML collapses runs of spaces, so every other
+space of a run, and every space that starts a line, is `&nbsp;`, and reading
+the comment back turns them into spaces again. Only a mention picked from the list is an
 anchor, so an `@name` typed by hand stays text. `followEdit` moves the
 mentions with each edit of the draft, and drops one the edit touched.
-`refindMentions` finds them again, in order, in text that comes back from
-the editor.
+`refindMentions` finds them again in text that comes back from the editor:
+each name binds its picks to its places in document order, longer names
+first, and only where the name does not run on into a longer word. When two
+people picked under one name no longer match the count of that name in the
+text, nothing says who is still meant, so neither stays a mention, the box
+stays open with the editor's text, and the status bar asks to pick again.
 
 `editableComment(html)` gives a comment back as text to edit, with mentions as
 `@Full Name`. When the HTML holds anything but text, `<br />` and mentions, it
-gives null and the edit is refused, so a save never strips formatting.
+gives null and the edit is refused, so a save never strips formatting. It
+reads the HTML with domino, like the description code, so the text is what a
+browser shows: every character reference decoded, and a newline in the source
+a space, or nothing at the start or end of a line.
 
 `editWindowLeft(createdDate, now)` counts down five minutes. Wrike's API takes
 an edit at any age and leaves no mark of it, so the client keeps the web
@@ -685,12 +703,22 @@ failed fetch waits for `r`, and the reload fetches the selected image again.
 Text is typed into OpenTUI's `<input>`, which gives cursor movement and line
 editing. The input reports each change as a `draft` action, so the draft still
 lives in the mode. A picker and the palette take their text as key presses,
-because every letter filters there.
+because every letter filters there. A key the keymap binds in the current
+mode is not also typed into the field.
+
+The comment box is a `<textarea>` instead, because a comment has lines and an
+`<input>` strips newlines and stops at 1,000 characters. `Alt+Enter` and
+`Ctrl+J` start a new line, the box grows to eight lines and then scrolls, and
+a draft the reducer changes, like a picked mention, is put back into the field
+with the cursor at the end. Wrike takes up to 10,000 characters of comment
+text as sent, mention anchors included. A longer comment is refused with its
+length and the draft stays in the box.
 
 Editing the description and composing a long comment suspend the renderer and
 open `$VISUAL`, then `$EDITOR`, then `vi`, on a temp file. The effect resumes
-the renderer and reads the file. An unchanged file is a cancel, and so is an
-editor that exits with an error. The comment box stays open while the editor
+the renderer and reads the file. An unchanged file is a cancel, and so are a file
+that differs only by whitespace stripped from line ends, which many editors do
+on save, and an editor that exits with an error. The comment box stays open while the editor
 runs, and the text that comes back goes through the same submit as `Enter`,
 for a new comment and for an edit.
 
@@ -774,7 +802,7 @@ for its values.
 | Picker | arrows or `Ctrl+N` `Ctrl+P` move, typing filters, `Backspace` erases, `Space` toggles (assignees, filters, columns), `Enter` applies, `Esc` cancels |
 | Palette | typing filters, arrows or `Ctrl+N` `Ctrl+P` move, `Backspace` erases, `Enter` runs, `Esc` closes |
 | Text field | `Enter` saves, `Esc` discards |
-| Comment | `Enter` posts or saves the edit, `Ctrl+E` moves the draft to the editor, `Esc` discards |
+| Comment | `Enter` posts or saves the edit, `Alt+Enter` and `Ctrl+J` start a new line, `Ctrl+E` moves the draft to the editor, `Esc` discards |
 | Mention list | arrows or `Ctrl+N` `Ctrl+P` move, `Tab` or `Enter` writes the name, `Esc` closes the list |
 | Delete confirm | `y` deletes, any other key keeps the comment |
 | Legend | `j` `k` scroll, `Esc`, `?` or `q` closes |

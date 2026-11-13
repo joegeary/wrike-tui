@@ -100,6 +100,25 @@ describe("comments", () => {
     expect(lastWrite()).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: `${PAT_MENTION} the sandbox is ready for trainings.` } })
   })
 
+  test("Alt+Enter starts a line, and an edit saved after one keystroke changes exactly that keystroke", async () => {
+    const posted = e2e.fake.data.comments[0]!
+    await tmux.keys("Enter")
+    await tmux.see("lines-open", /─ Edit comment, [45]:\d\d left ─/, "Alt+Enter new line")
+    await tmux.keys("M-Enter")
+    await tmux.type("Second line.")
+    await tmux.see("lines-typed", /│@Pat Example the sandbox is ready for trainings\. +│+\n.*│Second line\. +│/)
+    await tmux.keys("Enter")
+    await tmux.see("lines-saved", "Comment saved", "Second line.")
+    const twoLines = `${PAT_MENTION} the sandbox is ready for trainings.<br />Second line.`
+    expect(lastWrite()).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: twoLines } })
+    await tmux.keys("Enter")
+    await tmux.see("lines-reopened", /─ Edit comment, [45]:\d\d left ─/, /│Second line\. +│/)
+    await tmux.type("!")
+    await tmux.keys("Enter")
+    await tmux.see("lines-resaved", "Comment saved", "Second line.!")
+    expect(lastWrite()).toEqual({ method: "PUT", path: `/comments/${posted.id}`, params: { text: `${twoLines}!` } })
+  })
+
   test("d asks, another key keeps the comment, and y deletes it", async () => {
     const posted = e2e.fake.data.comments[0]!
     await tmux.keys("d")

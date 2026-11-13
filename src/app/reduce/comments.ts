@@ -1,14 +1,16 @@
-import { commentBody, editableComment, editWindowLeft, followEdit, refindMentions, typedMention, type Mention } from "../../domain/comment"
+import { COMMENT_LIMIT, commentBody, editableComment, editWindowLeft, followEdit, refindMentions, typedMention, type Mention } from "../../domain/comment"
 import type { CommentId, TaskId } from "../../domain/ids"
 import type { Comment } from "../../domain/model"
 import { describeError } from "../../wrike/errors"
-import { contactName, detailsItems, mentionName, mentionSuggestions, openTask, sameItem, selectedAttachment, selectedComment } from "../selectors"
+import { contactName, detailsItems, editedComment, mentionName, mentionSuggestions, openTask, sameItem, selectedAttachment, selectedComment } from "../selectors"
 import type { Action, Compose, State, Update } from "../state"
 import { withPreview } from "./attachments"
 import { clamp, failure, info } from "./core"
 import { loadHistory, needsHistory } from "./load"
 
 const EMPTY = "Write the comment first, or press Esc to discard"
+const tooLong = (length: number) =>
+  `Wrike takes up to ${COMMENT_LIMIT.toLocaleString("en-US")} characters in a comment, and this one has ${length.toLocaleString("en-US")}. Shorten it, or press Esc to discard`
 
 /** Steps the selection through the details items. With nothing selected, `]` starts at the first and `[` at the last. */
 export function selectItem(state: State, by: 1 | -1): Update {
@@ -113,10 +115,11 @@ export function submitCompose(state: State, mode: Compose): Update {
   if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
   const body = commentBody(mode.draft, mode.mentions)
   if (body.text === "") return [{ ...state, flash: failure(EMPTY) }, []]
+  if (body.text.length > COMMENT_LIMIT) return [{ ...state, flash: failure(tooLong(body.text.length)) }, []]
   const closed: State = { ...state, mode: { kind: "browse" } }
   if (mode.editing === null) return [{ ...closed, flash: info("Posting the comment...") }, [{ kind: "save-comment", taskId: task.id, editing: null, body }]]
 
-  const comment = state.details.state === "ready" ? state.details.value.comments.find((candidate) => candidate.id === mode.editing) : undefined
+  const comment = editedComment({ ...state, mode })
   if (!comment) return [{ ...closed, flash: info("That comment is no longer there") }, []]
   if (editWindowLeft(comment.createdDate, state.clock.now) <= 0) return [{ ...state, flash: failure("The 5-minute edit window has closed. Esc discards the edit") }, []]
   const original = editableComment(comment.text, mentionName(state))
@@ -130,6 +133,9 @@ export function composeEditor(state: State): Update {
   return state.mode.kind === "compose" ? [state, [{ kind: "compose-in-editor", draft: state.mode.draft }]] : [state, []]
 }
 
+const unsureMentions = (names: string[]) =>
+  `More than one person named ${names.join(" and ")} was mentioned and the editor removed one, so it is plain text now. Type @ to pick the person again`
+
 /** The editor's text is submitted as if typed. An unchanged or emptied file is a cancel. */
 export function composed(state: State, text: string | null): Update {
   const mode = state.mode
@@ -138,7 +144,9 @@ export function composed(state: State, text: string | null): Update {
     const why = mode.editing === null ? "Comment discarded" : text === null ? "Comment unchanged" : "Edit discarded"
     return [{ ...state, mode: { kind: "browse" }, flash: info(why) }, []]
   }
-  const next: Compose = { ...mode, draft: text, mentions: refindMentions(text, mode.mentions) }
+  const found = refindMentions(text, mode.mentions)
+  const next: Compose = { ...mode, draft: text, mentions: found.mentions }
+  if (found.unsure.length > 0) return [{ ...state, mode: next, flash: info(unsureMentions(found.unsure)) }, []]
   return submitCompose({ ...state, mode: next }, next)
 }
 

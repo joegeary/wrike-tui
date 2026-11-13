@@ -27,12 +27,13 @@ const SPACES: Record<string, string> = { "&#32;": " ", "&#9;": "\t", "&nbsp;": "
 
 /**
  * The pane shows character references and backslash escapes as typed, so spaces come back as
- * themselves, and the escapes the editor adds for ==, ++ and { go, since plain markdown reads
- * those as text already.
+ * themselves, a hard break is spelled with two spaces instead of a backslash, and the escapes
+ * the editor adds for ==, ++ and { go, since plain markdown reads those as text already.
  */
 const plain = (markdown: string) =>
   markdown
     .replace(/\n{3,}/g, "\n\n")
+    .replace(/(?<!\\)((?:\\\\)*)\\\n/g, "$1  \n")
     .replace(/(?<!\\)(&#32;|&#9;|&nbsp;)/g, (space) => SPACES[space]!)
     .replace(/(?<!\\)\\(==|\+\+|\{)/g, "$1")
 

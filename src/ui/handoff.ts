@@ -6,6 +6,8 @@ import type { Env } from "../auth/config"
 /** The part of the renderer that gives the terminal away and takes it back. */
 export type Suspendable = { suspend(): unknown; resume(): unknown }
 
+const withoutTrailingSpace = (text: string) => text.replace(/[ \t]+$/gm, "").replace(/\n+$/, "")
+
 const words = (command: string) => command.trim().split(/\s+/)
 
 export function editorCommand(env: Env): string[] {
@@ -16,6 +18,8 @@ export function editorCommand(env: Env): string[] {
  * Opens `initial` in the user's editor on a temp file while the renderer is
  * suspended. Resolves to the edited text, or null when the file came back
  * unchanged or the editor exited with an error, which is how editors abort.
+ * Many editors strip trailing whitespace on save, so a file that differs only
+ * by that came back unchanged.
  */
 export async function editInEditor(
   renderer: Suspendable,
@@ -38,7 +42,7 @@ export async function editInEditor(
     }
     if (exitCode !== 0) return null
     const edited = await Bun.file(path).text()
-    return edited === written ? null : edited.replace(/\n+$/, "")
+    return withoutTrailingSpace(edited) === withoutTrailingSpace(written) ? null : edited.replace(/\n+$/, "")
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

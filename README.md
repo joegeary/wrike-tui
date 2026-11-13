@@ -149,6 +149,7 @@ Press `?` in the client to see the keys for the pane you are in.
 | Text field | `Enter` | Save |
 | | `Esc` | Discard |
 | Comment | `Enter` | Post, or save an edit |
+| | `Alt+Enter` or `Ctrl+J` | Start a new line |
 | | `Ctrl+E` | Finish the comment in `$EDITOR` |
 | | `Esc` | Discard |
 | | `@` and letters | Offer people to mention |
@@ -228,9 +229,9 @@ Markdown covers Wrike's formatting with a few additions:
 | A link's `rel` | `[text](url){rel=nofollow}` |
 | Bold, italic | `**b**` and `*i*`; `__strong__` and `_em_` keep Wrike's other tags |
 
-Each blank line is a blank line in Wrike. One blank line ends a list or a
-heading, and two spaces at the end of a line before a list or heading keep
-the break Wrike stored there. A space markdown would drop, at the end of a
+Each blank line is a blank line in Wrike. A backslash at the end of a line is
+a line break inside a paragraph, and one before a list or heading keeps the
+break Wrike stored there. One blank line ends a list or a heading. A space markdown would drop, at the end of a
 line or inside bold, reads `&#32;`.
 
 Copy uses the OSC 52 terminal sequence, so it works over SSH when your terminal

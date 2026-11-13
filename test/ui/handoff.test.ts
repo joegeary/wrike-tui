@@ -38,6 +38,11 @@ describe("editInEditor", () => {
     expect(await editInEditor(renderer(), { EDITOR: editor }, "", "txt")).toBeNull()
   })
 
+  test("an editor that only strips trailing whitespace on save is a cancel", async () => {
+    const editor = await script("trim", 'sed -i -E "s/[[:space:]]+$//" "$1"')
+    expect(await editInEditor(renderer(), { EDITOR: editor }, "```\ncode  \n```\nline\t", "md")).toBeNull()
+  })
+
   test("an editor that exits with an error is a cancel, even if it wrote", async () => {
     const editor = await script("abort", 'print -r -- "junk" >> "$1"\nexit 1')
     const screen = renderer()

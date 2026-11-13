@@ -1,8 +1,7 @@
 import { createDocument } from "@mixmark-io/domino"
-import { separator, type Part } from "./flow"
+import { HARD_BREAK, separator, type Part } from "./flow"
 
 const BLOCK_TAGS = new Set(["UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "PRE", "TABLE", "P", "DIV", "BLOCKQUOTE", "HR"])
-const HARD_BREAK = "  \n"
 
 /** Markdown for a description or a comment, in the dialect that markdownToHtml reads back. */
 export function htmlToMarkdown(html: string): string {

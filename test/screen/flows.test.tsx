@@ -278,7 +278,7 @@ describe("A formatted description", () => {
     expect(frame).toContain("Partners first")
     expect(frame).toContain("Budget is fixed at 10k.")
     expect(frame).toContain("See the venue (https://example.test/venue) and its plan (image)")
-    for (const marker of ["[x]", "[ ]", "{color", "==", "++", "{rel", "<br>", "&#32;"]) expect(frame).not.toContain(marker)
+    for (const marker of ["[x]", "[ ]", "{color", "==", "++", "{rel", "<br>", "&#32;", "\\"]) expect(frame).not.toContain(marker)
   })
 
   test("E opens it as markdown, and ticking a box saves Wrike's checklist with every other style intact", async () => {
@@ -290,14 +290,14 @@ describe("A formatted description", () => {
     expect(app.outside.edited).toEqual([
       {
         initial: [
-          "One page, owners named per line.  ",
+          "One page, owners named per line.\\",
           "- [x] Book the venue",
           "- [ ] {color:#191919}Send the invites{color}",
           "  - Partners first",
           "",
           "",
-          "=={#ffcc80}Budget== is ++fixed++ at {color:#D81B60}10k{color}.  ",
-          "See [the venue](https://example.test/venue){rel=nofollow} and its plan ![](//storage.example.test/plan.png)  ",
+          "=={#ffcc80}Budget== is ++fixed++ at {color:#D81B60}10k{color}.\\",
+          "See [the venue](https://example.test/venue){rel=nofollow} and its plan ![](//storage.example.test/plan.png)\\",
           "| **Item** | **Owner** |",
           "| --- | --- |",
           "| Venue | Riley<br>Sam |",
@@ -425,6 +425,111 @@ describe("Editing my comment", () => {
     await app.press("ctrl+e")
     await app.see("Comment saved", "Second line from the editor.")
     expect(app.fake.writes.at(-1)).toMatchObject({ method: "PUT", params: { text: "First line.\nSecond line from the editor.", plainText: "true" } })
+  })
+})
+
+describe("The comment box", () => {
+  /** Opens the SSO task and posts `text` through the editor, which takes what one line cannot. */
+  async function postThroughEditor(text: string) {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    app.outside.editor = () => text
+    await app.press("c")
+    await app.type("x")
+    await app.press("ctrl+e")
+    await app.see("Comment posted", "Comments (4)")
+    app.outside.editor = (initial) => initial
+  }
+
+  /** Opens my newest comment in the box, presses `keys`, saves, and gives what Wrike stored before and after. */
+  async function editWith(keys: () => Promise<void>) {
+    const before = app.fake.data.comments[0]!.text
+    await app.press("[", "enter")
+    await app.see(/─ Edit comment, \d:\d\d left ─/)
+    await keys()
+    await app.press("enter")
+    await app.see("Comment saved")
+    return { before, after: app.fake.data.comments[0]!.text }
+  }
+
+  test("an edit saved after one keystroke changes exactly that keystroke, across lines", async () => {
+    await postThroughEditor("First line.\nSecond line.")
+    const { before, after } = await editWith(() => app.type("!"))
+    expect(before).toBe("First line.<br />Second line.")
+    expect(after).toBe(`${before}!`)
+  })
+
+  test("an edit saved after one keystroke keeps a mention on the second line", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.type("@pa")
+    await app.press("tab")
+    await app.type("please review")
+    app.outside.editor = (initial) => `Heads up\n${initial}`
+    await app.press("ctrl+e")
+    await app.see("Comment posted")
+    app.outside.editor = (initial) => initial
+    const { before, after } = await editWith(() => app.type("!"))
+    expect(before).toBe(`Heads up<br /><a class="stream-user-id avatar" rel="${PAT}">&#64;Pat Example</a> please review`)
+    expect(after).toBe(`${before}!`)
+  })
+
+  test("an edit of a comment over 1,000 characters keeps all of it", async () => {
+    const long = "word ".repeat(260).trim()
+    await postThroughEditor(long)
+    const { after } = await editWith(() => app.press("backspace"))
+    expect(after).toBe(long.slice(0, -1))
+  })
+
+  test("a comment typed past 1,000 characters posts whole", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.type("abcdefghij".repeat(105))
+    await app.press("enter")
+    await app.see("Comment posted")
+    expect(app.fake.writes.at(-1)!.params.text).toBe("abcdefghij".repeat(105))
+  })
+
+  test("Alt+Enter and Ctrl+J start a new line, the box grows to show it, and Enter posts them all", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.see("Alt+Enter new line")
+    await app.type("First line.")
+    await app.press("alt+enter")
+    await app.type("Second line.")
+    await app.see(/│First line\. +││\n.*│Second line\. +││/)
+    await app.press("ctrl+j")
+    await app.type("Third, after Ctrl+J.")
+    await app.press("enter")
+    await app.see("Comment posted")
+    expect(app.fake.writes.at(-1)!.params).toEqual({ text: "First line.\nSecond line.\nThird, after Ctrl+J.", plainText: "true" })
+  })
+
+  test("a comment longer than Wrike's 10,000 characters is refused and the draft stays", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    app.outside.editor = () => "a".repeat(10_001)
+    await app.press("c")
+    await app.type("x")
+    await app.press("ctrl+e")
+    await app.see("Wrike takes up to 10,000 characters in a comment, and this one has 10,001", "─ New comment ─")
+    expect(app.fake.writes).toEqual([])
+    await app.press("backspace", "enter")
+    await app.see("Comment posted")
+    expect(app.fake.writes.at(-1)!.params.text).toHaveLength(10_000)
   })
 })
 

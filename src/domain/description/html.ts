@@ -1,5 +1,5 @@
 import { Lexer, Marked, Parser, Renderer, type Token, type TokenizerAndRendererExtension, type Tokens } from "marked"
-import { breaksBetween, type Part } from "./flow"
+import { breaksBetween, ENDS_IN_HARD_BREAK, type Part } from "./flow"
 
 class WrikeRenderer extends Renderer {
   // Wrike stores <b> and <strong> alike, so each keeps its own delimiter: ** and *, or __ and _.
@@ -47,14 +47,26 @@ const DEFAULT_HIGHLIGHT = "#F8BBD0"
 
 const HEX = "#[0-9a-fA-F]{3,8}"
 
+const WORD = /[\p{L}\p{N}]/u
+
+/**
+ * Like markdown's `_`, highlight and underline only open where no word runs
+ * into them, and only close before something that is not a word, so `a==b==c`
+ * and `i++; j++` stay the text they were typed as. The tokens read so far in
+ * this run of inline text end with the character before the delimiter.
+ */
+const openable = (tokens: Token[]) => !WORD.test([...(tokens.at(-1)?.raw ?? "")].at(-1) ?? "")
+const CLOSED = "(?![\\p{L}\\p{N}])"
+
 /** Inline syntax markdown lacks, for Wrike's text color, highlight and underline. */
 const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
   {
     name: "color",
     level: "inline",
     start: (src) => src.indexOf("{color:"),
+    // Wrike colors parts of words, so a color may touch a word; a space just inside either tag keeps it text.
     tokenizer(src) {
-      const match = new RegExp(`^\\{color:(${HEX})\\}([\\s\\S]*?)\\{color\\}`).exec(src)
+      const match = new RegExp(`^\\{color:(${HEX})\\}(?=\\S)([\\s\\S]*?\\S)\\{color\\}`).exec(src)
       if (match) return { type: "color", raw: match[0], color: match[1], tokens: this.lexer.inlineTokens(match[2]!) }
     },
     renderer(token) {
@@ -65,8 +77,8 @@ const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
     name: "highlight",
     level: "inline",
     start: (src) => src.indexOf("=="),
-    tokenizer(src) {
-      const match = new RegExp(`^==(?:\\{(${HEX})\\})?(?=\\S)([\\s\\S]*?\\S)==`).exec(src)
+    tokenizer(src, tokens) {
+      const match = openable(tokens) && new RegExp(`^==(?:\\{(${HEX})\\})?(?=\\S)([\\s\\S]*?\\S)==${CLOSED}`, "u").exec(src)
       if (match) return { type: "highlight", raw: match[0], color: match[1] ?? DEFAULT_HIGHLIGHT, tokens: this.lexer.inlineTokens(match[2]!) }
     },
     renderer(token) {
@@ -77,8 +89,8 @@ const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
     name: "underline",
     level: "inline",
     start: (src) => src.indexOf("++"),
-    tokenizer(src) {
-      const match = /^\+\+(?=\S)([\s\S]*?\S)\+\+/.exec(src)
+    tokenizer(src, tokens) {
+      const match = openable(tokens) && new RegExp(`^\\+\\+(?=\\S)([\\s\\S]*?\\S)\\+\\+${CLOSED}`, "u").exec(src)
       if (match) return { type: "underline", raw: match[0], tokens: this.lexer.inlineTokens(match[1]!) }
     },
     renderer(token) {
@@ -126,7 +138,9 @@ export function markdownToHtml(markdown: string): string {
 const parser = new Parser(wrikeMarked.defaults)
 const inline = (tokens: Token[]) => parser.parseInline(tokens)
 
-const HARD_BREAK = / {2,}\n*$/
+/** A paragraph that ends in a hard break, spelled with a backslash or, as a person may type it, two spaces. */
+const endsInHardBreak = (raw: string) => ENDS_IN_HARD_BREAK.test(raw) || / {2,}\n*$/.test(raw)
+const withoutHardBreak = (text: string) => (/ $/.test(text) ? text.replace(/ +$/, "") : text.slice(0, -1))
 
 const trailingNewlines = (raw: string) => raw.length - raw.replace(/\n+$/, "").length
 
@@ -147,7 +161,7 @@ function flow(tokens: Token[], bullets: number, opening = (html: string) => html
     const part: Part = token.type === "paragraph" || token.type === "text" || token.type === "html" ? "text" : "block"
     if (previous) html += "<br />".repeat(Math.max(0, breaksBetween(previous.part, part, newlines, previous.hardBreak)))
     html += previous ? render(token, bullets) : opening(render(token, bullets))
-    previous = { part, hardBreak: HARD_BREAK.test(token.raw) }
+    previous = { part, hardBreak: endsInHardBreak(token.raw) }
     newlines = trailingNewlines(token.raw)
   }
   return html
@@ -159,7 +173,7 @@ function render(token: Token, bullets: number): string {
     case "text":
       if (!token.tokens) return escapeHtml(token.text)
       // A hard break at the end of a paragraph is the <br> before the block that follows, which flow writes.
-      return inline(HARD_BREAK.test(token.raw) ? attachRel(Lexer.lexInline(token.text.replace(/ +$/, ""), wrikeMarked.defaults)) : token.tokens)
+      return inline(endsInHardBreak(token.raw) ? attachRel(Lexer.lexInline(withoutHardBreak(token.text), wrikeMarked.defaults)) : token.tokens)
     case "html":
       return escapeHtml(token.text.replace(/\n+$/, ""))
     case "heading":

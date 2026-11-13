@@ -5,7 +5,7 @@ describe("htmlToMarkdown", () => {
   test("renders Wrike's tags", () => {
     const html = "<h2>Plan</h2>First line<br>second line<br><br>Next <b>bold</b> and <i>soft</i> and <s>gone</s><ul><li>one</li><li>two</li></ul><a href=\"https://example.test\">link</a>"
     expect(htmlToMarkdown(html)).toBe(
-      ["## Plan", "", "First line  ", "second line", "", "Next **bold** and *soft* and ~~gone~~", "- one", "- two", "", "[link](https://example.test)"].join("\n"),
+      ["## Plan", "", "First line\\", "second line", "", "Next **bold** and *soft* and ~~gone~~", "- one", "- two", "", "[link](https://example.test)"].join("\n"),
     )
   })
   test("numbers ordered lists and indents nested ones", () => {
@@ -64,19 +64,19 @@ describe("a description round trip through the editor", () => {
 })
 
 describe("line breaks", () => {
-  // Each blank line in the editor is a blank line in Wrike. A <br> right before a block draws nothing, so it is two spaces.
+  // Each blank line in the editor is a blank line in Wrike. A <br> right before a block draws nothing, so it is a backslash before the newline.
   test.each([
-    ["one break inside a paragraph", "a<br />b", "a  \nb"],
+    ["one break inside a paragraph", "a<br />b", "a\\\nb"],
     ["a blank line between paragraphs", "a<br /><br />b", "a\n\nb"],
     ["two blank lines between paragraphs", "a<br /><br /><br />b", "a\n\n\nb"],
     ["a list right under text", "a<ul><li>x</li></ul>", "a\n- x"],
-    ["a list after a break", "a<br /><ul><li>x</li></ul>", "a  \n- x"],
+    ["a list after a break", "a<br /><ul><li>x</li></ul>", "a\\\n- x"],
     ["a blank line before a list", "a<br /><br /><ul><li>x</li></ul>", "a\n\n- x"],
     ["text right under a list", "<ul><li>x</li></ul>a", "- x\n\na"],
     ["a blank line after a list", "<ul><li>x</li></ul><br />a", "- x\n\n\na"],
     ["text right under a heading", "<h5>H</h5>a", "##### H\n\na"],
-    ["a list inside a list item", '<ul><li>x<br /><ul style="list-style-type: circle;"><li>y</li></ul></li></ul>', "- x  \n  - y"],
-    ["spaces at the ends of a line", "a <br /> b", "a&#32;  \n&#32;b"],
+    ["a list inside a list item", '<ul><li>x<br /><ul style="list-style-type: circle;"><li>y</li></ul></li></ul>', "- x\\\n  - y"],
+    ["spaces at the ends of a line", "a <br /> b", "a&#32;\\\n&#32;b"],
     ["a space inside bold", "<b>a </b> b", "**a&#32;** b"],
   ])("%s", (_name, html, markdown) => {
     expect(htmlToMarkdown(html)).toBe(markdown)
@@ -85,6 +85,13 @@ describe("line breaks", () => {
 })
 
 describe("editableDescription", () => {
+  test("an editor that strips trailing spaces on save keeps every line break", () => {
+    const html = "Owner: Riley<br />Due: Friday<br />Notes: see below<ul><li>one<br />two</li></ul>"
+    const editable = editableDescription(html)
+    expect(editable.format).toBe("markdown")
+    const stripped = `${editable.text.replace(/[ \t]+$/gm, "")}\n\nAdded a line.`
+    expect(descriptionFromEdit({ ...editable, text: stripped })).toBe(`${html}Added a line.`)
+  })
   test("simple HTML opens as markdown and converts back", () => {
     const editable = editableDescription("Line one<br><br>Line <b>two</b>")
     expect(editable).toMatchObject({ format: "markdown", text: "Line one\n\nLine **two**" })
@@ -179,7 +186,7 @@ describe("nested bullet lists", () => {
 describe("images", () => {
   test("open as ![](src) and save back with the same src", () => {
     const html = 'Before<br /><img src="//storage.example.test/thumb100/a b.png?x=1&amp;y=2" /><br />After'
-    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Before  \n![](<//storage.example.test/thumb100/a b.png?x=1&y=2>)  \nAfter" })
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Before\\\n![](<//storage.example.test/thumb100/a b.png?x=1&y=2>)\\\nAfter" })
     expect(descriptionFromEdit(editableDescription(html))).toBe(html)
   })
 })
@@ -203,6 +210,29 @@ describe("text color and highlight", () => {
   })
   test("a bare ==highlight== takes the highlight Wrike descriptions use most", () => {
     expect(markdownToHtml("==look==")).toBe('<span style="background-color: #F8BBD0;">look</span>')
+  })
+})
+
+describe("prose a person types", () => {
+  // Like markdown's _, == and ++ open only with no word running into them, and no delimiter takes a space just inside it.
+  test.each([
+    "a==b==c",
+    "if a == b and c == d",
+    "i++; j++",
+    "c++/g++",
+    "c++ and g++",
+    "x++ + y++",
+    "set {color:#fff} and {color} later",
+  ])("%s stays text", (typed) => {
+    expect(markdownToHtml(typed)).toBe(typed)
+  })
+  test.each([
+    ["==look== here", '<span style="background-color: #F8BBD0;">look</span> here'],
+    ["(++under++)", "(<u>under</u>)"],
+    ["a {color:#fff}x{color}, b", 'a <span style="color: #fff;">x</span>, b'],
+    ["in a{color:#fff}x{color}y, as Wrike colors part of a word", 'in a<span style="color: #fff;">x</span>y, as Wrike colors part of a word'],
+  ])("%s is still markup", (typed, html) => {
+    expect(markdownToHtml(typed)).toBe(html)
   })
 })
 

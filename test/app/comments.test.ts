@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { resolveKey } from "../../src/app/keymap"
-import { listCursor, listRows, mentionSuggestions } from "../../src/app/selectors"
+import { countingDown, listCursor, listRows, mentionSuggestions } from "../../src/app/selectors"
 import type { State } from "../../src/app/state"
 import { attachmentId, commentId, userId } from "../../src/domain/ids"
 import type { Attachment, Comment, Task } from "../../src/domain/model"
@@ -162,6 +162,13 @@ describe("editing my comment", () => {
     expect(unchanged.state.flash?.text).toBe("Comment unchanged")
   })
 
+  test("the clock keeps counting the edited comment's window down when the selection moves off it", () => {
+    const editing = play(onMine(), "enter").state
+    expect(countingDown({ ...editing, selected: null })).toBe(true)
+    expect(countingDown({ ...editing, selected: { kind: "comment", id: older.id } })).toBe(true)
+    expect(countingDown({ ...editing, mode: { kind: "browse" }, selected: null })).toBe(false)
+  })
+
   test("a window that closes while typing keeps the draft and says so", () => {
     const { state, effects } = play(onMine(), "enter", { type: "draft", text: "Too late" }, moved("2026-11-12T16:03:01Z"), "enter")
     expect(effects).toEqual([])
@@ -287,6 +294,20 @@ describe("mentions in the comment box", () => {
         body: { text: `<a class="stream-user-id avatar" rel="${PAT}">&#64;Pat Example</a> can you &lt;check&gt; this?`, plainText: false },
       },
     ])
+  })
+
+  test("when the editor leaves fewer mentions of a name two people share, the box stays open and says so", () => {
+    const JOHN_A = userId("JOHNA")
+    const JOHN_B = userId("JOHNB")
+    const opened = openWith([older])
+    const contacts = new Map(opened.contacts).set(JOHN_A, { id: JOHN_A, name: "John Smith", email: null, active: true }).set(JOHN_B, { id: JOHN_B, name: "John Smith", email: "b@example.test", active: true })
+    const draft = "@John Smith and @John Smith "
+    const composing = play({ ...opened, contacts }, "c", { type: "draft", text: "@jo" }, "tab", { type: "draft", text: "@John Smith and @jo" }, "down", "tab").state
+    expect(composing.mode).toMatchObject({ draft, mentions: [{ at: 0, id: JOHN_A }, { at: 16, id: JOHN_B }] })
+    const back = play(composing, "ctrl+e", { type: "composed", text: "@John Smith only" })
+    expect(back.effects.map((effect) => effect.kind)).toEqual(["compose-in-editor"])
+    expect(back.state.mode).toMatchObject({ kind: "compose", draft: "@John Smith only", mentions: [] })
+    expect(back.state.flash?.text).toBe("More than one person named John Smith was mentioned and the editor removed one, so it is plain text now. Type @ to pick the person again")
   })
 
   test("typing over a picked mention makes it plain text again", () => {
