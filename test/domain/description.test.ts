@@ -25,7 +25,7 @@ describe("markdownToHtml", () => {
   test("writes Wrike's tag set with <br> between paragraphs and no <p>", () => {
     const markdown = ["## Plan", "", "First **bold** and ~~gone~~", "", "Second", "", "- one", "- two", "", "[link](https://example.test)"].join("\n")
     expect(markdownToHtml(markdown)).toBe(
-      '<h2>Plan</h2>First <strong>bold</strong> and <s>gone</s><br /><br />Second<ul><li>one</li><li>two</li></ul><a href="https://example.test">link</a>',
+      '<h2>Plan</h2>First <b>bold</b> and <s>gone</s><br /><br />Second<ul><li>one</li><li>two</li></ul><a href="https://example.test">link</a>',
     )
   })
   test("an empty document clears the description", () => {
@@ -50,6 +50,12 @@ describe("a description round trip through the editor", () => {
       "See https://www.wrike.com/open.htm?id=1 for details",
     )
   })
+  test("keeps the blank lines Wrike leaves at the end", () => {
+    const html = "Done<br /><br />"
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Done" })
+    expect(roundTrip(html)).toBe(html)
+    expect(descriptionFromEdit({ ...editableDescription(html), text: "Done today" })).toBe("Done today<br /><br />")
+  })
   test("keeps an explicit link", () => {
     expect(roundTrip('Fixed in <a href="https://example.test/pull/1">PR 1</a>')).toBe(
       'Fixed in <a href="https://example.test/pull/1">PR 1</a>',
@@ -60,8 +66,8 @@ describe("a description round trip through the editor", () => {
 describe("editableDescription", () => {
   test("simple HTML opens as markdown and converts back", () => {
     const editable = editableDescription("Line one<br><br>Line <b>two</b>")
-    expect(editable).toEqual({ format: "markdown", text: "Line one\n\nLine **two**" })
-    expect(descriptionFromEdit({ format: "markdown", text: "Line one\n\nLine **2**\n" })).toBe("Line one<br /><br />Line <strong>2</strong>")
+    expect(editable).toMatchObject({ format: "markdown", text: "Line one\n\nLine **two**" })
+    expect(descriptionFromEdit({ ...editable, text: "Line one\n\nLine **2**\n" })).toBe("Line one<br /><br />Line <b>2</b>")
   })
   test.each([
     ["underline", "plain <u>under</u>"],
@@ -80,7 +86,7 @@ describe("code in a description", () => {
 
   test("inline code opens as markdown and comes back as <code>", () => {
     const html = "Points at <code>grade_indicators &lt;v2&gt;</code> now"
-    expect(editableDescription(html)).toEqual({ format: "markdown", text: "Points at `grade_indicators <v2>` now" })
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Points at `grade_indicators <v2>` now" })
     expect(roundTrip(html)).toBe(html)
   })
   test("a <pre> block opens as a fence and keeps its lines", () => {

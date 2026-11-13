@@ -1,9 +1,6 @@
 import { Marked, Renderer } from "marked"
 import TurndownService from "turndown"
-
-const ROUND_TRIP_TAGS = new Set([
-  "p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "b", "strong", "i", "em", "s", "a", "ul", "ol", "li", "code", "pre",
-])
+import { sameHtml } from "./html-equivalence"
 
 function turndown(): TurndownService {
   const service = new TurndownService({
@@ -12,6 +9,11 @@ function turndown(): TurndownService {
     emDelimiter: "*",
     codeBlockStyle: "fenced",
   })
+  // Wrike stores <b> and <strong> alike, so each keeps its own delimiter and comes back as itself.
+  service.addRule("bold", { filter: "b", replacement: (content) => (content.trim() ? `**${content}**` : "") })
+  service.addRule("strong", { filter: "strong", replacement: (content) => (content.trim() ? `__${content}__` : "") })
+  service.addRule("italic", { filter: "i", replacement: (content) => (content.trim() ? `*${content}*` : "") })
+  service.addRule("emphasis", { filter: "em", replacement: (content) => (content.trim() ? `_${content}_` : "") })
   service.addRule("strikethrough", {
     filter: ["s", "del"],
     replacement: (content) => `~~${content}~~`,
@@ -64,6 +66,14 @@ class WrikeRenderer extends Renderer {
   override paragraph(token: Parameters<Renderer["paragraph"]>[0]): string {
     return `${this.parser.parseInline(token.tokens)}<br /><br />`
   }
+  override strong(token: Parameters<Renderer["strong"]>[0]): string {
+    const tag = token.raw.startsWith("__") ? "strong" : "b"
+    return `<${tag}>${this.parser.parseInline(token.tokens)}</${tag}>`
+  }
+  override em(token: Parameters<Renderer["em"]>[0]): string {
+    const tag = token.raw.startsWith("_") ? "em" : "i"
+    return `<${tag}>${this.parser.parseInline(token.tokens)}</${tag}>`
+  }
   override del(token: Parameters<Renderer["del"]>[0]): string {
     return `<s>${this.parser.parseInline(token.tokens)}</s>`
   }
@@ -96,32 +106,30 @@ export function markdownToHtml(markdown: string): string {
     .replace(/(?:<br \/>)+(<\/li>|<(?:h[1-6]|ul|ol|pre)>|$)/g, "$1")
 }
 
-export type EditableDescription = { format: "markdown" | "html"; text: string }
+export type EditableDescription =
+  | { format: "markdown"; text: string; padding: Padding }
+  | { format: "html"; text: string }
+
+/** Leading and trailing breaks and spaces, which markdown cannot spell. A save puts them back. */
+type Padding = { before: string; after: string }
+
+const PADDING = /^((?:\s|&nbsp;|&#160;|<br\s*\/?>)*)([\s\S]*?)((?:\s|&nbsp;|&#160;|<br\s*\/?>)*)$/
 
 /**
- * Markdown when every tag survives a round trip through it. Raw HTML otherwise,
+ * Markdown when saving it unchanged writes back the same HTML. Raw HTML otherwise,
  * so a save never strips formatting the user did not touch.
  */
 export function editableDescription(html: string): EditableDescription {
-  return survivesMarkdown(html)
-    ? { format: "markdown", text: htmlToMarkdown(html) }
+  const [, before = "", body = "", after = ""] = PADDING.exec(html)!
+  const text = htmlToMarkdown(body)
+  // A description of nothing but blank lines would come back empty, so it stays HTML.
+  return (body !== "" || html === "") && sameHtml(markdownToHtml(text), body)
+    ? { format: "markdown", text, padding: { before, after } }
     : { format: "html", text: html }
 }
 
 export function descriptionFromEdit(edited: EditableDescription): string {
-  return edited.format === "markdown" ? markdownToHtml(edited.text) : edited.text.trim()
-}
-
-function survivesMarkdown(html: string): boolean {
-  // Markup inside code would come back as literal text.
-  for (const match of html.matchAll(/<(pre|code)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
-    if (match[2]!.includes("<")) return false
-  }
-  for (const match of html.matchAll(/<\/?([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g)) {
-    const tag = match[1]!.toLowerCase()
-    if (!ROUND_TRIP_TAGS.has(tag)) return false
-    const attributes = [...match[2]!.matchAll(/([a-zA-Z-]+)\s*=/g)].map((attribute) => attribute[1]!.toLowerCase())
-    if (attributes.some((name) => !(tag === "a" && (name === "href" || name === "rel" || name === "target")))) return false
-  }
-  return true
+  if (edited.format === "html") return edited.text.trim()
+  const html = markdownToHtml(edited.text)
+  return html === "" ? "" : edited.padding.before + html + edited.padding.after
 }

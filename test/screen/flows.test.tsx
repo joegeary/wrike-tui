@@ -232,7 +232,7 @@ describe("Editing a task", () => {
     expect(app.outside.edited).toEqual([{ initial: expect.stringContaining("## Goal\n\nStaff sign in"), extension: "md" }])
     const { description } = app.fake.writes[0]!.params
     expect(description).toStartWith("<h2>Goal</h2>Staff sign in to the sandbox")
-    expect(description).toContain("<li>Test with <strong>three</strong> pilot accounts</li>")
+    expect(description).toContain("<li>Test with <b>three</b> pilot accounts</li>")
     expect(description).toContain('<a href="https://example.test/runbooks/sso">SSO runbook</a>')
   })
 
