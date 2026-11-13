@@ -8,7 +8,7 @@ import { openTask, pickerOptions, selectedEntry, selectedTask } from "../selecto
 import { EDIT_FIELDS, type Action, type Mode, type OpenTarget, type Origin, type PickerField, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
 import { newComment } from "./comments"
 import { failure, info, markMissing, retitle, TODO, then } from "./core"
-import { isCurrent, loadHistory, needsHistory, open } from "./load"
+import { historyStale, isCurrent, loadHistory, needsHistory, open } from "./load"
 
 export function detailsLoaded(state: State, action: Action & { type: "details-loaded" }): Update {
   if (!isCurrent(state, "details", action.request)) return [state, []]
@@ -28,7 +28,8 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
 export function taskSaved(state: State, action: Action & { type: "task-saved" }): Update {
   if (!action.result.ok) return [{ ...state, flash: failure(describeError(action.result.error)) }, []]
   const task = action.result.value
-  return retitle({ ...replaceTask(state, task), flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
+  const saved = retitle({ ...replaceTask(state, task), flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
+  return then(saved, (next) => historyStale(next, task))
 }
 
 /** Puts a saved task everywhere it is listed. A list of active tasks loses one that is closed, and My to-do gains one that became mine. */

@@ -146,6 +146,14 @@ export function loadHistory(state: State, task: Task, page: "first" | "more"): U
   ]
 }
 
+/** A save makes the task's held history stale. A task drawn with its history asks again now, keeping the old changes drawn meanwhile, and any other on its next view. */
+export function historyStale(state: State, task: Task): Update {
+  if (state.settings.history && shown(state.details)?.task.id === task.id) return loadHistory(state, task, "first")
+  const histories = new Map(state.histories)
+  histories.delete(task.id)
+  return [{ ...state, histories }, []]
+}
+
 export function historyLoaded(state: State, action: Action & { type: "history-loaded" }): Update {
   const held = state.histories.get(action.taskId)
   if (!held || !isCurrent(state, `history:${action.taskId}`, action.request)) return [state, []]
