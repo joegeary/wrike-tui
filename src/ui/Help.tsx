@@ -18,7 +18,7 @@ function column(state: State, contexts: Context[], gaps: boolean): Line[] {
   return contexts.flatMap((context, index): Line[] => [
     ...(gaps && index > 0 ? [{ kind: "gap" } as const] : []),
     { kind: "title", text: CONTEXT_TITLES[context] },
-    ...boundCommands(context)
+    ...boundCommands(state.keymap, context)
       .filter(({ command }) => isOffered(command, state))
       .map(({ command, keys }): Line => ({ kind: "binding", keys: keys.map(keyLabel).join(" "), label: command.title })),
   ])

@@ -1,11 +1,12 @@
 import { useState } from "react"
+import { firstKeyLabel, howToRun, type Keymap } from "../app/keymap"
 import { contactName, sameItem } from "../app/selectors"
 import type { Loadable, State } from "../app/state"
 import { localDay } from "../domain/dates"
 import { hasPreview, type Attachment } from "../domain/model"
 import { describeError } from "../wrike/errors"
 import { itemAnchor } from "./Comments"
-import { fileKind, fileSize, oneLine, shortDay, truncate } from "./format"
+import { fileKind, fileSize, oneLine, shortDay, truncate, upperFirst } from "./format"
 import { useTheme } from "./theme"
 
 /** A thumbnail's box. With block characters a cell is one pixel wide and two tall, so Wrike's small previews fill it. */
@@ -36,7 +37,7 @@ export function Attachments({ state, attachments, width }: { state: State; attac
               <span fg={theme.text}>{name}</span>
               <span fg={selected ? theme.selectedDim : theme.dim}>{truncate(`  ${about.filter((part) => part !== null).join("  ")}`, width - Bun.stringWidth(name))}</span>
             </text>
-            {selected && hasPreview(attachment) ? <Preview key={attachment.id} preview={state.previews.get(attachment.id)} /> : null}
+            {selected && hasPreview(attachment) ? <Preview key={attachment.id} preview={state.previews.get(attachment.id)} open={openFile(state.keymap)} /> : null}
           </box>
         )
       })}
@@ -44,8 +45,13 @@ export function Attachments({ state, attachments, width }: { state: State; attac
   )
 }
 
+function openFile(keymap: Keymap): string {
+  const key = firstKeyLabel(keymap, "details.act")
+  return key === null ? `${upperFirst(howToRun(keymap, "details.act"))} to open the file.` : `${key} opens the file.`
+}
+
 /** The thumbnail, drawn with the terminal's best image protocol, or a line that says why there is none. */
-function Preview({ preview }: { preview: Loadable<Uint8Array> | undefined }) {
+function Preview({ preview, open }: { preview: Loadable<Uint8Array> | undefined; open: string }) {
   const theme = useTheme()
   const [undrawable, setUndrawable] = useState(false)
   const note = (text: string) => (
@@ -55,6 +61,6 @@ function Preview({ preview }: { preview: Loadable<Uint8Array> | undefined }) {
   )
   if (preview?.state === "error") return note(`No preview: ${describeError(preview.error)}`)
   if (preview?.state !== "ready") return note("Loading the preview...")
-  if (undrawable) return note("This preview cannot be drawn here. Enter opens the file.")
+  if (undrawable) return note(`This preview cannot be drawn here. ${open}`)
   return <image source={preview.value} protocol="auto" fit="fit" width={PREVIEW.width} height={PREVIEW.height} flexShrink={0} onError={() => setUndrawable(true)} />
 }

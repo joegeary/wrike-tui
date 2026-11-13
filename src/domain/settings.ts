@@ -15,7 +15,12 @@ export type Settings = {
   /** Whether field history is drawn among the comments. */
   history: boolean
   lists: Partial<Record<TaskScopeKind, Partial<ListSpec>>>
+  /** Keys that replace the defaults, by command ID. Absent from a file that changes none. */
+  keys?: KeyOverrides
 }
+
+/** A command ID to the key, or the list of keys, that replace its default keys. An empty list unbinds the command. */
+export type KeyOverrides = Readonly<Record<string, string | readonly string[]>>
 
 export const DEFAULT_SETTINGS: Settings = { theme: "terminal", navWidth: NAV_WIDTH.default, completed: false, history: true, lists: {} }
 

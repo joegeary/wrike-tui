@@ -1,5 +1,5 @@
 import { isOffered } from "../app/commands"
-import { activeContexts, boundCommands, keyLabel } from "../app/keymap"
+import { activeContexts, boundCommands, firstKeyLabel, keyLabel, type Keymap } from "../app/keymap"
 import { currentStep, fieldDefs, isMultiPicker } from "../app/selectors"
 import type { ConfirmTarget, State, TaskPlan } from "../app/state"
 import { fieldEditor } from "../domain/fields"
@@ -11,7 +11,7 @@ type Hint = { key: string; text: string }
 /** The commands with a hint that a key runs here, read from the keymap and the registry. */
 function hints(state: State): Hint[] {
   return activeContexts(state).flatMap((context) =>
-    boundCommands(context).flatMap(({ command, keys }) => {
+    boundCommands(state.keymap, context).flatMap(({ command, keys }) => {
       if (!command.hint || !isOffered(command, state)) return []
       const text = typeof command.hint === "string" ? command.hint : command.hint(state)
       return text === null ? [] : [{ key: keyLabel(keys[0]!), text }]
@@ -24,10 +24,10 @@ function message(state: State, theme: Theme): { text: string; color: Color } {
   if ((mode.kind === "edit-text" || mode.kind === "new-task") && mode.error) return { text: mode.error, color: theme.error }
   if (mode.kind === "form" && mode.phase === "filling" && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
-  if (mode.kind === "confirm") return { text: question(mode.target), color: theme.warning }
+  if (mode.kind === "confirm") return { text: question(mode.target, keyOf(state.keymap, "confirm.yes")), color: theme.warning }
   if (mode.kind === "new-task") return { text: planText(mode.plan), color: theme.dim }
-  if (mode.kind === "picker" && isMultiPicker(state, mode) && mode.field === "custom") return { text: "Type to filter. With nothing chosen, Enter clears the field.", color: theme.dim }
-  if (mode.kind === "picker" && mode.field === "request-form") return { text: "Type to search, Enter opens the form", color: theme.dim }
+  if (mode.kind === "picker" && isMultiPicker(state, mode) && mode.field === "custom") return { text: `Type to filter. With nothing chosen, ${keyOf(state.keymap, "picker.apply")} clears the field.`, color: theme.dim }
+  if (mode.kind === "picker" && mode.field === "request-form") return { text: `Type to search, ${keyOf(state.keymap, "picker.apply")} opens the form`, color: theme.dim }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
   if (mode.kind === "form") return { text: mode.phase === "filling" && currentStep(mode) ? "* is required" : "", color: theme.dim }
   if (mode.kind === "palette") return { text: "Type to find a command", color: theme.dim }
@@ -46,17 +46,20 @@ const quoted = (title: string) => `"${title.length > 40 ? `${title.slice(0, 39)}
 
 const tasks = (n: number) => (n === 1 ? "1 task" : `${n} tasks`)
 
-/** The question a confirm asks. */
-function question(target: ConfirmTarget): string {
-  if (target.kind === "comment") return "Delete this comment? y deletes, any other key keeps it"
+/** The key that runs a command, as drawn, for a sentence in a mode the palette cannot open over. */
+const keyOf = (keymap: Keymap, command: string) => firstKeyLabel(keymap, command) ?? "no key"
+
+/** The question a confirm asks, with the key that answers yes. */
+function question(target: ConfirmTarget, yes: string): string {
+  if (target.kind === "comment") return `Delete this comment? ${yes} deletes, any other key keeps it`
   if (target.kind === "delete-tasks") {
     const n = target.tasks.length
-    return `Delete ${tasks(n)}? ${n === 1 ? "It goes" : "They go"} to the Recycle Bin. y deletes, any other key keeps ${n === 1 ? "it" : "them"}`
+    return `Delete ${tasks(n)}? ${n === 1 ? "It goes" : "They go"} to the Recycle Bin. ${yes} deletes, any other key keeps ${n === 1 ? "it" : "them"}`
   }
-  if (target.kind === "cancel-tasks") return `Cancel ${tasks(target.plan.length)}? y cancels, any other key leaves them`
+  if (target.kind === "cancel-tasks") return `Cancel ${tasks(target.plan.length)}? ${yes} cancels, any other key leaves them`
   const subtasks =
     target.subtasks === 0 ? "" : target.subtasks === 1 ? " Its subtask stays as a top-level task." : ` Its ${target.subtasks} subtasks stay as top-level tasks.`
-  return `Delete ${quoted(target.title)}? It goes to the Recycle Bin.${subtasks} y deletes, any other key keeps it`
+  return `Delete ${quoted(target.title)}? It goes to the Recycle Bin.${subtasks} ${yes} deletes, any other key keeps it`
 }
 
 function planText(plan: TaskPlan): string {

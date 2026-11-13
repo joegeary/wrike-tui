@@ -14,6 +14,8 @@ export function truncate(text: string, width: number): string {
 }
 
 /** Whitespace runs, line breaks included, as single spaces. */
+export const upperFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
 export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim()
 
 /** Exactly `width` columns: cut with an ellipsis or padded on the right. */

@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import { firstKeyLabel, howToRun, retryHint, type Keymap } from "../app/keymap"
 import { contactName, currentList, currentView, fieldDefs, folderTitles, listCursor, listRows, markedTasks, statusOf, typedInList, type PaneRow } from "../app/selectors"
 import type { State } from "../app/state"
 import type { ColumnKey, GroupKey } from "../domain/list"
@@ -6,7 +7,7 @@ import { dueDay, permalinkId, startDay, type InboxEntry } from "../domain/model"
 import { scopeTitle } from "../domain/scope"
 import type { ListRow } from "../domain/shape"
 import { retryText } from "../wrike/errors"
-import { fit, fitAfter, fitRight, humanize, listDay, relativeTime, truncate } from "./format"
+import { fit, fitAfter, fitRight, humanize, listDay, relativeTime, truncate, upperFirst } from "./format"
 import { windowCount, windowStart } from "./layout"
 import { Pane, titleRoom } from "./Pane"
 import { statusColor, useTheme, type Color, type Theme } from "./theme"
@@ -55,11 +56,19 @@ function paneTitle(state: State, room: number): string {
   return `${truncate(scopeTitle(scope), Math.max(6, room - Bun.stringWidth(shaping)))}${shaping}`
 }
 
+/** The palette is where the filters are cleared, unless the config gave that command a key. */
+function clearFilters(keymap: Keymap): string {
+  const key = firstKeyLabel(keymap, "list.filter.clear")
+  const palette = firstKeyLabel(keymap, "app.palette")
+  if (key === null && palette !== null) return `Press ${palette} and clear them.`
+  return `${upperFirst(howToRun(keymap, "list.filter.clear"))} to clear them.`
+}
+
 function emptyText(state: State): string {
   const { scope } = state
   const { spec } = currentView(state)
-  if (scope.kind === "inbox") return state.includeRead ? "The Inbox is empty." : "No unread notifications. Press a to show read ones."
-  if (spec.filters.length > 0 && (currentList(state)?.items.length ?? 0) > 0) return "No loaded task matches the filters. Press : and clear them."
+  if (scope.kind === "inbox") return state.includeRead ? "The Inbox is empty." : `No unread notifications. ${upperFirst(howToRun(state.keymap, "inbox.read"))} to show read ones.`
+  if (spec.filters.length > 0 && (currentList(state)?.items.length ?? 0) > 0) return `No loaded task matches the filters. ${clearFilters(state.keymap)}`
   switch (scope.kind) {
     case "todo":
       return "No active task is assigned to you."
@@ -67,7 +76,7 @@ function emptyText(state: State): string {
       return `No task matches "${scope.query}".`
     case "space":
     case "folder":
-      return spec.completed ? "No tasks here." : "No active task here. Press x to show completed ones."
+      return spec.completed ? "No tasks here." : `No active task here. ${upperFirst(howToRun(state.keymap, "list.completed"))} to show completed ones.`
   }
 }
 
@@ -75,7 +84,7 @@ function Notice({ state, width, theme, empty }: { state: State; width: number; t
   const list = currentList(state)
   const error = state.scope.kind === "inbox" ? (state.inbox.state === "error" ? state.inbox.error : null) : (list?.error ?? null)
   const loading = state.scope.kind === "inbox" ? state.inbox.state === "loading" || state.inbox.state === "idle" : !list || list.loading === "first"
-  if (error) return <text fg={theme.error} wrapMode="word" width={width}>{retryText(error)}</text>
+  if (error) return <text fg={theme.error} wrapMode="word" width={width}>{retryText(error, retryHint(state.keymap))}</text>
   if (!empty) return null
   if (loading) return <text fg={theme.dim}>Loading...</text>
   return <text fg={theme.dim} wrapMode="word" width={width}>{emptyText(state)}</text>
@@ -229,7 +238,7 @@ export function ListPane(props: { state: State; width: number; height: number; o
           case "more":
             return (
               <text key={row.id} wrapMode="none" bg={selected ? theme.selection : undefined} fg={selected ? theme.selectedDim : theme.dim}>
-                {fitAfter("  ", `${row.label}${row.label === "Load more" ? ", press Enter" : ""}`, inner)}
+                {fitAfter("  ", `${row.label}${row.label === "Load more" ? `, ${howToRun(state.keymap, "list.open")}` : ""}`, inner)}
               </text>
             )
         }
