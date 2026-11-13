@@ -16,7 +16,7 @@ import {
   tasksLoaded,
   treeLoaded,
 } from "./reduce/load"
-import { commentSaved, composed, composeEditor, editComment, selectItem, submitCompose } from "./reduce/comments"
+import { commentDeleted, commentSaved, composed, composeEditor, confirmDelete, deleteComment, editComment, keepComment, selectItem, submitCompose } from "./reduce/comments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
 import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
 import { currentList, navRowsOf, openTask, pickerOptions } from "./selectors"
@@ -92,6 +92,9 @@ function step(state: State, action: Action): Update {
     case "comment-saved":
       return commentSaved(state, action)
 
+    case "comment-deleted":
+      return commentDeleted(state, action)
+
     case "focus":
       return focusPane(state, action.pane === "left" ? PANES.indexOf(state.focus) - 1 : action.pane === "right" ? PANES.indexOf(state.focus) + 1 : PANES.indexOf(action.pane))
     case "show":
@@ -147,6 +150,10 @@ function step(state: State, action: Action): Update {
       return [{ ...state, selected: null }, []]
     case "edit-comment":
       return editComment(state)
+    case "delete-comment":
+      return deleteComment(state)
+    case "confirm":
+      return confirmDelete(state)
     case "task":
       return onTask(state, action.command)
     case "link":
@@ -184,6 +191,7 @@ function onKey(state: State, key: string): Update {
     const cleared = { ...state, flash: null }
     return step(cleared, command.run(cleared))
   }
+  if (state.mode.kind === "confirm-delete") return keepComment({ ...state, flash: null })
   // Typing in a picker or the palette filters it. Every other text is typed into an input, which reports through "draft".
   const text = key === "space" ? " " : key
   if ((state.mode.kind === "picker" || state.mode.kind === "palette") && [...text].length === 1) {
@@ -228,6 +236,7 @@ function submit(state: State): Update {
     case "browse":
     case "edit":
     case "help":
+    case "confirm-delete":
       return [state, []]
   }
 }
@@ -235,5 +244,6 @@ function submit(state: State): Update {
 function cancel(state: State): Update {
   const mode = state.mode
   if (mode.kind === "edit-text" || mode.kind === "picker") return [closeEditor(state, mode.origin, mode.field), []]
+  if (mode.kind === "confirm-delete") return keepComment(state)
   return [{ ...state, mode: { kind: "browse" } }, []]
 }

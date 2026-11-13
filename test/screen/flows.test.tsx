@@ -380,6 +380,58 @@ describe("Editing my comment", () => {
   })
 })
 
+describe("Deleting my comment", () => {
+  test("d asks, any other key keeps it, and y deletes it", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    const mine = app.fake.data.comments.find((comment) => comment.authorId === ME && comment.taskId === TASK.sso)!
+    await app.press("[", "[", "d")
+    await app.see("Delete this comment? y deletes, any other key keeps it", "y delete  n keep")
+    await app.press("j")
+    await app.see("Kept the comment", "Comments (3)")
+    await app.press("d")
+    await app.see("Delete this comment?")
+    await app.press("y")
+    const deleted = await app.see("Comment deleted", "Comments (2)")
+    expect(deleted).not.toContain("Waiting on the metadata file.")
+    expect(app.fake.writes).toEqual([{ method: "DELETE", path: `/comments/${mine.id}`, params: {} }])
+  })
+
+  test("a comment someone already deleted goes away with a neutral message", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("[", "[")
+    const mine = app.fake.data.comments.findIndex((comment) => comment.authorId === ME && comment.taskId === TASK.sso)
+    app.fake.data.comments.splice(mine, 1)
+    await app.press("d", "y")
+    await app.see("The comment was already deleted", "Comments (2)")
+  })
+
+  test("someone else's comment is not mine to delete", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("[", "d")
+    await app.see("This is Pat Example's comment, not yours")
+    expect(app.fake.writes).toEqual([])
+  })
+
+  test("read-only mode asks, then refuses and keeps the comment", async () => {
+    app = await openApp(WIDE, { readOnly: true })
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("[", "[", "d", "y")
+    await app.see("read-only mode: not saved", "Comments (3)", "Waiting on the metadata file.")
+    expect(app.fake.writes).toEqual([])
+  })
+})
+
 describe("Keys and panes", () => {
   test("? shows the legend for the focused pane, straight from the keymap", async () => {
     app = await openApp(WIDE)

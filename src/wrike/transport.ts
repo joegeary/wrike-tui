@@ -3,7 +3,7 @@ import type { Params } from "../domain/patch"
 import { WrikeFailure, type WrikeError } from "./errors"
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
-export type Method = "GET" | "PUT" | "POST"
+export type Method = "GET" | "PUT" | "POST" | "DELETE"
 
 export type Page = { data: unknown[]; next: string | null }
 

@@ -20,11 +20,38 @@ export function selectItem(state: State, by: 1 | -1): Update {
 
 export const newComment = (): Compose => ({ kind: "compose", draft: "", editing: null, mentions: [] })
 
+const notMine = (state: State, comment: Comment) => `This is ${contactName(state, comment.authorId)}'s comment, not yours`
+
 /** Why the selected comment cannot be edited, or null when it can. */
 function editRefusal(state: State, comment: Comment): string | null {
-  if (comment.authorId !== state.profile.userId) return `This is ${contactName(state, comment.authorId)}'s comment, not yours`
+  if (comment.authorId !== state.profile.userId) return notMine(state, comment)
   if (editWindowLeft(comment.createdDate, state.clock.now) <= 0) return "Comments can only be edited in the 5 minutes after posting"
   return null
+}
+
+/** `d` on a comment of mine asks first. Deleting has no time limit, in Wrike as here. */
+export function deleteComment(state: State): Update {
+  const comment = selectedComment(state)
+  if (!comment) return [state, []]
+  if (comment.authorId !== state.profile.userId) return [{ ...state, flash: info(notMine(state, comment)) }, []]
+  return [{ ...state, mode: { kind: "confirm-delete", id: comment.id } }, []]
+}
+
+/** `y` while asked: the comment is deleted. */
+export function confirmDelete(state: State): Update {
+  const task = openTask(state)
+  if (state.mode.kind !== "confirm-delete" || !task) return [state, []]
+  return [{ ...state, mode: { kind: "browse" }, flash: info("Deleting the comment...") }, [{ kind: "delete-comment", taskId: task.id, id: state.mode.id }]]
+}
+
+export const keepComment = (state: State): Update => [{ ...state, mode: { kind: "browse" }, flash: info("Kept the comment") }, []]
+
+export function commentDeleted(state: State, action: Action & { type: "comment-deleted" }): Update {
+  const { taskId, id, result } = action
+  if (result.ok) return [{ ...removeComment(state, taskId, id), flash: info("Comment deleted") }, []]
+  // A second delete answers 404: the comment is gone either way.
+  if (result.error.kind === "not_found") return [{ ...removeComment(state, taskId, id), flash: info("The comment was already deleted") }, []]
+  return [{ ...state, flash: failure(describeError(result.error)) }, []]
 }
 
 /** Opens the comment box on the selected comment, when it is mine and still in its edit window. */

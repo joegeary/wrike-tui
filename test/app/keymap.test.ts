@@ -3,6 +3,7 @@ import { BROWSE_CONTEXTS, COMMAND_GROUPS, commandById, COMMANDS, isOffered, type
 import { activeContexts, boundCommands, CONTEXT_TITLES, KEYMAP, keysFor, MAX_LABEL, normalizeKey, resolveKey } from "../../src/app/keymap"
 import { reduce } from "../../src/app/reducer"
 import { PANES, type Mode, type State } from "../../src/app/state"
+import { commentId } from "../../src/domain/ids"
 import { inTodo, loaded, play, withTree } from "../support/app"
 
 const MODES: Mode[] = [
@@ -14,6 +15,7 @@ const MODES: Mode[] = [
   { kind: "picker", field: "status", query: "", cursor: 0, chosen: [], origin: "browse" },
   { kind: "picker", field: "assignees", query: "", cursor: 0, chosen: [], origin: "browse" },
   { kind: "compose", draft: "", editing: null, mentions: [] },
+  { kind: "confirm-delete", id: commentId("C1") },
   { kind: "palette", query: "", cursor: 0 },
   { kind: "help" },
 ]

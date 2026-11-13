@@ -246,6 +246,12 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       comment.text = storedText(form)
       return json({ kind: "comments", data: [comment] })
     }
+    if (commentPath && method === "DELETE") {
+      const at = data.comments.findIndex((candidate) => candidate.id === commentPath[1])
+      if (at < 0) return commentNotFound()
+      data.comments.splice(at, 1)
+      return json({ kind: "comments", data: [] })
+    }
     return wrikeError(404, "method_not_found", `No fake route for ${method} ${path}`)
   }
 

@@ -121,6 +121,10 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))
       return dispatch({ type: "comment-saved", taskId, editing, result })
     }
+    case "delete-comment": {
+      const result = await attempt(async () => (await client.deleteComment(effect.id), null))
+      return dispatch({ type: "comment-deleted", taskId: effect.taskId, id: effect.id, result })
+    }
     case "edit-description": {
       const editable = editableDescription(effect.task.descriptionHtml)
       const edited = await edit(deps, dispatch, editable.text, editable.format === "markdown" ? "md" : "html")

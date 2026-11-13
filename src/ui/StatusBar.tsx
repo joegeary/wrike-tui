@@ -20,6 +20,7 @@ function message(state: State, theme: Theme): { text: string; color: Color } {
   const { mode } = state
   if (mode.kind === "edit-text" && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
+  if (mode.kind === "confirm-delete") return { text: "Delete this comment? y deletes, any other key keeps it", color: theme.warning }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
   if (mode.kind === "palette") return { text: "Type to find a command", color: theme.dim }
   if (mode.kind === "filter-input") return { text: "Shows tasks whose title contains this. Empty clears it.", color: theme.dim }

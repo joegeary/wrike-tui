@@ -148,7 +148,7 @@ describe("Retry-After", () => {
 })
 
 describe("read-only mode", () => {
-  test.each(["PUT", "POST"] as const)("a %s is refused before any request is sent", async (method) => {
+  test.each(["PUT", "POST", "DELETE"] as const)("a %s is refused before any request is sent", async (method) => {
     const { transport, calls } = transportWith([ok([])], { readOnly: true })
     expect(await errorOf(transport.request(method, "/tasks/T1", { title: "x" }))).toEqual({ kind: "read_only" })
     expect(calls).toEqual([])

@@ -39,6 +39,7 @@ export type WrikeClient = {
   comments(id: TaskId): Promise<Comment[]>
   addComment(id: TaskId, body: CommentBody): Promise<Comment>
   updateComment(id: CommentId, body: CommentBody): Promise<Comment>
+  deleteComment(id: CommentId): Promise<void>
   folders(ids: string[]): Promise<string[]>
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
 }
@@ -166,6 +167,10 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
 
     async updateComment(id, body) {
       return one(parseAll(CommentSchema, await transport.request("PUT", `/comments/${id}`, commentParams(body)), "comment"))
+    },
+
+    async deleteComment(id) {
+      await transport.request("DELETE", `/comments/${id}`)
     },
 
     async folders(ids) {

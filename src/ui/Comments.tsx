@@ -14,6 +14,7 @@ export const itemAnchor = (item: DetailsItem) => `${item.kind}:${item.id}`
 export function Comments({ state, comments, style }: { state: State; comments: Comment[]; style: SyntaxStyle }) {
   const theme = useTheme()
   const left = editTimeLeft(state)
+  const deleting = state.mode.kind === "confirm-delete"
   if (comments.length === 0) return <text fg={theme.dim}>No comments yet. Press c to write one.</text>
   return (
     <>
@@ -25,7 +26,7 @@ export function Comments({ state, comments, style }: { state: State; comments: C
             id={itemAnchor({ kind: "comment", id: comment.id })}
             flexDirection="column"
             marginTop={index === 0 ? 0 : 1}
-            {...(selected ? { border: ["left"], borderStyle: "heavy", borderColor: theme.accent, backgroundColor: theme.selection } : { paddingLeft: 1 })}
+            {...(selected ? { border: ["left"], borderStyle: "heavy", borderColor: deleting ? theme.error : theme.accent, backgroundColor: theme.selection } : { paddingLeft: 1 })}
           >
             <box flexDirection="row" flexWrap="wrap">
               <text wrapMode="none" flexShrink={1}>

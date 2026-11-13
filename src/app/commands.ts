@@ -3,7 +3,7 @@ import { THEME_NAMES, type ThemeName } from "../domain/settings"
 import { currentView, MULTI_PICKERS, navCursorRow, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
-export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "compose" | "palette" | "help"
+export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "compose" | "confirm" | "palette" | "help"
 
 /** The contexts a pane can be in while browsing. The palette lists the commands of these. */
 export const BROWSE_CONTEXTS: ReadonlySet<Context> = new Set(["global", "nav", "list", "task", "details"])
@@ -76,6 +76,7 @@ export const COMMANDS: Command[] = [
   command("details.previous", "Select the previous comment", "Navigate", ["details"], () => ({ type: "select", by: -1 }), { keywords: ["comments"] }),
   command("details.unselect", "Clear the selection", "Navigate", ["details"], () => ({ type: "unselect" }), { when: selecting, hint: "unselect" }),
   command("comment.edit", "Edit the comment", "Task", ["details"], () => ({ type: "edit-comment" }), { when: selecting, hint: "edit comment" }),
+  command("comment.delete", "Delete the comment", "Task", ["details"], () => ({ type: "delete-comment" }), { when: selecting, hint: "delete" }),
 
   command("inbox.read", "Toggle read notifications", "List", ["list"], () => ({ type: "toggle-read" }), { when: inInbox, hint: "read" }),
   command("list.toggle", "Open or close the row", "List", ["list"], () => ({ type: "toggle-row" }), { when: inTasks, keywords: ["subtasks", "group", "expand", "collapse"] }),
@@ -150,6 +151,9 @@ export const COMMANDS: Command[] = [
   command("compose.post", "Post the comment", "Task", ["compose"], () => ({ type: "submit" }), { hint: (state) => (editingComment(state) ? "save" : "post") }),
   command("compose.editor", "Write it in $EDITOR", "Task", ["compose"], () => ({ type: "compose-editor" }), { hint: "editor" }),
   command("compose.discard", "Discard", "Task", ["compose"], () => ({ type: "cancel" }), { hint: "discard" }),
+
+  command("confirm.yes", "Delete it", "Task", ["confirm"], () => ({ type: "confirm" }), { hint: "delete" }),
+  command("confirm.no", "Keep it", "Task", ["confirm"], () => ({ type: "cancel" }), { hint: "keep" }),
 
   command("palette.down", "Move down", "App", ["palette"], () => ({ type: "choice-move", by: 1 })),
   command("palette.up", "Move up", "App", ["palette"], () => ({ type: "choice-move", by: -1 })),

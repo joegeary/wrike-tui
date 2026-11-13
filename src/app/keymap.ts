@@ -50,6 +50,7 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("details", "details.previous", "["),
   ...bind("details", "details.unselect", "esc"),
   ...bind("details", "comment.edit", "enter"),
+  ...bind("details", "comment.delete", "d"),
 
   ...bind("task", "task.edit", "e"),
   ...bind("task", "task.status", "s"),
@@ -82,6 +83,9 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("compose", "compose.editor", "ctrl+e"),
   ...bind("compose", "compose.discard", "esc"),
 
+  ...bind("confirm", "confirm.yes", "y"),
+  ...bind("confirm", "confirm.no", "n", "esc"),
+
   ...bind("palette", "palette.down", "down", "ctrl+n"),
   ...bind("palette", "palette.up", "up", "ctrl+p"),
   ...bind("palette", "palette.erase", "backspace"),
@@ -103,6 +107,7 @@ export const CONTEXT_TITLES: Record<Context, string> = {
   picker: "Picker",
   text: "Text field",
   compose: "Comment",
+  confirm: "Confirm",
   palette: "Commands",
   help: "Keys",
 }
@@ -118,6 +123,8 @@ export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] 
       return ["text"]
     case "compose":
       return ["compose"]
+    case "confirm-delete":
+      return ["confirm"]
     case "edit":
       return ["edit"]
     case "picker":

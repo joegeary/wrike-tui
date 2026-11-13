@@ -132,3 +132,52 @@ describe("editing my comment", () => {
     expect(play(handed.state, { type: "composed", text: null }).state.flash?.text).toBe("Comment unchanged")
   })
 })
+
+describe("deleting my comment", () => {
+  const stale = comment("C4", ME, "Yesterday's note", "2026-11-11T10:00:00Z")
+  /** The thread with my day-old comment selected: deleting has no time limit. */
+  const onStale = () => play(openWith([older, stale, newest]), "]", "]").state
+
+  test("d asks first, and y deletes", () => {
+    const asked = play(onStale(), "d")
+    expect(asked.state.mode).toEqual({ kind: "confirm-delete", id: stale.id })
+    expect(asked.effects).toEqual([])
+    const { state, effects } = play(asked.state, "y")
+    expect(effects).toEqual([{ kind: "delete-comment", taskId: overdue.id, id: stale.id }])
+    expect(state.mode).toEqual({ kind: "browse" })
+  })
+
+  test("any other key keeps the comment", () => {
+    for (const key of ["n", "esc", "j", "Y", "enter"]) {
+      const { state, effects } = play(onStale(), "d", key)
+      expect(effects, key).toEqual([])
+      expect(state.mode, key).toEqual({ kind: "browse" })
+      expect(state.flash?.text, key).toBe("Kept the comment")
+    }
+  })
+
+  test("d on someone else's comment says it is not mine", () => {
+    const { state } = play(onStale(), "[", "d")
+    expect(state.mode).toEqual({ kind: "browse" })
+    expect(state.flash?.text).toBe("This is Pat Example's comment, not yours")
+  })
+
+  test("a deleted comment leaves the thread and the selection", () => {
+    const { state } = play(onStale(), { type: "comment-deleted", taskId: overdue.id, id: stale.id, result: { ok: true, value: null } })
+    expect(state.details).toMatchObject({ value: { comments: [older, newest] } })
+    expect(state.selected).toBeNull()
+    expect(state.flash).toEqual({ tone: "info", text: "Comment deleted" })
+  })
+
+  test("a comment that was already gone is removed too, with a neutral message", () => {
+    const { state } = play(onStale(), { type: "comment-deleted", taskId: overdue.id, id: stale.id, result: { ok: false, error: { kind: "not_found" } } })
+    expect(state.details).toMatchObject({ value: { comments: [older, newest] } })
+    expect(state.flash).toEqual({ tone: "info", text: "The comment was already deleted" })
+  })
+
+  test("read-only mode keeps the comment and says nothing was saved", () => {
+    const { state } = play(onStale(), { type: "comment-deleted", taskId: overdue.id, id: stale.id, result: { ok: false, error: { kind: "read_only" } } })
+    expect(state.details).toMatchObject({ value: { comments: [older, stale, newest] } })
+    expect(state.flash).toEqual({ tone: "error", text: "read-only mode: not saved" })
+  })
+})

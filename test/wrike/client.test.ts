@@ -231,6 +231,14 @@ describe("writes", () => {
     expect(original!.updatedDate).toBe(original!.createdDate)
   })
 
+  test("deleteComment sends a DELETE, and a second one is not_found", async () => {
+    const [original] = fake.data.comments.filter((comment) => comment.authorId === ME)
+    await client.deleteComment(commentId(original!.id))
+    expect(fake.writes).toEqual([{ method: "DELETE", path: `/comments/${original!.id}`, params: {} }])
+    expect((await client.comments(taskId(TASK.sso))).map((comment) => comment.id)).not.toContain(original!.id)
+    await expect(client.deleteComment(commentId(original!.id))).rejects.toMatchObject({ error: { kind: "not_found" } })
+  })
+
   test("updating a comment that is gone is not_found", async () => {
     await expect(client.updateComment(commentId("IEAAAAAAIMNOPE01"), { text: "x", plainText: true })).rejects.toMatchObject({ error: { kind: "not_found" } })
   })

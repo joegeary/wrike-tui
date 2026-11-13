@@ -66,6 +66,8 @@ export type Mode =
   | { kind: "edit-text"; field: TextField; draft: string; error?: string; origin: Origin }
   | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
   | Compose
+  /** Asks before the selected comment is deleted. Only `y` deletes it. */
+  | { kind: "confirm-delete"; id: CommentId }
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
 
@@ -149,6 +151,7 @@ export type Effect =
   | { kind: "load-details"; request: number; target: OpenTarget }
   | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
+  | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
   | { kind: "edit-description"; task: Task }
   | { kind: "compose-in-editor"; draft: string }
   | { kind: "open-url"; url: string }
@@ -197,6 +200,8 @@ export type Intent =
   | { type: "select"; by: 1 | -1 }
   | { type: "unselect" }
   | { type: "edit-comment" }
+  | { type: "delete-comment" }
+  | { type: "confirm" }
   | { type: "task"; command: TaskCommand }
   | { type: "link"; act: "browser" | "copy-url" | "copy-id" }
   | { type: "field-move"; by: number }
@@ -227,6 +232,7 @@ export type Action =
   | { type: "details-loaded"; request: number; result: Result<Details> }
   | { type: "task-saved"; done: string; result: Result<Task> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
+  | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
 export type Update = [State, Effect[]]
 
