@@ -113,7 +113,8 @@ wrike-tui signs in with a Wrike permanent access token.
    **API** tab.
 2. Create an app if you have none, then create a permanent access token and
    copy it.
-3. Run `wrike-tui auth login` and paste the token. The prompt does not echo it.
+3. Run `wrike-tui auth login --token` and paste the token. The prompt does not echo it.
+   Plain `wrike-tui auth login` asks whether you want a token or OAuth first.
 
 `auth login` finds the Wrike data center that accepts the token and stores the
 token in the keyring of your operating system. It stores your name and host in
@@ -122,7 +123,8 @@ token in the keyring of your operating system. It stores your name and host in
 | Command | What it does |
 | --- | --- |
 | `wrike-tui` | Opens the client. |
-| `wrike-tui auth login` | Stores a token. |
+| `wrike-tui auth login` | Asks whether to log in with a token or with OAuth. |
+| `wrike-tui auth login --token` | Stores a token. |
 | `wrike-tui auth login --oauth` | Signs in through the browser with OAuth. |
 | `wrike-tui auth status` | Shows who is logged in, how, and when an OAuth access token expires. |
 | `wrike-tui auth logout` | Removes the stored login, the OAuth client secret and the profile. |

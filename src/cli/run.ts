@@ -29,7 +29,8 @@ A keyboard-first terminal client for Wrike.
 
 Usage:
   wrike-tui                     Open the client
-  wrike-tui auth login          Store a Wrike permanent access token in the OS keyring
+  wrike-tui auth login          Ask which way to log in, then log in
+  wrike-tui auth login --token  Store a Wrike permanent access token in the OS keyring
   wrike-tui auth login --oauth  Sign in through the browser with an app from Wrike's App Console
   wrike-tui auth status         Show who is logged in and where the token comes from
   wrike-tui auth logout         Remove the stored login, client secret and profile
@@ -56,11 +57,13 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (command === "update" && rest.length === 0 && (sub === undefined || sub === "--check")) {
     return update(sub === "--check", io)
   }
-  if (command === "auth" && sub === "login" && rest.length === 1 && rest[0] === "--oauth") {
-    return io.oauth ? oauthLogin(io, io.oauth) : (io.err("OAuth login is not available here."), 1)
+  if (command === "auth" && sub === "login" && rest.length <= 1) {
+    const way = rest[0] === "--token" ? "token" : rest[0] === "--oauth" ? "oauth" : rest[0] === undefined ? await pickLogin(io) : undefined
+    if (way === "token") return login(io)
+    if (way === "oauth") return io.oauth ? oauthLogin(io, io.oauth) : (io.err("OAuth login is not available here."), 1)
+    if (way === null) return io.err("No way to log in picked. Nothing was stored."), 1
   }
   if (command === "auth" && rest.length === 0) {
-    if (sub === "login") return login(io)
     if (sub === "status") return status(io)
     if (sub === "logout") return logout(io)
   }
@@ -78,6 +81,22 @@ async function open(io: Io): Promise<number> {
   } catch (thrown) {
     io.err(describeError(toWrikeError(thrown)))
     return 1
+  }
+}
+
+const LOGIN_MENU = `How do you want to log in?
+  1. A permanent access token (Wrike: profile icon, Apps & Integrations, API tab)
+  2. OAuth through the browser (needs an app from Wrike's App Console)`
+
+/** Asks at a terminal. Piped input has no one to ask, so it reads a token as before. */
+async function pickLogin(io: Io): Promise<"token" | "oauth" | null> {
+  if (!io.oauth?.interactive) return "token"
+  io.out(LOGIN_MENU)
+  for (;;) {
+    const answer = await io.oauth.readLine("Pick 1 or 2: ")
+    if (answer === null) return null
+    if (answer === "1") return "token"
+    if (answer === "2") return "oauth"
   }
 }
 

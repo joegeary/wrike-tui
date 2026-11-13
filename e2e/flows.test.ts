@@ -46,7 +46,7 @@ describe("auth", () => {
 
   test("auth login prompts without echo, verifies the token and stores it in the keyring", async () => {
     await tmux.run("clear")
-    await tmux.run(`${BINARY} auth login`)
+    await tmux.run(`${BINARY} auth login --token`)
     await tmux.see("auth-login-prompt", "Wrike access token:")
     await tmux.type(TOKEN)
     expect(await tmux.screen()).not.toContain(TOKEN)
@@ -69,7 +69,7 @@ describe("auth", () => {
 
   test("a wrong token is refused and nothing changes", async () => {
     await tmux.run("clear")
-    await tmux.run(`${BINARY} auth login`)
+    await tmux.run(`${BINARY} auth login --token`)
     await tmux.see("auth-login-prompt-again", "Wrike access token:")
     await tmux.type("not-the-token")
     await tmux.keys("Enter")

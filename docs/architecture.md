@@ -7,7 +7,7 @@ wrike-tui is TypeScript on Bun, rendered by OpenTUI through
 
 Data flows one way. Each layer depends only on the layers under it.
 
-    src/cli/        argv parsing, `auth login [--oauth]|logout|status`, `keys`,
+    src/cli/        argv parsing, `auth login [--token|--oauth]|logout|status`, `keys`,
                     `update`, launching the TUI
     src/ui/         React components that render state and dispatch actions,
                     and the terminal handoffs (editor, browser, clipboard)
@@ -32,8 +32,9 @@ The token resolves in this order.
 1. `WRIKE_TOKEN` in the environment.
 2. The OS keyring through `Bun.secrets`, service `wrike-tui`, name `token`.
 
-`auth login` reads the token with echo off, then probes the known hosts in
-order (`www.wrike.com`, `app-us2.wrike.com`, `app-eu.wrike.com`) with
+`auth login` with no flag asks at a terminal which way to log in, and reads a
+token when its input is piped. `auth login --token` reads the token with echo
+off, then probes the known hosts in order (`www.wrike.com`, `app-us2.wrike.com`, `app-eu.wrike.com`) with
 `GET /api/v4/contacts?me=true`. The first 200 wins. The token goes to the
 keyring and the profile goes to `$XDG_CONFIG_HOME/wrike-tui/profile.json`:
 
