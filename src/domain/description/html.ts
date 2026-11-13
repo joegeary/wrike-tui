@@ -47,14 +47,26 @@ const DEFAULT_HIGHLIGHT = "#F8BBD0"
 
 const HEX = "#[0-9a-fA-F]{3,8}"
 
+const WORD = /[\p{L}\p{N}]/u
+
+/**
+ * Like markdown's `_`, highlight and underline only open where no word runs
+ * into them, and only close before something that is not a word, so `a==b==c`
+ * and `i++; j++` stay the text they were typed as. The tokens read so far in
+ * this run of inline text end with the character before the delimiter.
+ */
+const openable = (tokens: Token[]) => !WORD.test([...(tokens.at(-1)?.raw ?? "")].at(-1) ?? "")
+const CLOSED = "(?![\\p{L}\\p{N}])"
+
 /** Inline syntax markdown lacks, for Wrike's text color, highlight and underline. */
 const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
   {
     name: "color",
     level: "inline",
     start: (src) => src.indexOf("{color:"),
+    // Wrike colors parts of words, so a color may touch a word; a space just inside either tag keeps it text.
     tokenizer(src) {
-      const match = new RegExp(`^\\{color:(${HEX})\\}([\\s\\S]*?)\\{color\\}`).exec(src)
+      const match = new RegExp(`^\\{color:(${HEX})\\}(?=\\S)([\\s\\S]*?\\S)\\{color\\}`).exec(src)
       if (match) return { type: "color", raw: match[0], color: match[1], tokens: this.lexer.inlineTokens(match[2]!) }
     },
     renderer(token) {
@@ -65,8 +77,8 @@ const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
     name: "highlight",
     level: "inline",
     start: (src) => src.indexOf("=="),
-    tokenizer(src) {
-      const match = new RegExp(`^==(?:\\{(${HEX})\\})?(?=\\S)([\\s\\S]*?\\S)==`).exec(src)
+    tokenizer(src, tokens) {
+      const match = openable(tokens) && new RegExp(`^==(?:\\{(${HEX})\\})?(?=\\S)([\\s\\S]*?\\S)==${CLOSED}`, "u").exec(src)
       if (match) return { type: "highlight", raw: match[0], color: match[1] ?? DEFAULT_HIGHLIGHT, tokens: this.lexer.inlineTokens(match[2]!) }
     },
     renderer(token) {
@@ -77,8 +89,8 @@ const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
     name: "underline",
     level: "inline",
     start: (src) => src.indexOf("++"),
-    tokenizer(src) {
-      const match = /^\+\+(?=\S)([\s\S]*?\S)\+\+/.exec(src)
+    tokenizer(src, tokens) {
+      const match = openable(tokens) && new RegExp(`^\\+\\+(?=\\S)([\\s\\S]*?\\S)\\+\\+${CLOSED}`, "u").exec(src)
       if (match) return { type: "underline", raw: match[0], tokens: this.lexer.inlineTokens(match[1]!) }
     },
     renderer(token) {

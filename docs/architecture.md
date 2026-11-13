@@ -312,6 +312,12 @@ blank line in Wrike. A block ends at a blank line, and each further blank line
 after it is a `<br>`. A `<br>` just before a block draws nothing, so it is
 spelled with the backslash of a hard break.
 
+`==` and `++` work like markdown's `_`: they open only where no letter or
+digit runs into them and close only before something that is not one, so
+typed prose like `a==b==c` or `i++; j++` stays text. Wrike colors parts of
+words, so `{color:...}` may touch a word, and like the others it takes no space
+just inside either tag.
+
 Text that would read as markup is escaped, but only where markdown would read
 it: `snake_case` and `2 * 3` stay as written, `2\*3\*4` does not. A space
 markdown would drop, at the end of a line or inside bold, is written `&#32;`
