@@ -1,6 +1,7 @@
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
+import type { CustomField } from "../domain/fields"
 import type { HistoryEntry } from "../domain/history"
-import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
+import type { CustomFieldId, CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
 import { findStatus, IMPORTANCES, statusChoices, type Attachment, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
 import { scopeKey, taskScopeKind, type Scope, type ScopeKey } from "../domain/scope"
@@ -200,6 +201,21 @@ export function mentionSuggestions(state: State): MentionSuggestions | null {
 
 /** A contact's name as the comment box writes it, for a mention. */
 export const mentionName = (state: State) => (id: UserId) => state.contacts.get(id)?.name
+
+/** The custom field definitions by ID, from the last good load. */
+export const fieldDefs = memo((loadable: Loadable<CustomField[]>): ReadonlyMap<CustomFieldId, CustomField> => new Map((shown(loadable) ?? []).map((field) => [field.id, field])))
+
+/** A field as the details pane draws it. `field` is null when no loaded definition has its ID. */
+export type ShownField = { id: CustomFieldId; field: CustomField | null; value: string }
+
+/** The task's set fields by title, and those whose definition is not loaded last by ID. */
+export function taskFields(state: State, task: Task): ShownField[] {
+  const defs = fieldDefs(state.customFields)
+  const title = (shown: ShownField) => shown.field?.title ?? `\uffff${shown.id}`
+  return task.fields
+    .map((value): ShownField => ({ id: value.id, field: defs.get(value.id) ?? null, value: value.value }))
+    .sort((a, b) => title(a).localeCompare(title(b), undefined, { sensitivity: "base", numeric: true }))
+}
 
 export function statusOf(state: State, task: Task): CustomStatus | null {
   return findStatus(state.workflows, task.statusId)

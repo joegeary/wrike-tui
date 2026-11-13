@@ -1,21 +1,25 @@
 import { parseColor, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
-import { contactName, openHistory, statusOf } from "../app/selectors"
+import { contactName, openHistory, statusOf, taskFields, type ShownField } from "../app/selectors"
 import { EDIT_FIELDS, type Details, type EditField, type State } from "../app/state"
+import { isDay } from "../domain/dates"
 import { displayMarkdown } from "../domain/description"
+import { fieldText } from "../domain/fields"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
 import { Attachments } from "./Attachments"
 import { Comments, ComposeBox, itemAnchor, streamTitle } from "./Comments"
-import { shortDay } from "./format"
+import { shortDay, truncate } from "./format"
 import { Pane } from "./Pane"
 import { scrollBox } from "./scroll"
 import { statusColor, useTheme, type Theme } from "./theme"
 import { TextInput } from "./TextInput"
 
 const LABEL_WIDTH = 12
+/** Custom field titles run longer than the built-in labels, so their column grows to fit them, up to this. */
+const MAX_FIELD_LABEL = 24
 
 function useMarkdownStyle(theme: Theme): SyntaxStyle {
   const renderer = useRenderer()
@@ -43,13 +47,14 @@ function useMarkdownStyle(theme: Theme): SyntaxStyle {
 }
 
 /** `active` is undefined outside edit mode, where no row carries a cursor column. */
-function Field(props: { label: string; active?: boolean; children: ReactNode }) {
+function Field(props: { label: string; active?: boolean; labelWidth?: number; children: ReactNode }) {
   const theme = useTheme()
   const cursor = props.active === undefined ? "" : props.active ? "▸ " : "  "
+  const width = props.labelWidth ?? LABEL_WIDTH
   return (
     <box flexDirection="row">
-      <text fg={props.active ? theme.accent : theme.dim} width={LABEL_WIDTH + cursor.length} wrapMode="none">
-        {`${cursor}${props.label}`}
+      <text fg={props.active ? theme.accent : theme.dim} width={width + cursor.length} wrapMode="none">
+        {`${cursor}${truncate(props.label, width - 1)}`}
       </text>
       <box flexGrow={1} flexShrink={1} flexDirection="row">
         {props.children}
@@ -73,6 +78,31 @@ function Section({ title }: { title: string }) {
     <text fg={theme.heading} marginTop={1} wrapMode="none">
       {title}
     </text>
+  )
+}
+
+/** A field's value as text, and a date with the same short day the due date shows. */
+function fieldValue(shown: ShownField, today: string): string {
+  const text = fieldText(shown.field?.kind, shown.value)
+  const day = shown.value.slice(0, 10)
+  return shown.field?.kind.type === "Date" && isDay(day) ? `${text}  ${shortDay(day, today)}` : text
+}
+
+/** The task's custom fields under their titles. A task with none draws no section. */
+function Fields(props: { state: State; fields: ShownField[]; editing: boolean }) {
+  const theme = useTheme()
+  if (props.fields.length === 0) return null
+  const longest = Math.max(...props.fields.map((shown) => Bun.stringWidth(shown.field?.title ?? shown.id)))
+  const labelWidth = Math.min(MAX_FIELD_LABEL, Math.max(LABEL_WIDTH, longest + 2))
+  return (
+    <>
+      <Section title="Fields" />
+      {props.fields.map((shown) => (
+        <Field key={shown.id} label={shown.field?.title ?? shown.id} labelWidth={labelWidth} active={props.editing ? false : undefined}>
+          <Value fg={shown.field ? theme.text : theme.dim}>{fieldValue(shown, props.state.clock.today)}</Value>
+        </Field>
+      ))}
+    </>
   )
 }
 
@@ -148,6 +178,7 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
       <Field label="Permalink" active={editing ? false : undefined}>
         <text fg={theme.link} wrapMode="char" flexShrink={1}>{task.permalink}</text>
       </Field>
+      <Fields state={state} fields={taskFields(state, task)} editing={editing} />
 
       <Section title="Description" />
       {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
