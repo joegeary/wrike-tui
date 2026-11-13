@@ -1,5 +1,5 @@
 import type { SyntaxStyle } from "@opentui/core"
-import { contactName, editTimeLeft, mentionName, mentionSuggestions, sameItem } from "../app/selectors"
+import { contactName, editedComment, editTimeLeft, mentionName, mentionSuggestions, sameItem, selectedComment } from "../app/selectors"
 import type { Compose, DetailsItem, State } from "../app/state"
 import { showMentions } from "../domain/comment"
 import { displayMarkdown } from "../domain/description"
@@ -14,7 +14,7 @@ export const itemAnchor = (item: DetailsItem) => `${item.kind}:${item.id}`
 /** The thread, oldest first. The selected comment carries a bar on its left. */
 export function Comments({ state, comments, style }: { state: State; comments: Comment[]; style: SyntaxStyle }) {
   const theme = useTheme()
-  const left = editTimeLeft(state)
+  const left = editTimeLeft(state, selectedComment(state))
   const deleting = state.mode.kind === "confirm-delete"
   if (comments.length === 0) return <text fg={theme.dim}>No comments yet. Press c to write one.</text>
   return (
@@ -50,7 +50,7 @@ const COMPOSE_LINES = 8
 /** The comment box at the bottom of the details pane, with the people offered for a mention above it. An edit names the time left in its window. */
 export function ComposeBox({ state, mode, width, onDraft }: { state: State; mode: Compose; width: number; onDraft: (text: string) => void }) {
   const theme = useTheme()
-  const left = mode.editing ? editTimeLeft(state) : null
+  const left = editTimeLeft(state, editedComment(state))
   const title = mode.editing === null ? " New comment " : left !== null && left > 0 ? ` Edit comment, ${countdown(left)} left ` : " Edit comment, the window has closed "
   const suggestions = mentionSuggestions(state)
   // The pane's border and the list's own.

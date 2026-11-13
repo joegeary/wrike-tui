@@ -127,15 +127,21 @@ export function selectedComment(state: State): Comment | null {
   return state.details.value.comments.find((comment) => comment.id === selected.id) ?? null
 }
 
-/** Milliseconds left to edit the selected comment when it is mine, zero or less once its window has closed. Null otherwise. */
-export function editTimeLeft(state: State): number | null {
-  const comment = selectedComment(state)
+/** The comment the comment box is editing, while it is open on one. */
+export function editedComment(state: State): Comment | null {
+  const { mode } = state
+  if (mode.kind !== "compose" || mode.editing === null || state.details.state !== "ready") return null
+  return state.details.value.comments.find((comment) => comment.id === mode.editing) ?? null
+}
+
+/** Milliseconds left to edit `comment` when it is mine, zero or less once its window has closed. Null otherwise. */
+export function editTimeLeft(state: State, comment: Comment | null): number | null {
   if (!comment || comment.authorId !== state.profile.userId) return null
   return editWindowLeft(comment.createdDate, state.clock.now)
 }
 
-/** True while the screen counts an edit window down, which is when the clock must keep moving. */
-export const countingDown = (state: State) => (editTimeLeft(state) ?? 0) > 0
+/** True while the screen counts an edit window down, beside the selected comment or in the box's title, which is when the clock must keep moving. */
+export const countingDown = (state: State) => [selectedComment(state), editedComment(state)].some((comment) => (editTimeLeft(state, comment) ?? 0) > 0)
 
 export type MentionSuggestions = { at: number; contacts: Contact[] }
 

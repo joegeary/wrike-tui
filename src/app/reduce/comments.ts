@@ -2,7 +2,7 @@ import { COMMENT_LIMIT, commentBody, editableComment, editWindowLeft, followEdit
 import type { CommentId, TaskId } from "../../domain/ids"
 import type { Comment } from "../../domain/model"
 import { describeError } from "../../wrike/errors"
-import { contactName, detailsItems, mentionName, mentionSuggestions, openTask, sameItem, selectedComment } from "../selectors"
+import { contactName, detailsItems, editedComment, mentionName, mentionSuggestions, openTask, sameItem, selectedComment } from "../selectors"
 import type { Action, Compose, State, Update } from "../state"
 import { clamp, failure, info } from "./core"
 
@@ -101,7 +101,7 @@ export function submitCompose(state: State, mode: Compose): Update {
   const closed: State = { ...state, mode: { kind: "browse" } }
   if (mode.editing === null) return [{ ...closed, flash: info("Posting the comment...") }, [{ kind: "save-comment", taskId: task.id, editing: null, body }]]
 
-  const comment = state.details.state === "ready" ? state.details.value.comments.find((candidate) => candidate.id === mode.editing) : undefined
+  const comment = editedComment({ ...state, mode })
   if (!comment) return [{ ...closed, flash: info("That comment is no longer there") }, []]
   if (editWindowLeft(comment.createdDate, state.clock.now) <= 0) return [{ ...state, flash: failure("The 5-minute edit window has closed. Esc discards the edit") }, []]
   const original = editableComment(comment.text, mentionName(state))
