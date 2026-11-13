@@ -1,3 +1,4 @@
+import { createDocument } from "@mixmark-io/domino"
 import { userId, type UserId } from "./ids"
 import type { Contact } from "./model"
 
@@ -43,35 +44,52 @@ export function commentBody(draft: string, mentions: Mention[]): CommentBody {
   return { text: html.replace(/\n/g, "<br />"), plainText: false }
 }
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " }
-
-function decodeEntities(text: string): string {
-  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
-    if (name.startsWith("#")) {
-      const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1))
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole
-    }
-    return ENTITIES[name.toLowerCase()] ?? whole
-  })
+/** The comment's HTML parsed the way a browser reads it, with every character reference decoded. */
+function parse(html: string): HTMLElement {
+  const document = createDocument("")
+  document.body.innerHTML = html
+  return document.body
 }
 
-const attribute = (attributes: string, name: string) => new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, "i").exec(attributes)?.[1] ?? null
+// domino node lists are array-likes without an iterator.
+const childrenOf = (node: Node): Node[] => Array.from(node.childNodes as ArrayLike<Node>)
 
-/** The person a mention anchor names, from its attributes, or null for any other link. */
-function mentioned(attributes: string): UserId | null {
-  const rel = attribute(attributes, "rel")
-  return rel && attribute(attributes, "class")?.split(/\s+/).includes("stream-user-id") ? userId(rel) : null
+/** The person a mention anchor names, or null for any other element. */
+function mentioned(node: Node): UserId | null {
+  if (node.nodeName !== "A") return null
+  const anchor = node as Element
+  const rel = anchor.getAttribute("rel")
+  return rel && anchor.classList.contains("stream-user-id") ? userId(rel) : null
 }
 
 /** A mention's name: the person's name now, or the one stored in the anchor for someone the client does not know. */
-const mentionedName = (id: UserId, inner: string, nameOf: (id: UserId) => string | undefined) => nameOf(id) ?? decodeEntities(inner).replace(/^@/, "")
+const mentionedName = (id: UserId, anchor: Element, nameOf: (id: UserId) => string | undefined) => nameOf(id) ?? (anchor.textContent ?? "").replace(/^@/, "")
 
 /** The comment's HTML with each mention as a bold `@Full Name`, so it reads as a name and not as a link with no target. */
 export function showMentions(html: string, nameOf: (id: UserId) => string | undefined): string {
-  return html.replace(/<a\b([^>]*)>([^<]*)<\/a>/gi, (whole, attributes: string, inner: string) => {
-    const id = mentioned(attributes)
-    return id ? `<strong>@${escapeHtml(mentionedName(id, inner, nameOf))}</strong>` : whole
-  })
+  const body = parse(html)
+  for (const anchor of Array.from(body.querySelectorAll("a") as ArrayLike<Element>)) {
+    const id = mentioned(anchor)
+    if (!id) continue
+    const bold = anchor.ownerDocument.createElement("strong")
+    bold.textContent = `@${mentionedName(id, anchor, nameOf)}`
+    anchor.parentNode!.replaceChild(bold, anchor)
+  }
+  return body.innerHTML
+}
+
+const SOURCE_NEWLINE = /[ \t\r]*\n[ \t\r\n]*/g
+const atLineEdge = (node: Node | null) => node === null || node.nodeName === "BR"
+
+/**
+ * A text node as a browser shows it: a newline in the source, with the
+ * spaces around it, is one space, and none at all at the start or end of a line.
+ */
+function shownText(node: Node): string {
+  let text = node.nodeValue ?? ""
+  if (atLineEdge(node.previousSibling)) text = text.replace(/^[ \t\r]*\n[ \t\r\n]*/, "")
+  if (atLineEdge(node.nextSibling)) text = text.replace(/[ \t\r]*\n[ \t\r\n]*$/, "")
+  return text.replace(SOURCE_NEWLINE, " ")
 }
 
 /**
@@ -82,19 +100,17 @@ export function showMentions(html: string, nameOf: (id: UserId) => string | unde
 export function editableComment(html: string, nameOf: (id: UserId) => string | undefined): { text: string; mentions: Mention[] } | null {
   let text = ""
   const mentions: Mention[] = []
-  for (const [token, attributes, inner] of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>|<[^>]*>|[^<]+/gi)) {
-    if (attributes !== undefined) {
-      const id = mentioned(attributes)
-      if (!id || inner!.includes("<")) return null
-      const name = mentionedName(id, inner!, nameOf)
+  for (const node of childrenOf(parse(html))) {
+    if (node.nodeType === node.TEXT_NODE) {
+      text += shownText(node)
+    } else if (node.nodeName === "BR") {
+      text += "\n"
+    } else {
+      const id = mentioned(node)
+      if (!id || childrenOf(node).some((child) => child.nodeType !== child.TEXT_NODE)) return null
+      const name = mentionedName(id, node as Element, nameOf)
       mentions.push({ at: text.length, id, name })
       text += `@${name}`
-    } else if (/^<br\s*\/?>$/i.test(token)) {
-      text += "\n"
-    } else if (token.startsWith("<")) {
-      return null
-    } else {
-      text += decodeEntities(token)
     }
   }
   return { text, mentions }

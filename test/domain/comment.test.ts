@@ -74,6 +74,7 @@ describe("editableComment", () => {
     expect(editableComment('See <a href="https://example.test">the PR</a>', nameOf)).toBeNull()
     expect(editableComment("<b>bold</b> claim", nameOf)).toBeNull()
     expect(editableComment('<a class="other" rel="KUAB6OAK">@Joe Geary</a>', nameOf)).toBeNull()
+    expect(editableComment("a <!-- note --> b", nameOf)).toBeNull()
   })
 })
 

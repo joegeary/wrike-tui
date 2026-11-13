@@ -366,7 +366,10 @@ the editor.
 
 `editableComment(html)` gives a comment back as text to edit, with mentions as
 `@Full Name`. When the HTML holds anything but text, `<br />` and mentions, it
-gives null and the edit is refused, so a save never strips formatting.
+gives null and the edit is refused, so a save never strips formatting. It
+reads the HTML with domino, like the description code, so the text is what a
+browser shows: every character reference decoded, and a newline in the source
+a space, or nothing at the start or end of a line.
 
 `editWindowLeft(createdDate, now)` counts down five minutes. Wrike's API takes
 an edit at any age and leaves no mark of it, so the client keeps the web
