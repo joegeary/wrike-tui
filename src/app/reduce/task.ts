@@ -1,11 +1,12 @@
 import { withDay } from "../../domain/dates"
+import { kept } from "../../domain/fields"
 import { customStatusId, userId, type TaskId } from "../../domain/ids"
 import { dueDay, IMPORTANCES, permalinkId, startDay, type Importance, type Task } from "../../domain/model"
 import { assigneePatch, type TaskPatch } from "../../domain/patch"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { editRows, isMultiPicker, openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
-import { type Action, type EditTextMode, type Mode, type OpenTarget, type Origin, type PickerMode, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
+import { type Action, type EditTextMode, type Flash, type Mode, type OpenTarget, type Origin, type PickerMode, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
 import { closeEditor, openFieldEditor, submitFieldPicker, submitFieldText, submitSetField } from "./fields"
 import { withPreview } from "./attachments"
 import { newComment } from "./comments"
@@ -29,10 +30,19 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
   return pending ? then(retitled, (after) => taskCommand(after, pending, details.task, "browse")) : retitled
 }
 
+/** Wrike answers 200 to a field write it did not store, so the answer is read for the value. The task is drawn as Wrike answered. */
+function savedFlash(task: Task, action: Action & { type: "task-saved" }): Flash {
+  const { check } = action
+  if (!check || kept(check.value, task.fields.find((value) => value.id === check.id)?.value)) return info(action.done)
+  return check.value === null
+    ? failure(`Wrike did not clear ${check.title} on this task.`)
+    : failure(`Wrike did not keep ${check.title} on this task. It may not apply here.`)
+}
+
 export function taskSaved(state: State, action: Action & { type: "task-saved" }): Update {
   if (!action.result.ok) return [{ ...state, flash: failure(describeError(action.result.error)) }, []]
   const task = action.result.value
-  const saved = retitle({ ...replaceTask(state, task), flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
+  const saved = retitle({ ...replaceTask(state, task), flash: savedFlash(task, action) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
   return then(saved, (next) => historyStale(next, task))
 }
 
