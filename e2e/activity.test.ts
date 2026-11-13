@@ -31,14 +31,13 @@ describe("field history", () => {
     await tmux.run(BINARY)
     await tmux.see("inbox", "2 Inbox", "Fix login redirect loop")
     await tmux.keys("j", "j", "Enter")
-    // The thumbnail and the attachments push the oldest changes above the fold, so G brings the stream's end into view.
-    await tmux.see("history-open", "Comments (1) · 16 changes", change("Pat Example", "Work Type: DB"))
-    await tmux.keys("G")
-    const stream = await tmux.see(
-      "history-stream",
+    // The first screen holds the older changes and the comment, and G brings the stream's newest end into view.
+    const opened = await tmux.see(
+      "history-open",
+      "Comments (1) · 16 changes",
       change("Pat Example", "title Fix login loop → Fix login"),
       change("Riley Demo", "custom fields changed"),
-      change("Pat Example", "removed attachment old-capture.har"),
+      change("Pat Example", "removed attachment old-capture"),
       change("Riley Demo", "due cleared"),
       change("Sam Sample", "duration 1d → 2d"),
       change("Sam Sample", "moved out of Q4 Launch"),
@@ -46,26 +45,31 @@ describe("field history", () => {
       change("Jordan Placeholder", "unassigned Riley Demo"),
       change("Pat Example", "assigned Pat Example"),
       change("Pat Example", "attached callback-loop.png"),
+      /│ {2}Repro steps attached, it loops after the callback\. +[^│]?│/,
       change("Pat Example", "status New → In Progress"),
-      change("Riley Demo", "attached Login flow notes"),
-      change("Jordan Placeholder", "Labels: auth, sso"),
-      change("Pat Example", "Work Type: DB"),
-      /│ {2}Repro steps attached, it loops after the callback\. +│/,
     )
-    expect(stream).toMatch(/start \d{4}-\d\d-\d\d/)
-    expect(stream).toMatch(/due \d{4}-\d\d-\d\d/)
-    const lines = stream.split("\n")
+    expect(opened).toMatch(/start \d{4}-\d\d-\d\d/)
+    const lines = opened.split("\n")
     const at = (pattern: RegExp) => lines.findIndex((line) => pattern.test(line))
     // The Inbox row on the left quotes the comment too, so the comment is found by its indent in the details pane.
     const comment = at(/│ {2}Repro steps attached/)
-    expect(at(/ assigned Pat Example/)).toBeLessThan(comment)
+    expect(at(/ attached callback-loop\.png/)).toBeLessThan(comment)
     expect(comment).toBeLessThan(at(/status New → In Progress/))
+    await tmux.keys("G")
+    await tmux.see(
+      "history-stream",
+      change("Pat Example", "status New → In Progress"),
+      /│ {2}Riley Demo {2}\w{3} \d+ \d\d:\d\d {2}due \d{4}-\d\d-\d\d/,
+      change("Riley Demo", "attached Login flow notes"),
+      change("Jordan Placeholder", "Labels: auth, sso"),
+      change("Pat Example", "Work Type: DB"),
+    )
     expect(historyCalls()).toHaveLength(1)
   })
 
   test("H hides it and shows it again without asking Wrike twice", async () => {
     await tmux.keys("H")
-    await tmux.see("history-hidden", "Field history hidden", /Comments \(1\) +│/, absent("Work Type: DB"))
+    await tmux.see("history-hidden", "Field history hidden", /Comments \(1\) +[^│]?│/, absent("Work Type: DB"))
     await tmux.keys("H")
     await tmux.see("history-shown", "Field history shown among the comments", "Comments (1) · 16 changes")
     expect(historyCalls()).toHaveLength(1)
@@ -78,10 +82,10 @@ describe("attachments", () => {
     await tmux.see(
       "attachments",
       "Attachments (4)",
-      /│ {2}callback-loop\.png {2}PNG image {2}178 KB {2}Pat Example {2}\w{3} \d+ +│/,
-      /│ {2}har-capture\.txt {2}text {2}47 KB {2}Pat Example {2}\w{3} \d+ +│/,
-      /│ {2}whiteboard\.jpg {2}JPEG image {2}2\.2 MB {2}Pat Example {2}\w{3} \d+ +│/,
-      /│ {2}Login flow notes {2}Google {2}Riley Demo {2}\w{3} \d+ +│/,
+      /│ {2}callback-loop\.png {2}PNG image {2}178 KB {2}Pat Example {2}\w{3} \d+ +[^│]?│/,
+      /│ {2}har-capture\.txt {2}text {2}47 KB {2}Pat Example {2}\w{3} \d+ +[^│]?│/,
+      /│ {2}whiteboard\.jpg {2}JPEG image {2}2\.2 MB {2}Pat Example {2}\w{3} \d+ +[^│]?│/,
+      /│ {2}Login flow notes {2}Google {2}Riley Demo {2}\w{3} \d+ +[^│]?│/,
     )
     await tmux.keys("]")
     await tmux.see("attachment-thumbnail", /┃callback-loop\.png/, /┃[▀▄█]{20,}/, "Enter open")
