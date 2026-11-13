@@ -310,6 +310,15 @@ describe("attachments", () => {
     expect(await client.attachments(taskId(TASK.sso))).toEqual([])
   })
 
+  test("a link that is not an absolute https URL is an invalid response", async () => {
+    const shot = fake.data.attachments.find((file) => file.id === "IEAAAAAAIYAAAA01")!
+    for (const link of ["http://storage.example.test/a?signature=x", "/attachments/a?signature=x", "javascript:alert(1)", "file:///etc/passwd", "--help", ""]) {
+      shot.link = link
+      const refused = await client.attachmentUrl(attachmentId(shot.id)).then(() => null, (thrown: WrikeFailure) => thrown.error)
+      expect(refused).toEqual({ kind: "invalid", message: "Unexpected attachment link from Wrike (0.url: not an absolute https URL)" })
+    }
+  })
+
   test("a file Wrike describes in a shape this version cannot read is left out, and the rest are listed", async () => {
     fake.data.attachments.push({ id: "IEAAAAAAIYAAAA09", authorId: PAT, createdDate: "2026-11-12T10:00:00Z", taskId: TASK.login } as never)
     expect((await client.attachments(taskId(TASK.login))).map((file) => file.name)).toEqual(["callback-loop.png", "har-capture.txt", "whiteboard.jpg", "Login flow notes"])

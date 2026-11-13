@@ -41,6 +41,8 @@ export type FakeAttachment = {
   taskId: string
   width?: number
   height?: number
+  /** The link `/url` answers with, in place of the signed storage URL. */
+  link?: string
 }
 
 /** A real 24 by 16 PNG, the size of thumbnail Wrike's preview route answers with. */

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { readFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { TASK } from "../fake/data"
 import { openApp } from "./harness"
 
@@ -192,6 +194,33 @@ describe("Attachments", () => {
       "GET /api/v4/attachments/IEAAAAAAIYAAAA01/preview",
       "GET /api/v4/attachments/IEAAAAAAIYAAAA01/url",
     ])
+  })
+
+  test("a signed link reaches only the browser: a bad one is never opened, and no flash or session file holds one", async () => {
+    const home = await mkdtemp(join(tmpdir(), "wrike-tui-link-"))
+    app = await openApp(WIDE, { home })
+    const shot = app.fake.data.attachments.find((file) => file.id === "IEAAAAAAIYAAAA01")!
+    shot.link = "http://storage.example.test/attachments/IEAAAAAAIYAAAA01/callback-loop.png?signature=plain-http"
+    await openLogin()
+    await app.press("]", "enter")
+    const refused = await app.see("Could not open callback-loop.png: Unexpected attachment link from Wrike")
+    expect(app.outside.opened).toEqual([])
+    expect(refused).not.toContain("signature")
+    delete shot.link
+    app.fake.fail({ path: "/api/v4/attachments/IEAAAAAAIYAAAA01/url", status: 500 })
+    await app.press("enter")
+    const failed = await app.see("Could not open callback-loop.png: Wrike failed with 500")
+    expect(failed).not.toContain("signature")
+    await app.press("enter")
+    await app.see("Opening callback-loop.png in the browser")
+    expect(app.outside.opened).toEqual([SHOT_URL])
+    await app.close()
+    const session = await readFile(app.paths.session, "utf8")
+    await rm(home, { recursive: true, force: true })
+    expect(session).toContain(TASK.login)
+    expect(session).not.toContain("signature")
+    // The test's own close needs an app that is still open.
+    app = await openApp(WIDE)
   })
 
   test("a text file has no thumbnail, an image the terminal cannot draw says so, and ] goes on to the comments", async () => {

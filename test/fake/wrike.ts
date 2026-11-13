@@ -254,7 +254,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       const attachment = data.attachments.find((candidate) => candidate.id === attachmentPath[1])
       if (!attachment) return wrikeError(404, "resource_not_found", "Attachment not found")
       if (attachmentPath[2] === "url") {
-        const url = `https://storage.example.test/attachments/${attachment.id}/${encodeURIComponent(attachment.name)}?signature=fake-${attachment.version}`
+        const url = attachment.link ?? `https://storage.example.test/attachments/${attachment.id}/${encodeURIComponent(attachment.name)}?signature=fake-${attachment.version}`
         return json({ kind: "url", data: [{ url }] })
       }
       if (!attachment.contentType?.startsWith("image/")) return wrikeError(404, "resource_not_found", "Preview not available")
