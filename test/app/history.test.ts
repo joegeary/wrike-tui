@@ -87,6 +87,27 @@ describe("field history", () => {
     expect(play(all, { type: "older-history" })).toMatchObject({ effects: [], state: { flash: { text: "All of the history is shown" } } })
   })
 
+  test("a save in the TUI asks again for the drawn task's history, and leaves another task's to be asked on its next view", () => {
+    const first = open(inTodo(), overdue)
+    const shown = play(first.state, answer(loads(first.effects)[0]!, page([change("2026-11-12T10:00:00Z", "B")]))).state
+    const saved = play(shown, { type: "task-saved", done: "Title saved", result: { ok: true, value: { ...overdue, title: "C" } } })
+    const [load] = loads(saved.effects)
+    expect(loads(saved.effects)).toHaveLength(1)
+    expect(load).toMatchObject({ taskId: overdue.id, pageToken: null })
+    expect(titles(saved.state)).toEqual(["B"])
+    expect(titles(play(saved.state, answer(load!, page([change("2026-11-12T16:00:00Z", "C"), change("2026-11-12T10:00:00Z", "B")]))).state)).toEqual(["C", "B"])
+
+    const elsewhere = open(shown, later).state
+    const savedAway = play(elsewhere, { type: "task-saved", done: "Title saved", result: { ok: true, value: { ...overdue, title: "C" } } })
+    expect(loads(savedAway.effects)).toEqual([])
+    expect(loads(open(savedAway.state, overdue).effects)).toHaveLength(1)
+
+    const hidden = play(shown, "H").state
+    const savedHidden = play(hidden, { type: "task-saved", done: "Title saved", result: { ok: true, value: { ...overdue, title: "C" } } })
+    expect(loads(savedHidden.effects)).toEqual([])
+    expect(loads(play(savedHidden.state, "H").effects)).toHaveLength(1)
+  })
+
   test("H hides the history without a call, and turning it on asks only for a task never fetched", () => {
     const hidden = play(inTodo(), "H").state
     const opened = open(hidden, overdue)
