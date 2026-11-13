@@ -85,7 +85,7 @@ token in the keyring of your operating system. It stores your name and host in
 | `WRIKE_TOKEN` | Use this token instead of the keyring. Nothing is stored. |
 | `WRIKE_HOST` | Use this Wrike host, for example `app-eu.wrike.com`, instead of the stored one. |
 | `VISUAL`, `EDITOR` | The editor for descriptions and long comments. `vi` is the fallback. |
-| `BROWSER` | The command that opens a URL. The default is `xdg-open` on Linux and `open` on macOS. |
+| `BROWSER` | The command that opens a URL given as its last argument. The default is `xdg-open` on Linux and `open` on macOS. Windows has no default. |
 | `WRIKE_TUI_READ_ONLY=1` | Refuse every change. A save says "read-only mode: not saved" and nothing is sent to Wrike. |
 | `WRIKE_TUI_NO_RESTORE=1` | Start on the Inbox instead of where the last session ended. |
 

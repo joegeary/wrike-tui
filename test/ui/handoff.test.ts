@@ -65,6 +65,11 @@ describe("editInEditor", () => {
   })
 })
 
+test("on Windows without $BROWSER, opening a link fails with a reason instead of passing it through cmd", async () => {
+  const url = "https://storage.example.test/a.png?signature=x&expires=1"
+  await expect(openInBrowser({}, url, "win32")).rejects.toThrow("Set BROWSER to a program that opens a URL given as its argument")
+})
+
 test("openInBrowser runs $BROWSER with the URL and does not wait for it", async () => {
   const browser = await script("browser", 'print -r -- "$1" > "$0.url"')
   await openInBrowser({ BROWSER: browser }, "https://www.wrike.com/open.htm?id=4598459101")

@@ -44,16 +44,21 @@ export async function editInEditor(
   }
 }
 
-function browserCommand(env: Env): string[] {
+/**
+ * The command that takes a URL as its last argument. Windows has no opener
+ * that takes one as a plain argument: `cmd /c start` would split a signed
+ * link at its `&`, so there it must be named in BROWSER.
+ */
+function browserCommand(env: Env, platform: NodeJS.Platform): string[] {
   if (env.BROWSER) return words(env.BROWSER)
-  if (process.platform === "darwin") return ["open"]
-  if (process.platform === "win32") return ["cmd", "/c", "start", ""]
+  if (platform === "darwin") return ["open"]
+  if (platform === "win32") throw new Error("Set BROWSER to a program that opens a URL given as its argument")
   return ["xdg-open"]
 }
 
 /** Starts the browser and does not wait for it, because a browser may run until its window closes. */
-export async function openInBrowser(env: Env, url: string): Promise<void> {
-  Bun.spawn([...browserCommand(env), url], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).unref()
+export async function openInBrowser(env: Env, url: string, platform: NodeJS.Platform = process.platform): Promise<void> {
+  Bun.spawn([...browserCommand(env, platform), url], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).unref()
 }
 
 /** The part of the renderer that writes to the terminal clipboard. */
