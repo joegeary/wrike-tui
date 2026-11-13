@@ -14,6 +14,7 @@ import type { Favorite, Space, SpaceTree } from "../domain/workspace"
 import type { SessionFile } from "../persist/schemas"
 import type { TaskPage, TaskQuery } from "../wrike/client"
 import type { WrikeError } from "../wrike/errors"
+import { buildKeymap, keyProblemsText, type Keymap } from "./keymap"
 import { viewPath, type NavPath } from "./nav"
 import { restoreSession } from "./session"
 
@@ -193,6 +194,8 @@ export type State = {
   clock: Clock
   /** The config file's content. The theme and the list defaults are read from here. */
   settings: Settings
+  /** The keys in effect, built at launch from the default keys and the config's `keys`. */
+  keymap: Keymap
   scope: Scope
   focus: Pane
   zoom: boolean
@@ -418,11 +421,14 @@ export type Boot = {
 }
 
 export function initialState(profile: Profile, clock: Clock, boot: Boot): State {
+  const keys = buildKeymap(boot.settings.keys)
+  const keysFlash: Flash | null = keys.problems.length > 0 ? { tone: "error", text: keyProblemsText(keys.problems) } : null
   const fresh: State = {
     profile,
     readOnly: boot.readOnly,
     clock,
     settings: boot.settings,
+    keymap: keys.keymap,
     scope: { kind: "inbox" },
     focus: "list",
     zoom: false,
@@ -447,7 +453,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     customFields: boot.fields ? { state: "loading", previous: boot.fields } : { state: "idle" },
     spaceWorkflows: "unloaded",
     mode: { kind: "browse" },
-    flash: boot.flash,
+    flash: boot.flash && keysFlash ? { tone: "error", text: `${boot.flash.text} ${keysFlash.text}` } : (boot.flash ?? keysFlash),
     lastFolder: null,
     afterOpen: null,
     requests: new Map(),

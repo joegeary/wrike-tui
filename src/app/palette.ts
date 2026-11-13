@@ -73,7 +73,7 @@ export function paletteLines(state: State, query: string): PaletteLine[] {
   const lines: PaletteLine[] = []
   paletteCommands(state, query).forEach((entry, index, all) => {
     if (grouped && entry.group !== all[index - 1]?.group) lines.push({ kind: "heading", label: entry.group })
-    lines.push({ kind: "command", command: entry, index, keys: keysFor(entry.id, contexts) })
+    lines.push({ kind: "command", command: entry, index, keys: keysFor(state.keymap, entry.id, contexts) })
   })
   return lines
 }

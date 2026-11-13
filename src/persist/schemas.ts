@@ -31,6 +31,7 @@ export const ConfigSchema = z
     completed: z.boolean().default(DEFAULT_SETTINGS.completed),
     history: z.boolean().default(DEFAULT_SETTINGS.history),
     lists: z.partialRecord(z.enum(TASK_SCOPE_KINDS), ListSpecSchema.partial()).default({}),
+    keys: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
   })
   .transform((file): Settings => file as Settings)
 

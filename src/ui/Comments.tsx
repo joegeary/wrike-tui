@@ -1,5 +1,6 @@
 import type { SyntaxStyle } from "@opentui/core"
 import { useMemo } from "react"
+import { howToRun, retryHint, type Keymap } from "../app/keymap"
 import { commentStream, contactName, editedComment, editTimeLeft, mentionName, mentionSuggestions, sameItem, selectedComment } from "../app/selectors"
 import type { Compose, DetailsItem, Paged, State } from "../app/state"
 import { showMentions } from "../domain/comment"
@@ -7,7 +8,7 @@ import { displayMarkdown } from "../domain/description"
 import { describeChange, type HistoryEntry } from "../domain/history"
 import type { Comment } from "../domain/model"
 import { describeError } from "../wrike/errors"
-import { countdown, fit, fitAfter, stamp } from "./format"
+import { countdown, fit, fitAfter, stamp, upperFirst } from "./format"
 import { TextArea } from "./TextArea"
 import { useTheme } from "./theme"
 
@@ -26,14 +27,14 @@ export function streamTitle(comments: number, history: Paged<HistoryEntry> | nul
 type Notice = { text: string; tone: "dim" | "warning" }
 
 /** What the stream says about history it does not show. A failed load leaves the comments in place and says so in one line. */
-function historyNotices(history: Paged<HistoryEntry> | null): Notice[] {
+function historyNotices(history: Paged<HistoryEntry> | null, keymap: Keymap): Notice[] {
   if (!history) return []
   if (history.error) {
     const why = history.error.kind === "rate_limited" ? "Wrike is rate limiting history." : `History did not load: ${describeError(history.error)}`
-    return [{ text: `${why} Press r to retry.`, tone: "warning" }]
+    return [{ text: `${why} ${retryHint(keymap)}`, tone: "warning" }]
   }
   if (history.loading === "more") return [{ text: "Loading older changes...", tone: "dim" }]
-  if (history.next) return [{ text: "Older changes are not loaded. Press : and run Load older changes.", tone: "dim" }]
+  if (history.next) return [{ text: `Older changes are not loaded. ${upperFirst(howToRun(keymap, "history.older"))}.`, tone: "dim" }]
   return []
 }
 
@@ -44,7 +45,7 @@ export function Comments({ state, comments, history, style }: { state: State; co
   const deleting = state.mode.kind === "confirm" && state.mode.target.kind === "comment"
   const changes = history?.items
   const stream = useMemo(() => commentStream(comments, changes ?? []), [comments, changes])
-  const notices = historyNotices(history)
+  const notices = historyNotices(history, state.keymap)
   const empty = <text fg={theme.dim} marginTop={stream.length + notices.length === 0 ? 0 : 1}>No comments yet. Press c to write one.</text>
   return (
     <>

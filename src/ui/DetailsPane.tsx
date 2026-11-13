@@ -1,6 +1,7 @@
 import { parseColor, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
+import { howToRun, retryHint } from "../app/keymap"
 import { contactName, editRows, openHistory, statusOf, taskFields, typedInList, type ShownField } from "../app/selectors"
 import type { CustomFieldId } from "../domain/ids"
 import type { Details, EditField, State } from "../app/state"
@@ -203,7 +204,7 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
       {attachmentsError ? (
         <>
           <Section title="Attachments" />
-          <text fg={theme.warning} wrapMode="word">{`Did not load: ${retryText(attachmentsError)}`}</text>
+          <text fg={theme.warning} wrapMode="word">{`Did not load: ${retryText(attachmentsError, retryHint(state.keymap))}`}</text>
         </>
       ) : null}
       {attachments.length > 0 ? (
@@ -251,10 +252,10 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
 
   return (
     <Pane number={3} title={title} width={props.width} focused={state.focus === "details" && state.mode.kind === "browse"}>
-      {details.state === "idle" ? <text fg={theme.dim} wrapMode="word">Select a task and press Enter to open it here.</text> : null}
+      {details.state === "idle" ? <text fg={theme.dim} wrapMode="word">{`Select a task and ${howToRun(state.keymap, "list.open")} to open it here.`}</text> : null}
       {details.state === "loading" && !shownDetails ? <text fg={theme.dim}>Loading...</text> : null}
       {details.state === "error" ? (
-        <text fg={theme.error} wrapMode="word">{retryText(details.error)}</text>
+        <text fg={theme.error} wrapMode="word">{retryText(details.error, retryHint(state.keymap))}</text>
       ) : null}
       {shownDetails ? (
         <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY>

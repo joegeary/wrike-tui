@@ -1,9 +1,10 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useSyncExternalStore } from "react"
-import { normalizeKey, resolveKey } from "../app/keymap"
+import { howToRun, normalizeKey, resolveKey } from "../app/keymap"
 import type { Store } from "../app/store"
 import type { UiBridge } from "./bridge"
 import { DetailsPane } from "./DetailsPane"
+import { upperFirst } from "./format"
 import { Help } from "./Help"
 import { MIN_HEIGHT, MIN_WIDTH, paneWidths } from "./layout"
 import { ListPane } from "./ListPane"
@@ -31,7 +32,7 @@ export function App({ store, bridge }: { store: Store; bridge: UiBridge }) {
   if (screen.width < MIN_WIDTH || screen.height < MIN_HEIGHT) {
     return (
       <box width="100%" height="100%" backgroundColor={theme.background}>
-        <text fg={theme.warning} wrapMode="word">{`wrike-tui needs at least ${MIN_WIDTH} columns and ${MIN_HEIGHT} rows. Press q to quit.`}</text>
+        <text fg={theme.warning} wrapMode="word">{`wrike-tui needs at least ${MIN_WIDTH} columns and ${MIN_HEIGHT} rows. ${upperFirst(howToRun(state.keymap, "app.quit"))} to quit.`}</text>
       </box>
     )
   }

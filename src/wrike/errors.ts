@@ -44,6 +44,6 @@ export function describeError(error: WrikeError): string {
 }
 
 /** The error as a full sentence, followed by how to try again. */
-export function retryText(error: WrikeError): string {
-  return `${describeError(error).replace(/\.$/, "")}. Press r to retry.`
+export function retryText(error: WrikeError, retry: string): string {
+  return `${describeError(error).replace(/\.$/, "")}. ${retry}`
 }
