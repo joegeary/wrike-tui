@@ -12,6 +12,12 @@ class WrikeRenderer extends Renderer {
   override del(token: Tokens.Del): string {
     return tag("s", this.parser.parseInline(token.tokens))
   }
+  // Written by hand so the href goes back exactly as written, without the URL encoding marked's own renderer applies.
+  override link(token: Tokens.Link): string {
+    const rel = (token as LinkWithRel).rel ? ` rel="${escapeAttribute((token as LinkWithRel).rel!)}"` : ""
+    const title = token.title ? ` title="${escapeAttribute(token.title)}"` : ""
+    return `<a href="${escapeAttribute(token.href)}"${title}${rel}>${this.parser.parseInline(token.tokens)}</a>`
+  }
   // Wrike stores an image as a bare <img src>, so the URL goes back exactly as written.
   override image(token: Tokens.Image): string {
     const alt = token.text ? ` alt="${escapeAttribute(token.text)}"` : ""
@@ -80,6 +86,31 @@ const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
   },
 ]
 
+type LinkWithRel = Tokens.Link & { rel?: string }
+
+const REL = /^\{rel=([\w-]+)\}/
+
+/** A link's rel, which Wrike keeps on pasted links, follows the link as {rel=value}. */
+function attachRel(tokens: Token[]): Token[] {
+  wrikeMarked.walkTokens(tokens, (token) => {
+    if (token.type === "table") for (const cell of [...token.header, ...token.rows.flat()]) attachRelAmong(cell.tokens)
+    else if ("tokens" in token && token.tokens) attachRelAmong(token.tokens)
+  })
+  attachRelAmong(tokens)
+  return tokens
+}
+
+function attachRelAmong(tokens: Token[]) {
+  tokens.forEach((link, index) => {
+    const next = tokens[index + 1]
+    const match = next?.type === "text" ? REL.exec(next.raw) : null
+    if (link.type !== "link" || !match) return
+    ;(link as LinkWithRel).rel = match[1]
+    next!.raw = next!.raw.slice(match[0].length)
+    ;(next as Tokens.Text).text = (next as Tokens.Text).text.slice(match[0].length)
+  })
+}
+
 // Only an explicit [text](url) makes a link. A bare URL or <address> stays the text it was in Wrike.
 const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: () => undefined }, extensions: WRIKE_INLINE }).setOptions({
   gfm: true,
@@ -88,7 +119,7 @@ const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: ()
 
 /** The HTML Wrike stores for markdown written in the dialect htmlToMarkdown writes. */
 export function markdownToHtml(markdown: string): string {
-  return flow(wrikeMarked.lexer(markdown.trim()), 0)
+  return flow(attachRel(wrikeMarked.lexer(markdown.trim())), 0)
 }
 
 const parser = new Parser(wrikeMarked.defaults)
@@ -127,7 +158,7 @@ function render(token: Token, bullets: number): string {
     case "text":
       if (!token.tokens) return escapeHtml(token.text)
       // A hard break at the end of a paragraph is the <br> before the block that follows, which flow writes.
-      return inline(HARD_BREAK.test(token.raw) ? Lexer.lexInline(token.text.replace(/ +$/, ""), wrikeMarked.defaults) : token.tokens)
+      return inline(HARD_BREAK.test(token.raw) ? attachRel(Lexer.lexInline(token.text.replace(/ +$/, ""), wrikeMarked.defaults)) : token.tokens)
     case "html":
       return escapeHtml(token.text.replace(/\n+$/, ""))
     case "heading":

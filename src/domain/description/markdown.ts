@@ -115,8 +115,10 @@ function inline(node: Node): string {
       return wrap("~~", inlineChildren(node))
     case "CODE":
       return codeSpan(node.textContent ?? "")
-    case "A":
-      return `[${inlineChildren(node)}](${destination(node.getAttribute("href") ?? "")})`
+    case "A": {
+      const rel = node.getAttribute("rel")
+      return `[${inlineChildren(node)}](${destination(node.getAttribute("href") ?? "")})${rel ? `{rel=${rel}}` : ""}`
+    }
     case "U":
       return wrap("++", inlineChildren(node))
     case "SPAN":
@@ -166,7 +168,7 @@ const ESCAPES: [RegExp, string][] = [
   [/([*_`~[\]])/g, "\\$1"],
   [/&(?=#?\w+;)/g, "\\&"],
   [/([=+])(?=\1)/g, "\\$1"],
-  [/\{(?=color[:}])/g, "\\{"],
+  [/\{(?=color[:}]|rel=)/g, "\\{"],
   [/^([-+>]|#{1,6} |=+)/gm, "\\$1"],
   [/^(\d+)([.)]) /gm, "$1\\$2 "],
 ]

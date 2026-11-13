@@ -215,3 +215,20 @@ describe("underline", () => {
     expect(descriptionFromEdit(editableDescription(html))).toBe(html)
   })
 })
+
+describe("links", () => {
+  const roundTrip = (html: string) => descriptionFromEdit(editableDescription(html))
+
+  test("keep a rel after the link, and an empty link Wrike pasted beside it", () => {
+    const html = '<a href="https://example.test/a" rel="nofollow"></a><a href="https://example.test/a" rel="nofollow">the spec</a> today'
+    expect(editableDescription(html)).toMatchObject({
+      format: "markdown",
+      text: "[](https://example.test/a){rel=nofollow}[the spec](https://example.test/a){rel=nofollow} today",
+    })
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("keep the href exactly as written", () => {
+    const html = '<a href="https://example.test/a%20b?q=1&amp;r=ü">x</a>'
+    expect(roundTrip(html)).toBe(html)
+  })
+})
