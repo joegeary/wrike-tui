@@ -88,7 +88,10 @@ export const AttachmentSchema = z
     }),
   )
 
-export const AttachmentUrlSchema = z.object({ url: z.string() })
+const isHttps = (url: string) => URL.canParse(url) && new URL(url).protocol === "https:"
+
+/** Wrike's signed link to a file. It goes to the browser launcher, so anything but an absolute https URL is refused here. */
+export const AttachmentUrlSchema = z.object({ url: z.string().refine(isHttps, "not an absolute https URL") })
 
 export const ContactSchema = z.object({
   id: z.string(),
