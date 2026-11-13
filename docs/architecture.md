@@ -617,8 +617,9 @@ length and the draft stays in the box.
 
 Editing the description and composing a long comment suspend the renderer and
 open `$VISUAL`, then `$EDITOR`, then `vi`, on a temp file. The effect resumes
-the renderer and reads the file. An unchanged file is a cancel, and so is an
-editor that exits with an error. The comment box stays open while the editor
+the renderer and reads the file. An unchanged file is a cancel, and so are a file
+that differs only by whitespace stripped from line ends, which many editors do
+on save, and an editor that exits with an error. The comment box stays open while the editor
 runs, and the text that comes back goes through the same submit as `Enter`,
 for a new comment and for an edit.
 
