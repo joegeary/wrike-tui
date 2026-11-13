@@ -46,6 +46,9 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("details", "details.up", "k", "up"),
   ...bind("details", "details.top", "g"),
   ...bind("details", "details.bottom", "G"),
+  ...bind("details", "details.next", "]"),
+  ...bind("details", "details.previous", "["),
+  ...bind("details", "details.unselect", "esc"),
 
   ...bind("task", "task.edit", "e"),
   ...bind("task", "task.status", "s"),

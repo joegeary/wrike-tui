@@ -3,7 +3,7 @@ import { navRows, type NavPath } from "../../src/app/nav"
 import { reduce, start } from "../../src/app/reducer"
 import { currentList, currentView, listCursor, listRows, navCursorRow, navRowsOf, pickerOptions, selectedRow, selectedTask } from "../../src/app/selectors"
 import { initialState, LIST_LIMIT, type State } from "../../src/app/state"
-import { customStatusId, folderId, taskId, userId } from "../../src/domain/ids"
+import { commentId, customStatusId, folderId, taskId, userId } from "../../src/domain/ids"
 import { DEFAULT_SPECS, NOBODY } from "../../src/domain/list"
 import type { Workflow } from "../../src/domain/model"
 import type { Favorite } from "../../src/domain/workspace"
@@ -782,7 +782,7 @@ describe("results of writes", () => {
     expect(play(composing.state, "enter")).toMatchObject({ effects: [], state: { mode: { kind: "compose" }, flash: { tone: "error" } } })
     const sent = play(composing.state, { type: "draft", text: "On it" }, "enter")
     expect(sent.effects).toEqual([{ kind: "add-comment", taskId: overdue.id, text: "On it" }])
-    const comment = { id: "C1", authorId: ME, text: "On it", createdDate: "2026-11-12T16:01:00Z" }
+    const comment = { id: commentId("C1"), authorId: ME, text: "On it", createdDate: "2026-11-12T16:01:00Z" }
     const { state, effects } = play(sent.state, { type: "comment-added", taskId: overdue.id, result: { ok: true, value: comment } })
     expect(state.details).toMatchObject({ value: { comments: [comment] } })
     expect(state.flash?.text).toBe("Comment posted")

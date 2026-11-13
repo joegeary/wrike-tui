@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
+import { commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
 import {
   IMPORTANCES,
   STATUS_GROUPS,
@@ -62,7 +62,7 @@ export const TaskSchema = z
 
 export const CommentSchema = z
   .object({ id: z.string(), authorId: z.string(), text: z.string(), createdDate: z.string() })
-  .transform((wire): Comment => ({ ...wire, authorId: userId(wire.authorId) }))
+  .transform((wire): Comment => ({ ...wire, id: commentId(wire.id), authorId: userId(wire.authorId) }))
 
 export const ContactSchema = z.object({
   id: z.string(),

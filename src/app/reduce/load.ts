@@ -121,6 +121,7 @@ export function open(state: State, target: OpenTarget, after: TaskCommand | null
       ...next,
       openTaskId: target.kind === "task" ? target.id : null,
       details: sameTask ? loading(state.details) : { state: "loading" },
+      selected: sameTask ? state.selected : null,
       afterOpen: after,
       focus: after ? state.focus : "details",
     },

@@ -15,6 +15,7 @@ import {
   tasksLoaded,
   treeLoaded,
 } from "./reduce/load"
+import { selectItem } from "./reduce/comments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
 import { choiceToggle, closeEditor, commentAdded, composeEditor, detailsLoaded, onLink, onTask, openField, submitCompose, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
 import { currentList, navRowsOf, openTask, pickerOptions } from "./selectors"
@@ -132,6 +133,10 @@ function step(state: State, action: Action): Update {
 
     case "scroll":
       return [state, [{ kind: "scroll", pane: action.pane, to: action.to }]]
+    case "select":
+      return selectItem(state, action.by)
+    case "unselect":
+      return [{ ...state, selected: null }, []]
     case "task":
       return onTask(state, action.command)
     case "link":

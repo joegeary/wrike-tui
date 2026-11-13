@@ -7,7 +7,8 @@ import { htmlToMarkdown } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
-import { shortDay, stamp } from "./format"
+import { Comments, itemAnchor } from "./Comments"
+import { shortDay } from "./format"
 import { Pane } from "./Pane"
 import { scrollBox } from "./scroll"
 import { statusColor, useTheme, type Theme } from "./theme"
@@ -148,16 +149,7 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
       {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
 
       <Section title={`Comments (${comments.length})`} />
-      {comments.length === 0 ? <text fg={theme.dim}>No comments yet. Press c to write one.</text> : null}
-      {comments.map((comment, index) => (
-        <box key={comment.id} flexDirection="column" marginTop={index === 0 ? 0 : 1}>
-          <text wrapMode="none">
-            <span fg={theme.accent}>{contactName(state, comment.authorId)}</span>
-            <span fg={theme.dim}>{`  ${stamp(comment.createdDate)}`}</span>
-          </text>
-          <markdown syntaxStyle={style} content={htmlToMarkdown(comment.text)} />
-        </box>
-      ))}
+      <Comments state={state} comments={comments} style={style} />
     </>
   )
 }
@@ -174,6 +166,11 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
   }, [bridge])
 
   useEffect(() => scroll.current?.scrollTo(0), [state.openTaskId])
+
+  const selected = state.selected
+  useEffect(() => {
+    if (selected) scroll.current?.scrollChildIntoView(itemAnchor(selected))
+  }, [selected])
 
   const shownDetails = details.state === "ready" ? details.value : details.state === "loading" ? details.previous : undefined
   const title = details.state === "loading" && shownDetails ? "Details (refreshing)" : "Details"

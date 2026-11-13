@@ -1,6 +1,6 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, MULTI_PICKERS, navCursorRow } from "./selectors"
+import { currentView, MULTI_PICKERS, navCursorRow, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
 export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "compose" | "palette" | "help"
@@ -33,6 +33,7 @@ const THEME_LABELS: Record<ThemeName, string> = { terminal: "terminal colors", d
 const inTasks = (state: State) => state.scope.kind !== "inbox"
 const inInbox = (state: State) => state.scope.kind === "inbox"
 const onFavorite = (state: State) => navCursorRow(state)?.kind === "favorite"
+const selecting = (state: State) => selectedComment(state) !== null
 const multi = (state: State) => state.mode.kind === "picker" && MULTI_PICKERS.has(state.mode.field)
 
 const command = (id: string, title: string, group: CommandGroup, contexts: Context[], run: Command["run"], extra: Partial<Command> = {}): Command => ({
@@ -70,6 +71,9 @@ export const COMMANDS: Command[] = [
   command("details.up", "Scroll up", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "up" })),
   command("details.top", "Scroll to the top", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "top" })),
   command("details.bottom", "Scroll to the bottom", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "bottom" })),
+  command("details.next", "Select the next comment", "Navigate", ["details"], () => ({ type: "select", by: 1 }), { keywords: ["comments"] }),
+  command("details.previous", "Select the previous comment", "Navigate", ["details"], () => ({ type: "select", by: -1 }), { keywords: ["comments"] }),
+  command("details.unselect", "Clear the selection", "Navigate", ["details"], () => ({ type: "unselect" }), { when: selecting, hint: "unselect" }),
 
   command("inbox.read", "Toggle read notifications", "List", ["list"], () => ({ type: "toggle-read" }), { when: inInbox, hint: "read" }),
   command("list.toggle", "Open or close the row", "List", ["list"], () => ({ type: "toggle-row" }), { when: inTasks, keywords: ["subtasks", "group", "expand", "collapse"] }),

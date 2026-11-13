@@ -1,12 +1,12 @@
 import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
-import { findStatus, IMPORTANCES, statusChoices, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
+import { findStatus, IMPORTANCES, statusChoices, type Comment, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
 import { scopeKey, taskScopeKind, type Scope, type ScopeKey } from "../domain/scope"
 import { defaultSpec } from "../domain/settings"
 import { cursorIndex, shapeList, type ListRow, type RowId, type ShapeContext } from "../domain/shape"
 import type { SpaceTree } from "../domain/workspace"
 import { cursorRow, navRows, type NavRow, type SelectableNavRow } from "./nav"
-import { shown, type ListView, type Loadable, type Mode, type Paged, type PickerField, type State } from "./state"
+import { shown, type Details, type DetailsItem, type ListView, type Loadable, type Mode, type Paged, type PickerField, type State } from "./state"
 
 export type PaneRow = ListRow | { kind: "entry"; id: RowId; entry: InboxEntry }
 
@@ -110,6 +110,20 @@ export function selectedEntry(state: State): InboxEntry | null {
 
 export function openTask(state: State): Task | null {
   return state.details.state === "ready" ? state.details.value.task : null
+}
+
+/** What `]` and `[` step through, in the order the details pane draws it. */
+export function detailsItems(details: Details): DetailsItem[] {
+  return details.comments.map((comment) => ({ kind: "comment", id: comment.id }))
+}
+
+export const sameItem = (a: DetailsItem | null, b: DetailsItem | null) => a !== null && b !== null && a.kind === b.kind && a.id === b.id
+
+/** The selected comment of the open task, or null when nothing is selected or the selection is gone. */
+export function selectedComment(state: State): Comment | null {
+  const { selected } = state
+  if (selected?.kind !== "comment" || state.details.state !== "ready") return null
+  return state.details.value.comments.find((comment) => comment.id === selected.id) ?? null
 }
 
 export function statusOf(state: State, task: Task): CustomStatus | null {

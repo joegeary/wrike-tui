@@ -1,4 +1,4 @@
-import type { CustomStatusId, LegacyItemId, TaskId, UserId } from "./ids"
+import type { CommentId, CustomStatusId, LegacyItemId, TaskId, UserId } from "./ids"
 
 export const STATUS_GROUPS = ["Active", "Completed", "Deferred", "Cancelled"] as const
 export type StatusGroup = (typeof STATUS_GROUPS)[number]
@@ -38,7 +38,7 @@ export type Task = {
   updatedDate: string
 }
 
-export type Comment = { id: string; authorId: UserId; text: string; createdDate: string }
+export type Comment = { id: CommentId; authorId: UserId; text: string; createdDate: string }
 
 /** A deactivated person keeps a name, because old tasks still name them. Pickers offer active people only. */
 export type Contact = { id: UserId; name: string; email: string | null; active: boolean }

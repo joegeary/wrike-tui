@@ -294,6 +294,31 @@ describe("Comments", () => {
   })
 })
 
+describe("Selecting comments", () => {
+  test("] and [ select a comment with a bar beside it, and Esc clears the selection", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("]")
+    const first = await app.see(/┃Riley Demo/, /┃The identity provider team needs the entity ID by Friday\./)
+    expect(first).toMatch(/ Sam Sample\s+\w{3} \d+ \d\d:\d\d/)
+    await app.press("]", "]", "]")
+    const last = await app.see(/┃Pat Example/)
+    expect(last).not.toContain("┃Riley Demo")
+    await app.press("[")
+    await app.see(/┃Sam Sample/)
+    await app.press("?")
+    const legend = await app.see("─ Keys ─")
+    expect(legend).toMatch(/\]\s+Select the next comment/)
+    expect(legend).toMatch(/\[\s+Select the previous comment/)
+    expect(legend).toMatch(/Esc\s+Clear the selection/)
+    await app.press("esc", "esc")
+    const cleared = await app.see(/^(?![\s\S]*┃)/)
+    expect(cleared).toContain("Comments (3)")
+  })
+})
+
 describe("Keys and panes", () => {
   test("? shows the legend for the focused pane, straight from the keymap", async () => {
     app = await openApp(WIDE)

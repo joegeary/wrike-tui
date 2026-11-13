@@ -1,5 +1,5 @@
 import type { Profile } from "../auth/profile"
-import type { LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
@@ -69,6 +69,9 @@ export type Mode =
   | { kind: "help" }
 
 export type Details = { task: Task; comments: Comment[]; folders: string[] }
+
+/** Something in the details pane that `]` and `[` step through, in the order the pane draws it. Attachments join this union. */
+export type DetailsItem = { kind: "comment"; id: CommentId }
 export type Clock = { now: string; today: string }
 export type Flash = { tone: "info" | "error"; text: string }
 
@@ -100,6 +103,8 @@ export type State = {
   missing: ReadonlySet<string>
   openTaskId: TaskId | null
   details: Loadable<Details>
+  /** The details item `]` and `[` selected. It is cleared when another task opens. */
+  selected: DetailsItem | null
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
   /** Space workflows load once, the first time a task's status is not in the account workflows. */
@@ -178,6 +183,8 @@ export type Intent =
   | { type: "expand-all" }
   | { type: "collapse-all" }
   | { type: "scroll"; pane: "details" | "help"; to: ScrollTo }
+  | { type: "select"; by: 1 | -1 }
+  | { type: "unselect" }
   | { type: "task"; command: TaskCommand }
   | { type: "link"; act: "browser" | "copy-url" | "copy-id" }
   | { type: "field-move"; by: number }
@@ -256,6 +263,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     missing: new Set(),
     openTaskId: null,
     details: { state: "idle" },
+    selected: null,
     contacts: new Map(),
     workflows: [],
     spaceWorkflows: "unloaded",
