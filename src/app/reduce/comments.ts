@@ -1,4 +1,4 @@
-import { commentBody, editableComment, editWindowLeft, followEdit, refindMentions, typedMention, type Mention } from "../../domain/comment"
+import { COMMENT_LIMIT, commentBody, editableComment, editWindowLeft, followEdit, refindMentions, typedMention, type Mention } from "../../domain/comment"
 import type { CommentId, TaskId } from "../../domain/ids"
 import type { Comment } from "../../domain/model"
 import { describeError } from "../../wrike/errors"
@@ -7,6 +7,8 @@ import type { Action, Compose, State, Update } from "../state"
 import { clamp, failure, info } from "./core"
 
 const EMPTY = "Write the comment first, or press Esc to discard"
+const tooLong = (length: number) =>
+  `Wrike takes up to ${COMMENT_LIMIT.toLocaleString("en-US")} characters in a comment, and this one has ${length.toLocaleString("en-US")}. Shorten it, or press Esc to discard`
 
 /** Steps the selection through the details items. With nothing selected, `]` starts at the first and `[` at the last. */
 export function selectItem(state: State, by: 1 | -1): Update {
@@ -95,6 +97,7 @@ export function submitCompose(state: State, mode: Compose): Update {
   if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
   const body = commentBody(mode.draft, mode.mentions)
   if (body.text === "") return [{ ...state, flash: failure(EMPTY) }, []]
+  if (body.text.length > COMMENT_LIMIT) return [{ ...state, flash: failure(tooLong(body.text.length)) }, []]
   const closed: State = { ...state, mode: { kind: "browse" } }
   if (mode.editing === null) return [{ ...closed, flash: info("Posting the comment...") }, [{ kind: "save-comment", taskId: task.id, editing: null, body }]]
 

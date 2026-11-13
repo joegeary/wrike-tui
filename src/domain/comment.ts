@@ -14,6 +14,9 @@ export function editWindowLeft(createdDate: string, now: string): number {
   return new Date(createdDate).getTime() + EDIT_WINDOW_MS - new Date(now).getTime()
 }
 
+/** The most characters Wrike takes for a comment's text, as sent, so mention anchors count. */
+export const COMMENT_LIMIT = 10_000
+
 /** A mention in a draft: `@name` at offset `at`. Wrike stores it as an anchor to the person. */
 export type Mention = { at: number; id: UserId; name: string }
 

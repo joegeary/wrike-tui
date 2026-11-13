@@ -141,6 +141,7 @@ Press `?` in the client to see the keys for the pane you are in.
 | Text field | `Enter` | Save |
 | | `Esc` | Discard |
 | Comment | `Enter` | Post, or save an edit |
+| | `Alt+Enter` or `Ctrl+J` | Start a new line |
 | | `Ctrl+E` | Finish the comment in `$EDITOR` |
 | | `Esc` | Discard |
 | | `@` and letters | Offer people to mention |

@@ -5,7 +5,7 @@ import { showMentions } from "../domain/comment"
 import { displayMarkdown } from "../domain/description"
 import type { Comment } from "../domain/model"
 import { countdown, fit, fitAfter, stamp } from "./format"
-import { TextInput } from "./TextInput"
+import { TextArea } from "./TextArea"
 import { useTheme } from "./theme"
 
 /** The renderable ID a details item is drawn under, which scrolling into view looks for. */
@@ -44,6 +44,9 @@ export function Comments({ state, comments, style }: { state: State; comments: C
   )
 }
 
+/** The comment box grows with its lines up to this many, then scrolls. */
+const COMPOSE_LINES = 8
+
 /** The comment box at the bottom of the details pane, with the people offered for a mention above it. An edit names the time left in its window. */
 export function ComposeBox({ state, mode, width, onDraft }: { state: State; mode: Compose; width: number; onDraft: (text: string) => void }) {
   const theme = useTheme()
@@ -69,8 +72,19 @@ export function ComposeBox({ state, mode, width, onDraft }: { state: State; mode
           })}
         </box>
       ) : null}
-      <box border borderStyle="rounded" borderColor={theme.accent} title={title} titleColor={theme.accent} height={3} flexShrink={0} flexDirection="row">
-        <TextInput value={mode.draft} placeholder="Write a comment, @ mentions someone" onInput={onDraft} />
+      <box
+        border
+        borderStyle="rounded"
+        borderColor={theme.accent}
+        title={title}
+        titleColor={theme.accent}
+        bottomTitle=" Alt+Enter new line "
+        bottomTitleAlignment="right"
+        maxHeight={COMPOSE_LINES + 2}
+        flexShrink={0}
+        flexDirection="row"
+      >
+        <TextArea value={mode.draft} placeholder="Write a comment, @ mentions someone" onInput={onDraft} />
       </box>
     </>
   )

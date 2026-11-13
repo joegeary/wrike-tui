@@ -1,6 +1,6 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
 import { useCallback, useSyncExternalStore } from "react"
-import { normalizeKey } from "../app/keymap"
+import { normalizeKey, resolveKey } from "../app/keymap"
 import type { Store } from "../app/store"
 import type { UiBridge } from "./bridge"
 import { DetailsPane } from "./DetailsPane"
@@ -21,7 +21,10 @@ export function App({ store, bridge }: { store: Store; bridge: UiBridge }) {
 
   useKeyboard((event) => {
     const key = normalizeKey(event)
-    if (key) store.dispatch({ type: "key", key })
+    if (!key) return
+    // A key the keymap gives meaning to is not also typed into the focused field, so Enter posts a comment and does not start a line.
+    if (resolveKey(store.getState(), key)) event.preventDefault()
+    store.dispatch({ type: "key", key })
   })
 
   if (screen.width < MIN_WIDTH || screen.height < MIN_HEIGHT) {

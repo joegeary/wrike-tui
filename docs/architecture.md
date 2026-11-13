@@ -601,7 +601,16 @@ the spaces list and the trees of the spaces that are open.
 Text is typed into OpenTUI's `<input>`, which gives cursor movement and line
 editing. The input reports each change as a `draft` action, so the draft still
 lives in the mode. A picker and the palette take their text as key presses,
-because every letter filters there.
+because every letter filters there. A key the keymap binds in the current
+mode is not also typed into the field.
+
+The comment box is a `<textarea>` instead, because a comment has lines and an
+`<input>` strips newlines and stops at 1,000 characters. `Alt+Enter` and
+`Ctrl+J` start a new line, the box grows to eight lines and then scrolls, and
+a draft the reducer changes, like a picked mention, is put back into the field
+with the cursor at the end. Wrike takes up to 10,000 characters of comment
+text as sent, mention anchors included. A longer comment is refused with its
+length and the draft stays in the box.
 
 Editing the description and composing a long comment suspend the renderer and
 open `$VISUAL`, then `$EDITOR`, then `vi`, on a temp file. The effect resumes
@@ -685,7 +694,7 @@ for its values.
 | Picker | arrows or `Ctrl+N` `Ctrl+P` move, typing filters, `Backspace` erases, `Space` toggles (assignees, filters, columns), `Enter` applies, `Esc` cancels |
 | Palette | typing filters, arrows or `Ctrl+N` `Ctrl+P` move, `Backspace` erases, `Enter` runs, `Esc` closes |
 | Text field | `Enter` saves, `Esc` discards |
-| Comment | `Enter` posts or saves the edit, `Ctrl+E` moves the draft to the editor, `Esc` discards |
+| Comment | `Enter` posts or saves the edit, `Alt+Enter` and `Ctrl+J` start a new line, `Ctrl+E` moves the draft to the editor, `Esc` discards |
 | Mention list | arrows or `Ctrl+N` `Ctrl+P` move, `Tab` or `Enter` writes the name, `Esc` closes the list |
 | Delete confirm | `y` deletes, any other key keeps the comment |
 | Legend | `j` `k` scroll, `Esc`, `?` or `q` closes |
