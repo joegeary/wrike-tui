@@ -1,4 +1,4 @@
-import { Lexer, Marked, Parser, Renderer, type Token, type Tokens } from "marked"
+import { Lexer, Marked, Parser, Renderer, type Token, type TokenizerAndRendererExtension, type Tokens } from "marked"
 import { breaksBetween, type Part } from "./flow"
 
 class WrikeRenderer extends Renderer {
@@ -35,8 +35,41 @@ const tag = (name: string, content: string) => `<${name}>${content}</${name}>`
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 const escapeAttribute = (text: string) => escapeHtml(text).replace(/"/g, "&quot;")
 
+/** The highlight a bare ==text== takes: the one Wrike descriptions use most. */
+export const DEFAULT_HIGHLIGHT = "#F8BBD0"
+
+const HEX = "#[0-9a-fA-F]{3,8}"
+
+/** Inline syntax markdown lacks, for Wrike's text color and highlight. */
+const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
+  {
+    name: "color",
+    level: "inline",
+    start: (src) => src.indexOf("{color:"),
+    tokenizer(src) {
+      const match = new RegExp(`^\\{color:(${HEX})\\}([\\s\\S]*?)\\{color\\}`).exec(src)
+      if (match) return { type: "color", raw: match[0], color: match[1], tokens: this.lexer.inlineTokens(match[2]!) }
+    },
+    renderer(token) {
+      return `<span style="color: ${token.color};">${this.parser.parseInline(token.tokens!)}</span>`
+    },
+  },
+  {
+    name: "highlight",
+    level: "inline",
+    start: (src) => src.indexOf("=="),
+    tokenizer(src) {
+      const match = new RegExp(`^==(?:\\{(${HEX})\\})?(?=\\S)([\\s\\S]*?\\S)==`).exec(src)
+      if (match) return { type: "highlight", raw: match[0], color: match[1] ?? DEFAULT_HIGHLIGHT, tokens: this.lexer.inlineTokens(match[2]!) }
+    },
+    renderer(token) {
+      return `<span style="background-color: ${token.color};">${this.parser.parseInline(token.tokens!)}</span>`
+    },
+  },
+]
+
 // Only an explicit [text](url) makes a link. A bare URL or <address> stays the text it was in Wrike.
-const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: () => undefined } }).setOptions({
+const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: () => undefined }, extensions: WRIKE_INLINE }).setOptions({
   gfm: true,
   renderer: new WrikeRenderer(),
 })

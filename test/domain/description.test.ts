@@ -92,7 +92,7 @@ describe("editableDescription", () => {
   })
   test.each([
     ["underline", "plain <u>under</u>"],
-    ["highlight", 'a <span style="color:#ff0000">red</span> word'],
+    ["a color spelled another way", 'a <span style="color:#ff0000">red</span> word'],
     ["mention anchor", '<a class="stream-user-id" rel="KUAAAA01">@Sam</a>'],
   ])("%s opens as raw HTML and saves untouched", (_name, html) => {
     expect(editableDescription(html)).toEqual({ format: "html", text: html })
@@ -182,5 +182,27 @@ describe("images", () => {
     const html = 'Before<br /><img src="//storage.example.test/thumb100/a b.png?x=1&amp;y=2" /><br />After'
     expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Before  \n![](<//storage.example.test/thumb100/a b.png?x=1&y=2>)  \nAfter" })
     expect(descriptionFromEdit(editableDescription(html))).toBe(html)
+  })
+})
+
+describe("text color and highlight", () => {
+  const roundTrip = (html: string) => descriptionFromEdit(editableDescription(html))
+
+  test.each([
+    ["a text color", 'a <span style="color: #43A047;">green</span> word', "a {color:#43A047}green{color} word"],
+    ["a highlight, keeping the case of its color", 'a <span style="background-color: #ffcc80;">marked</span> word', "a =={#ffcc80}marked== word"],
+    [
+      "both around bold",
+      '<span style="color: #D81B60;"><span style="background-color: #E1BEE7;"><b>Due</b></span></span> soon',
+      "{color:#D81B60}=={#E1BEE7}**Due**=={color} soon",
+    ],
+    ["a near-black color pasted from Wrike, kept as it is", '<span style="color: #191919;">Owner</span>', "{color:#191919}Owner{color}"],
+    ["text that looks like the syntax", "a == b and {color} c", "a \\== b and \\{color} c"],
+  ])("%s", (_name, html, markdown) => {
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: markdown })
+    expect(roundTrip(html)).toBe(html)
+  })
+  test("a bare ==highlight== takes the highlight Wrike descriptions use most", () => {
+    expect(markdownToHtml("==look==")).toBe('<span style="background-color: #F8BBD0;">look</span>')
   })
 })

@@ -117,6 +117,8 @@ function inline(node: Node): string {
       return codeSpan(node.textContent ?? "")
     case "A":
       return `[${inlineChildren(node)}](${destination(node.getAttribute("href") ?? "")})`
+    case "SPAN":
+      return span(node)
     case "INPUT":
       // A checklist item: the checkbox opens its label, which reads as a task list item.
       return node.hasAttribute("checked") ? "[x] " : "[ ] "
@@ -129,7 +131,17 @@ function inline(node: Node): string {
   }
 }
 
-const wrap = (delimiter: string, content: string) => (content ? `${delimiter}${keepEdgeSpace(content)}${delimiter}` : "")
+/** Wrike's text color and highlight, the only styles a span carries, in the spelling Wrike writes them. */
+function span(element: Element): string {
+  const style = element.getAttribute("style") ?? ""
+  const color = /^color: (#[0-9a-fA-F]{3,8});$/.exec(style)?.[1]
+  if (color) return `{color:${color}}${keepEdgeSpace(inlineChildren(element))}{color}`
+  const highlight = /^background-color: (#[0-9a-fA-F]{3,8});$/.exec(style)?.[1]
+  if (highlight) return wrap(`=={${highlight}}`, inlineChildren(element), "==")
+  return inlineChildren(element)
+}
+
+const wrap = (opening: string, content: string, closing = opening) => (content ? `${opening}${keepEdgeSpace(content)}${closing}` : "")
 
 function codeSpan(code: string): string {
   const ticks = "`".repeat(longestRun(code, "`") + 1)
@@ -151,6 +163,8 @@ const ESCAPES: [RegExp, string][] = [
   [/\\/g, "\\\\"],
   [/([*_`~[\]])/g, "\\$1"],
   [/&(?=#?\w+;)/g, "\\&"],
+  [/=(?==)/g, "\\="],
+  [/\{(?=color[:}])/g, "\\{"],
   [/^([-+>]|#{1,6} |=+)/gm, "\\$1"],
   [/^(\d+)([.)]) /gm, "$1\\$2 "],
 ]
