@@ -99,6 +99,7 @@ export async function openApp(size: { width: number; height: number } = { width:
     left: () => screen.mockInput.pressArrow("left"),
     right: () => screen.mockInput.pressArrow("right"),
     space: () => screen.mockInput.pressKey(" "),
+    tab: () => screen.mockInput.pressTab(),
     "ctrl+e": () => screen.mockInput.pressKey("e", { ctrl: true }),
     "ctrl+n": () => screen.mockInput.pressKey("n", { ctrl: true }),
     "ctrl+p": () => screen.mockInput.pressKey("p", { ctrl: true }),

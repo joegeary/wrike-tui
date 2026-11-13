@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { commentBody, editableComment, editWindowLeft, followEdit, refindMentions, type Mention } from "../../src/domain/comment"
+import { commentBody, editableComment, editWindowLeft, followEdit, MENTION_LIMIT, mentionMatches, refindMentions, typedMention, type Mention } from "../../src/domain/comment"
 import { userId } from "../../src/domain/ids"
 
 const JOE = userId("KUAB6OAK")
@@ -95,5 +95,31 @@ describe("refindMentions", () => {
       { at: 30, id: PAT, name: "Pat Example" },
     ])
     expect(refindMentions("@Pat Example only", mentions)).toEqual([{ at: 0, id: PAT, name: "Pat Example" }])
+  })
+})
+
+describe("typedMention", () => {
+  test("is an @ at the start or after a space, then letters, at the end of the draft", () => {
+    expect(typedMention("@jo")).toEqual({ at: 0, query: "jo" })
+    expect(typedMention("Thanks\n@jo")).toEqual({ at: 7, query: "jo" })
+    expect(typedMention("Thanks @")).toBeNull()
+    expect(typedMention("Thanks @jo ")).toBeNull()
+    expect(typedMention("mail joe@example")).toBeNull()
+  })
+})
+
+describe("mentionMatches", () => {
+  const person = (id: string, name: string, active = true) => ({ id: userId(id), name, email: null, active })
+  const people = [person("1", "Mary-Jane Watson"), person("2", "Joe Geary"), person("3", "Former Joe", false), person("4", "Jo Ann Smith")]
+
+  test("matches any word of an active person's name by prefix, in name order", () => {
+    expect(mentionMatches(people, "jo").map((contact) => contact.name)).toEqual(["Jo Ann Smith", "Joe Geary"])
+    expect(mentionMatches(people, "JANE").map((contact) => contact.name)).toEqual(["Mary-Jane Watson"])
+    expect(mentionMatches(people, "eary")).toEqual([])
+  })
+
+  test("offers a short list", () => {
+    const many = Array.from({ length: 9 }, (_, n) => person(String(n), `Alex ${n}`))
+    expect(mentionMatches(many, "al")).toHaveLength(MENTION_LIMIT)
   })
 })

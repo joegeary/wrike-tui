@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { resolveKey } from "../../src/app/keymap"
-import { listCursor, listRows } from "../../src/app/selectors"
+import { listCursor, listRows, mentionSuggestions } from "../../src/app/selectors"
 import type { State } from "../../src/app/state"
-import { commentId } from "../../src/domain/ids"
+import { commentId, userId } from "../../src/domain/ids"
 import type { Comment, Task } from "../../src/domain/model"
 import { inTodo, later, ME, overdue, PAT, play, requestOf } from "../support/app"
 
@@ -72,7 +72,7 @@ describe("editing my comment", () => {
 
   test("Enter opens the comment box on it, prefilled", () => {
     const { state } = play(onMine(), "enter")
-    expect(state.mode).toEqual({ kind: "compose", draft: "On it.", editing: mine.id, mentions: [] })
+    expect(state.mode).toEqual({ kind: "compose", draft: "On it.", editing: mine.id, mentions: [], pick: 0, dismissed: null })
   })
 
   test("Enter on someone else's comment says it is not mine", () => {
@@ -179,5 +179,58 @@ describe("deleting my comment", () => {
     const { state } = play(onStale(), { type: "comment-deleted", taskId: overdue.id, id: stale.id, result: { ok: false, error: { kind: "read_only" } } })
     expect(state.details).toMatchObject({ value: { comments: [older, stale, newest] } })
     expect(state.flash).toEqual({ tone: "error", text: "read-only mode: not saved" })
+  })
+})
+
+describe("mentions in the comment box", () => {
+  const SASHA = userId("SASHA")
+  /** The comment box with `draft` typed, and one more Example among the contacts. */
+  function typing(draft: string): State {
+    const opened = openWith([older])
+    const contacts = new Map(opened.contacts).set(SASHA, { id: SASHA, name: "Sasha Example", email: null, active: true })
+    return play({ ...opened, contacts }, "c", { type: "draft", text: draft }).state
+  }
+
+  test("@ and letters offer the active people with a word of their name starting so", () => {
+    expect(mentionSuggestions(typing("Thanks @"))).toBeNull()
+    expect(mentionSuggestions(typing("Thanks @s"))?.contacts.map((contact) => contact.name)).toEqual(["Sam Sample", "Sasha Example"])
+    expect(mentionSuggestions(typing("Thanks @EX"))?.contacts.map((contact) => contact.name)).toEqual(["Pat Example", "Sasha Example"])
+    expect(mentionSuggestions(typing("Thanks @de"))?.contacts.map((contact) => contact.name)).toEqual(["Riley Demo"])
+    expect(mentionSuggestions(typing("mail sam@ex"))).toBeNull()
+    expect(mentionSuggestions(typing("Thanks @zz"))).toBeNull()
+  })
+
+  test("Tab or Enter picks the highlighted person as @Full Name, and Up and Down move", () => {
+    const tabbed = play(typing("Thanks @ex"), "tab").state
+    expect(tabbed.mode).toMatchObject({ draft: "Thanks @Pat Example ", mentions: [{ at: 7, id: PAT, name: "Pat Example" }] })
+    const moved = play(typing("Thanks @ex"), "down", "enter").state
+    expect(moved.mode).toMatchObject({ draft: "Thanks @Sasha Example ", mentions: [{ at: 7, id: SASHA, name: "Sasha Example" }] })
+    expect(play(typing("Thanks @ex"), "ctrl+n", "ctrl+n", "ctrl+n", "ctrl+p", "tab").state.mode).toMatchObject({ draft: "Thanks @Pat Example " })
+  })
+
+  test("Esc closes the list and keeps the comment box, and Enter then posts the text as typed", () => {
+    const closed = play(typing("ping @pa"), "esc")
+    expect(closed.state.mode).toMatchObject({ kind: "compose", draft: "ping @pa" })
+    expect(mentionSuggestions(closed.state)).toBeNull()
+    expect(play(closed.state, { type: "draft", text: "ping @pat" }).state.mode).toMatchObject({ dismissed: 5 })
+    const { effects } = play(closed.state, "enter")
+    expect(effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: null, body: { text: "ping @pa", plainText: true } }])
+  })
+
+  test("a picked mention posts as HTML with Wrike's anchor", () => {
+    const picked = play(typing("@pa"), "tab", { type: "draft", text: "@Pat Example can you <check> this?" }, "enter")
+    expect(picked.effects).toEqual([
+      {
+        kind: "save-comment",
+        taskId: overdue.id,
+        editing: null,
+        body: { text: `<a class="stream-user-id avatar" rel="${PAT}">&#64;Pat Example</a> can you &lt;check&gt; this?`, plainText: false },
+      },
+    ])
+  })
+
+  test("typing over a picked mention makes it plain text again", () => {
+    const { effects } = play(typing("@pa"), "tab", { type: "draft", text: "@Pat Exampl " }, "enter")
+    expect(effects).toEqual([{ kind: "save-comment", taskId: overdue.id, editing: null, body: { text: "@Pat Exampl", plainText: true } }])
   })
 })

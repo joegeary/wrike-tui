@@ -79,6 +79,11 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("text", "text.save", "enter"),
   ...bind("text", "text.discard", "esc"),
 
+  ...bind("mention", "mention.down", "down", "ctrl+n"),
+  ...bind("mention", "mention.up", "up", "ctrl+p"),
+  ...bind("mention", "mention.pick", "tab", "enter"),
+  ...bind("mention", "mention.close", "esc"),
+
   ...bind("compose", "compose.post", "enter"),
   ...bind("compose", "compose.editor", "ctrl+e"),
   ...bind("compose", "compose.discard", "esc"),
@@ -106,6 +111,7 @@ export const CONTEXT_TITLES: Record<Context, string> = {
   edit: "Edit mode",
   picker: "Picker",
   text: "Text field",
+  mention: "Mention",
   compose: "Comment",
   confirm: "Confirm",
   palette: "Commands",
@@ -122,7 +128,7 @@ export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] 
     case "edit-text":
       return ["text"]
     case "compose":
-      return ["compose"]
+      return ["mention", "compose"]
     case "confirm-delete":
       return ["confirm"]
     case "edit":
@@ -179,7 +185,7 @@ export function keysFor(command: string, contexts: Context[]): string[] {
 }
 
 const KEY_LABELS: Record<string, string> = {
-  enter: "Enter", esc: "Esc", space: "Space", backspace: "Backspace",
+  enter: "Enter", esc: "Esc", space: "Space", backspace: "Backspace", tab: "Tab",
   up: "↑", down: "↓", left: "←", right: "→", "ctrl+n": "Ctrl+N", "ctrl+p": "Ctrl+P", "ctrl+e": "Ctrl+E",
 }
 

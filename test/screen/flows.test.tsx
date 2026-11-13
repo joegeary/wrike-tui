@@ -432,6 +432,47 @@ describe("Deleting my comment", () => {
   })
 })
 
+describe("Mentions", () => {
+  test("@ and letters offer people, Tab picks one, and the comment posts Wrike's mention anchor", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.type("@pa")
+    const offered = await app.see("─ Mention ─", "▸ Pat Example  pat.example@example.test", "Tab mention  Esc close list")
+    expect(offered).not.toContain("Riley Demo  riley")
+    await app.press("tab")
+    await app.see(/│@Pat Example +│/, /^(?![\s\S]*─ Mention ─)/)
+    await app.type("can we run <trainings> & demos?")
+    await app.press("enter")
+    await app.see("Comment posted", "Comments (4)", "can we run <trainings> & demos?")
+    expect(app.fake.writes).toEqual([
+      {
+        method: "POST",
+        path: `/tasks/${TASK.sso}/comments`,
+        params: { text: `<a class="stream-user-id avatar" rel="${PAT}">&#64;Pat Example</a> can we run &lt;trainings&gt; &amp; demos?` },
+      },
+    ])
+  })
+
+  test("Esc closes the list and keeps the box, and a name typed by hand stays text", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)")
+    await app.press("c")
+    await app.type("ping @ri")
+    await app.see("▸ Riley Demo")
+    await app.press("esc")
+    await app.see("─ New comment ─", /^(?![\s\S]*─ Mention ─)/)
+    await app.type("ley Demo")
+    await app.press("enter")
+    await app.see("Comment posted")
+    expect(app.fake.writes.at(-1)?.params).toEqual({ text: "ping @riley Demo", plainText: "true" })
+  })
+})
+
 describe("Keys and panes", () => {
   test("? shows the legend for the focused pane, straight from the keymap", async () => {
     app = await openApp(WIDE)

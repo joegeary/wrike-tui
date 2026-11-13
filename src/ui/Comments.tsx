@@ -1,9 +1,9 @@
 import type { SyntaxStyle } from "@opentui/core"
-import { contactName, editTimeLeft, sameItem } from "../app/selectors"
+import { contactName, editTimeLeft, mentionSuggestions, sameItem } from "../app/selectors"
 import type { Compose, DetailsItem, State } from "../app/state"
 import { htmlToMarkdown } from "../domain/description"
 import type { Comment } from "../domain/model"
-import { countdown, stamp } from "./format"
+import { countdown, fit, fitAfter, stamp } from "./format"
 import { TextInput } from "./TextInput"
 import { useTheme } from "./theme"
 
@@ -43,14 +43,34 @@ export function Comments({ state, comments, style }: { state: State; comments: C
   )
 }
 
-/** The comment box at the bottom of the details pane. An edit names the time left in its window. */
-export function ComposeBox({ state, mode, onDraft }: { state: State; mode: Compose; onDraft: (text: string) => void }) {
+/** The comment box at the bottom of the details pane, with the people offered for a mention above it. An edit names the time left in its window. */
+export function ComposeBox({ state, mode, width, onDraft }: { state: State; mode: Compose; width: number; onDraft: (text: string) => void }) {
   const theme = useTheme()
   const left = mode.editing ? editTimeLeft(state) : null
   const title = mode.editing === null ? " New comment " : left !== null && left > 0 ? ` Edit comment, ${countdown(left)} left ` : " Edit comment, the window has closed "
+  const suggestions = mentionSuggestions(state)
+  // The pane's border and the list's own.
+  const inner = width - 4
   return (
-    <box border borderStyle="rounded" borderColor={theme.accent} title={title} titleColor={theme.accent} height={3} flexShrink={0} flexDirection="row">
-      <TextInput value={mode.draft} placeholder="Write a comment" onInput={onDraft} />
-    </box>
+    <>
+      {suggestions ? (
+        <box border borderStyle="rounded" borderColor={theme.border} title=" Mention " titleColor={theme.heading} height={suggestions.contacts.length + 2} flexShrink={0} flexDirection="column">
+          {suggestions.contacts.map((contact, index) => {
+            const picked = index === Math.min(mode.pick, suggestions.contacts.length - 1)
+            const room = Math.max(0, inner - 3 - Bun.stringWidth(contact.name))
+            return (
+              <text key={contact.id} wrapMode="none" bg={picked ? theme.selection : undefined}>
+                <span fg={theme.accent}>{picked ? " ▸ " : "   "}</span>
+                <span fg={theme.text}>{contact.name}</span>
+                <span fg={picked ? theme.selectedDim : theme.dim}>{contact.email ? fitAfter("  ", contact.email, room) : fit("", room)}</span>
+              </text>
+            )
+          })}
+        </box>
+      ) : null}
+      <box border borderStyle="rounded" borderColor={theme.accent} title={title} titleColor={theme.accent} height={3} flexShrink={0} flexDirection="row">
+        <TextInput value={mode.draft} placeholder="Write a comment, @ mentions someone" onInput={onDraft} />
+      </box>
+    </>
   )
 }

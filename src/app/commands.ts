@@ -1,9 +1,9 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, MULTI_PICKERS, navCursorRow, selectedComment } from "./selectors"
+import { currentView, mentionSuggestions, MULTI_PICKERS, navCursorRow, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
-export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "compose" | "confirm" | "palette" | "help"
+export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
 
 /** The contexts a pane can be in while browsing. The palette lists the commands of these. */
 export const BROWSE_CONTEXTS: ReadonlySet<Context> = new Set(["global", "nav", "list", "task", "details"])
@@ -34,6 +34,7 @@ const inTasks = (state: State) => state.scope.kind !== "inbox"
 const inInbox = (state: State) => state.scope.kind === "inbox"
 const onFavorite = (state: State) => navCursorRow(state)?.kind === "favorite"
 const selecting = (state: State) => selectedComment(state) !== null
+const suggesting = (state: State) => mentionSuggestions(state) !== null
 const editingComment = (state: State) => state.mode.kind === "compose" && state.mode.editing !== null
 const multi = (state: State) => state.mode.kind === "picker" && MULTI_PICKERS.has(state.mode.field)
 
@@ -148,9 +149,17 @@ export const COMMANDS: Command[] = [
   command("text.save", "Save", "App", ["text"], () => ({ type: "submit" }), { hint: "save" }),
   command("text.discard", "Discard", "App", ["text"], () => ({ type: "cancel" }), { hint: "discard" }),
 
-  command("compose.post", "Post the comment", "Task", ["compose"], () => ({ type: "submit" }), { hint: (state) => (editingComment(state) ? "save" : "post") }),
+  command("mention.down", "Next person", "Task", ["mention"], () => ({ type: "choice-move", by: 1 }), { when: suggesting }),
+  command("mention.up", "Previous person", "Task", ["mention"], () => ({ type: "choice-move", by: -1 }), { when: suggesting }),
+  command("mention.pick", "Mention this person", "Task", ["mention"], () => ({ type: "mention-pick" }), { when: suggesting, hint: "mention" }),
+  command("mention.close", "Close the list", "Task", ["mention"], () => ({ type: "mention-close" }), { when: suggesting, hint: "close list" }),
+
+  command("compose.post", "Post the comment", "Task", ["compose"], () => ({ type: "submit" }), {
+    when: (state) => !suggesting(state),
+    hint: (state) => (editingComment(state) ? "save" : "post"),
+  }),
   command("compose.editor", "Write it in $EDITOR", "Task", ["compose"], () => ({ type: "compose-editor" }), { hint: "editor" }),
-  command("compose.discard", "Discard", "Task", ["compose"], () => ({ type: "cancel" }), { hint: "discard" }),
+  command("compose.discard", "Discard", "Task", ["compose"], () => ({ type: "cancel" }), { when: (state) => !suggesting(state), hint: "discard" }),
 
   command("confirm.yes", "Delete it", "Task", ["confirm"], () => ({ type: "confirm" }), { hint: "delete" }),
   command("confirm.no", "Keep it", "Task", ["confirm"], () => ({ type: "cancel" }), { hint: "keep" }),

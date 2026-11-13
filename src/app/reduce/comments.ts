@@ -1,8 +1,8 @@
-import { commentBody, editableComment, editWindowLeft, refindMentions } from "../../domain/comment"
+import { commentBody, editableComment, editWindowLeft, followEdit, refindMentions, typedMention, type Mention } from "../../domain/comment"
 import type { CommentId, TaskId } from "../../domain/ids"
 import type { Comment } from "../../domain/model"
 import { describeError } from "../../wrike/errors"
-import { contactName, detailsItems, mentionName, openTask, sameItem, selectedComment } from "../selectors"
+import { contactName, detailsItems, mentionName, mentionSuggestions, openTask, sameItem, selectedComment } from "../selectors"
 import type { Action, Compose, State, Update } from "../state"
 import { clamp, failure, info } from "./core"
 
@@ -18,7 +18,32 @@ export function selectItem(state: State, by: 1 | -1): Update {
   return [{ ...state, selected: items[next]! }, []]
 }
 
-export const newComment = (): Compose => ({ kind: "compose", draft: "", editing: null, mentions: [] })
+export const newComment = (): Compose => composeOn("", null, [])
+
+const composeOn = (draft: string, editing: CommentId | null, mentions: Mention[]): Compose => ({ kind: "compose", draft, editing, mentions, pick: 0, dismissed: null })
+
+/** The draft as typed: mentions follow the edit, the highlight goes back to the first suggestion, and a closed list stays closed for its own `@`. */
+export function composeDraft(mode: Compose, draft: string): Compose {
+  const dismissed = mode.dismissed !== null && typedMention(draft)?.at === mode.dismissed ? mode.dismissed : null
+  return { ...mode, draft, mentions: followEdit(mode.draft, draft, mode.mentions), pick: 0, dismissed }
+}
+
+/** Tab or Enter on a suggestion: the typed `@letters` become `@Full Name` and a mention of that person. */
+export function pickMention(state: State): Update {
+  const found = mentionSuggestions(state)
+  if (state.mode.kind !== "compose" || !found) return [state, []]
+  const contact = found.contacts[clamp(state.mode.pick, found.contacts.length)]!
+  const mention: Mention = { at: found.at, id: contact.id, name: contact.name }
+  const draft = `${state.mode.draft.slice(0, found.at)}@${contact.name} `
+  return [{ ...state, mode: { ...state.mode, draft, mentions: [...state.mode.mentions, mention], pick: 0, dismissed: null } }, []]
+}
+
+/** Esc on the list closes it and leaves the comment box open. */
+export function closeMentions(state: State): Update {
+  const found = mentionSuggestions(state)
+  if (state.mode.kind !== "compose" || !found) return [state, []]
+  return [{ ...state, mode: { ...state.mode, dismissed: found.at } }, []]
+}
 
 const notMine = (state: State, comment: Comment) => `This is ${contactName(state, comment.authorId)}'s comment, not yours`
 
@@ -62,7 +87,7 @@ export function editComment(state: State): Update {
   if (refusal) return [{ ...state, flash: info(refusal) }, []]
   const editable = editableComment(comment.text, mentionName(state))
   if (!editable) return [{ ...state, flash: info("This comment has formatting the client cannot edit. Press o to edit it in Wrike") }, []]
-  return [{ ...state, mode: { kind: "compose", draft: editable.text, editing: comment.id, mentions: editable.mentions } }, []]
+  return [{ ...state, mode: composeOn(editable.text, comment.id, editable.mentions) }, []]
 }
 
 export function submitCompose(state: State, mode: Compose): Update {

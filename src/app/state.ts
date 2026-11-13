@@ -79,6 +79,10 @@ export type Compose = {
   editing: CommentId | null
   /** The mentions in the draft. They move with its edits, and one the user types over becomes plain text. */
   mentions: Mention[]
+  /** The highlighted suggestion while a mention is typed. */
+  pick: number
+  /** Where the `@` is whose suggestions Esc closed. They stay closed until another `@` is typed. */
+  dismissed: number | null
 }
 
 export type Details = { task: Task; comments: Comment[]; folders: string[] }
@@ -201,6 +205,8 @@ export type Intent =
   | { type: "unselect" }
   | { type: "edit-comment" }
   | { type: "delete-comment" }
+  | { type: "mention-pick" }
+  | { type: "mention-close" }
   | { type: "confirm" }
   | { type: "task"; command: TaskCommand }
   | { type: "link"; act: "browser" | "copy-url" | "copy-id" }

@@ -1,4 +1,3 @@
-import { followEdit } from "../domain/comment"
 import { findStatus } from "../domain/model"
 import { resolveKey } from "./keymap"
 import { stepCursor } from "./nav"
@@ -16,10 +15,24 @@ import {
   tasksLoaded,
   treeLoaded,
 } from "./reduce/load"
-import { commentDeleted, commentSaved, composed, composeEditor, confirmDelete, deleteComment, editComment, keepComment, selectItem, submitCompose } from "./reduce/comments"
+import {
+  closeMentions,
+  commentDeleted,
+  commentSaved,
+  composed,
+  composeDraft,
+  composeEditor,
+  confirmDelete,
+  deleteComment,
+  editComment,
+  keepComment,
+  pickMention,
+  selectItem,
+  submitCompose,
+} from "./reduce/comments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
 import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
-import { currentList, navRowsOf, openTask, pickerOptions } from "./selectors"
+import { currentList, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
 import { EDIT_FIELDS, PANES, type Action, type State, type Update } from "./state"
 
 export { start }
@@ -51,7 +64,7 @@ function step(state: State, action: Action): Update {
         const { error: _cleared, ...rest } = mode
         return [{ ...state, mode: { ...rest, draft: action.text } }, []]
       }
-      if (mode.kind === "compose") return [{ ...state, mode: { ...mode, draft: action.text, mentions: followEdit(mode.draft, action.text, mode.mentions) } }, []]
+      if (mode.kind === "compose") return [{ ...state, mode: composeDraft(mode, action.text) }, []]
       if (mode.kind === "search-input" || mode.kind === "filter-input") return [{ ...state, mode: { ...mode, draft: action.text } }, []]
       return [state, []]
     }
@@ -152,6 +165,10 @@ function step(state: State, action: Action): Update {
       return editComment(state)
     case "delete-comment":
       return deleteComment(state)
+    case "mention-pick":
+      return pickMention(state)
+    case "mention-close":
+      return closeMentions(state)
     case "confirm":
       return confirmDelete(state)
     case "task":
@@ -209,6 +226,7 @@ function moveChoice(state: State, by: number): Update {
   const { mode } = state
   if (mode.kind === "picker") return [{ ...state, mode: { ...mode, cursor: clamp(mode.cursor + by, pickerOptions(state, mode).length) } }, []]
   if (mode.kind === "palette") return [{ ...state, mode: { ...mode, cursor: clamp(mode.cursor + by, paletteCommands(state, mode.query).length) } }, []]
+  if (mode.kind === "compose") return [{ ...state, mode: { ...mode, pick: clamp(mode.pick + by, mentionSuggestions(state)?.contacts.length ?? 0) } }, []]
   return [state, []]
 }
 

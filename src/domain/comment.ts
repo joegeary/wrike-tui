@@ -1,4 +1,5 @@
 import { userId, type UserId } from "./ids"
+import type { Contact } from "./model"
 
 /**
  * Wrike's web app lets a comment be edited for five minutes after it is
@@ -107,4 +108,21 @@ export function refindMentions(text: string, mentions: Mention[]): Mention[] {
       from = at + mentionText(mention).length
       return [{ ...mention, at }]
     })
+}
+
+/** The mention being typed at the end of the draft: an `@` at the start or after a space, then at least one letter. */
+export function typedMention(draft: string): { at: number; query: string } | null {
+  const match = /(?:^|\s)@([^\s@]+)$/.exec(draft)
+  return match ? { at: draft.length - match[1]!.length - 1, query: match[1]! } : null
+}
+
+export const MENTION_LIMIT = 5
+
+/** Active people with a word of their name that starts with `query`, by name, at most `MENTION_LIMIT`. */
+export function mentionMatches(contacts: Iterable<Contact>, query: string): Contact[] {
+  const prefix = query.toLowerCase()
+  return [...contacts]
+    .filter((contact) => contact.active && contact.name.toLowerCase().split(/[\s-]+/).some((word) => word.startsWith(prefix)))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, MENTION_LIMIT)
 }

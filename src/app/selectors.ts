@@ -1,7 +1,7 @@
-import { editWindowLeft } from "../domain/comment"
+import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
 import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
-import { findStatus, IMPORTANCES, statusChoices, type Comment, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
+import { findStatus, IMPORTANCES, statusChoices, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
 import { scopeKey, taskScopeKind, type Scope, type ScopeKey } from "../domain/scope"
 import { defaultSpec } from "../domain/settings"
 import { cursorIndex, shapeList, type ListRow, type RowId, type ShapeContext } from "../domain/shape"
@@ -136,6 +136,17 @@ export function editTimeLeft(state: State): number | null {
 
 /** True while the screen counts an edit window down, which is when the clock must keep moving. */
 export const countingDown = (state: State) => (editTimeLeft(state) ?? 0) > 0
+
+export type MentionSuggestions = { at: number; contacts: Contact[] }
+
+/** The people offered for the mention typed at the end of the comment box, or null when no list is open. */
+export function mentionSuggestions(state: State): MentionSuggestions | null {
+  if (state.mode.kind !== "compose") return null
+  const typed = typedMention(state.mode.draft)
+  if (!typed || typed.at === state.mode.dismissed) return null
+  const contacts = mentionMatches(state.contacts.values(), typed.query)
+  return contacts.length === 0 ? null : { at: typed.at, contacts }
+}
 
 /** A contact's name as the comment box writes it, for a mention. */
 export const mentionName = (state: State) => (id: UserId) => state.contacts.get(id)?.name

@@ -187,7 +187,7 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
           <Body state={state} details={shownDetails} onDraft={props.onDraft} />
         </scrollbox>
       ) : null}
-      {state.mode.kind === "compose" ? <ComposeBox state={state} mode={state.mode} onDraft={props.onDraft} /> : null}
+      {state.mode.kind === "compose" ? <ComposeBox state={state} mode={state.mode} width={props.width} onDraft={props.onDraft} /> : null}
     </Pane>
   )
 }
