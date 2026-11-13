@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { WrikeFailure } from "../../src/wrike/errors"
-import { CommentSchema, contactFromWire, ContactSchema, InboxSchema, parseAll, TaskSchema, WorkflowSchema } from "../../src/wrike/schemas"
+import { describeChange } from "../../src/domain/history"
+import { CommentSchema, contactFromWire, ContactSchema, HistorySchema, InboxSchema, parseAll, TaskSchema, WorkflowSchema } from "../../src/wrike/schemas"
 import comments from "../fixtures/comments.json"
 import contacts from "../fixtures/contacts.json"
 import inbox from "../fixtures/inbox.json"
@@ -111,5 +112,29 @@ describe("inbox parser", () => {
       inbox: [{ notificationId: "n1", notificationType: "Mention", ts: "2026-11-12T00:00:00Z", item: { title: "Weekly report", baseType: "REPORT" } }],
     }).inbox
     expect(entry).toMatchObject({ item: null, author: null, unread: false })
+  })
+})
+
+describe("history parser", () => {
+  const one = (change: Record<string, unknown>) => HistorySchema.parse({ taskChanges: [{ success: true, changes: [{ timestamp: "2026-11-12T18:24:31Z", type: "STATUS", action: "UPDATE", ...change }] }] }).taskChanges[0]!.changes[0]!
+
+  test("a known type with a payload of another shape is still drawn, by its type and action", () => {
+    const entry = one({ payload: { surprise: true }, author: { id: "w:usr:1", name: "Joe Geary" } })
+    expect(entry).toEqual({ at: "2026-11-12T18:24:31Z", author: "Joe Geary", change: { kind: "other", type: "STATUS", action: "UPDATE" } })
+    expect(describeChange(entry.change)).toBe("status changed")
+  })
+
+  test("a change without an author or a payload parses, and a time without a zone is UTC", () => {
+    const entry = one({ timestamp: "2026-11-12T18:24:31", type: "RECURRENCE", action: "ENABLE" })
+    expect(entry).toEqual({ at: "2026-11-12T18:24:31Z", author: null, change: { kind: "other", type: "RECURRENCE", action: "ENABLE" } })
+    expect(describeChange(entry.change)).toBe("recurrence enable")
+    expect(one({ timestamp: Date.UTC(2026, 10, 12, 18, 24, 31, 500), payload: {} }).at).toBe("2026-11-12T18:24:31Z")
+  })
+
+  test("a cleared date, duration or field says so", () => {
+    expect(describeChange(one({ type: "DUE_DATE", payload: {} }).change)).toBe("due cleared")
+    expect(describeChange(one({ type: "DURATION", payload: { newValue: null } }).change)).toBe("duration cleared")
+    expect(describeChange(one({ type: "DURATION", payload: { newValue: { durationInMinutes: 90 } } }).change)).toBe("duration 90m")
+    expect(describeChange(one({ type: "CUSTOM_FIELDS", payload: { customField: { id: "w:cf:1", name: "Work Type" } } }).change)).toBe("Work Type cleared")
   })
 })

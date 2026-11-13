@@ -1,4 +1,5 @@
 import type { CommentBody } from "../domain/comment"
+import type { HistoryPage } from "../domain/history"
 import type { CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { taskId, userId } from "../domain/ids"
 import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
@@ -42,6 +43,8 @@ export type WrikeClient = {
   deleteComment(id: CommentId): Promise<void>
   folders(ids: string[]): Promise<string[]>
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
+  /** One page of an item's field history, newest first. */
+  history(item: LegacyItemId, page: { pageSize: number; pageToken?: string }): Promise<HistoryPage>
 }
 
 export type TaskQuery =
@@ -55,7 +58,7 @@ export type TaskPage = { tasks: Task[]; next: string | null }
 export const PAGE_SIZE = 200
 
 /** The calls that go to Wrike's MCP server, and the end of its session. */
-export type McpClient = Pick<WrikeClient, "inbox"> & { close(): Promise<void> }
+export type McpClient = Pick<WrikeClient, "inbox" | "history"> & { close(): Promise<void> }
 
 // A task list omits these unless asked, and the app's Task always carries them.
 const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds"]
@@ -181,6 +184,7 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
     },
 
     inbox: (options) => mcp.inbox(options),
+    history: (item, page) => mcp.history(item, page),
   }
 }
 

@@ -11,6 +11,7 @@ import {
   type TaskDates,
   type Workflow,
 } from "../domain/model"
+import type { HistoryChange, HistoryEntry } from "../domain/history"
 import { SPACE_ACCESS, type FolderNode, type Space, type SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
 
@@ -190,6 +191,71 @@ const InboxEntrySchema = z
   })
 
 export const InboxSchema = z.object({ inbox: z.array(InboxEntrySchema) })
+
+/** Wrike's times as the rest of the app writes them: ISO in UTC, to the second. A time without a zone is UTC. */
+function isoTime(raw: string | number): string {
+  const text = typeof raw === "string" && !/(?:Z|[+-]\d\d:?\d\d)$/.test(raw) ? `${raw}Z` : raw
+  const time = new Date(text)
+  return Number.isNaN(time.getTime()) ? String(raw) : time.toISOString().replace(/\.\d+Z$/, "Z")
+}
+
+const Named = z.object({ name: z.string() })
+const Titled = z.object({ title: z.string() })
+const Values = <T extends z.ZodType>(value: T) => z.object({ oldValue: value.nullish(), newValue: value })
+const Day = z.object({ newValue: z.string().nullish() })
+
+/** How each history type's payload reads. A type missing here, or a payload that does not match, is drawn as `other`. */
+const CHANGES: Record<string, (action: string, payload: unknown) => HistoryChange | null> = {
+  TITLE: (_, payload) => read(Values(z.string()), payload, (v) => ({ kind: "title", from: v.oldValue ?? null, to: v.newValue })),
+  STATUS: (_, payload) => read(Values(Named), payload, (v) => ({ kind: "status", from: v.oldValue?.name ?? null, to: v.newValue.name })),
+  ASSIGNEES: (action, payload) =>
+    action === "ADD"
+      ? read(z.object({ addedUsers: z.array(Named).min(1) }), payload, (v) => ({ kind: "assignees", added: v.addedUsers.map((user) => user.name), removed: [] }))
+      : read(z.object({ removedUsers: z.array(Named).min(1) }), payload, (v) => ({ kind: "assignees", added: [], removed: v.removedUsers.map((user) => user.name) })),
+  PARENTS: (action, payload) =>
+    action === "ADD"
+      ? read(z.object({ addedParents: z.array(Titled).min(1) }), payload, (v) => ({ kind: "parents", added: v.addedParents.map((parent) => parent.title), removed: [] }))
+      : read(z.object({ removedParents: z.array(Titled).min(1) }), payload, (v) => ({ kind: "parents", added: [], removed: v.removedParents.map((parent) => parent.title) })),
+  START_DATE: (_, payload) => read(Day, payload, (v) => ({ kind: "start", day: v.newValue?.slice(0, 10) ?? null })),
+  DUE_DATE: (_, payload) => read(Day, payload, (v) => ({ kind: "due", day: v.newValue?.slice(0, 10) ?? null })),
+  DURATION: (_, payload) =>
+    read(z.object({ newValue: z.object({ durationInMinutes: z.number() }).nullish() }), payload, (v) => ({ kind: "duration", minutes: v.newValue?.durationInMinutes ?? null })),
+  CUSTOM_FIELDS: (_, payload) =>
+    read(z.object({ customField: Named, newString: z.string().nullish() }), payload, (v) => ({ kind: "field", name: v.customField.name, value: v.newString ?? null })),
+}
+
+function read<T>(schema: z.ZodType<T>, payload: unknown, build: (value: T) => HistoryChange): HistoryChange | null {
+  const parsed = schema.safeParse(payload)
+  return parsed.success ? build(parsed.data) : null
+}
+
+const HistoryChangeSchema = z
+  .object({
+    timestamp: z.union([z.string(), z.number()]),
+    author: z.object({ name: z.string().nullish() }).nullish(),
+    type: z.string(),
+    action: z.string().default(""),
+    payload: z.unknown().optional(),
+  })
+  .transform(
+    (wire): HistoryEntry => ({
+      at: isoTime(wire.timestamp),
+      author: wire.author?.name || null,
+      change: CHANGES[wire.type]?.(wire.action, wire.payload) ?? { kind: "other", type: wire.type, action: wire.action },
+    }),
+  )
+
+/** What `get_item_history` answers for one item. An item Wrike could not read comes back with `success: false` and an error. */
+export const HistorySchema = z.object({
+  taskChanges: z.array(
+    z.object({
+      success: z.boolean().default(true),
+      error: z.unknown().optional(),
+      changes: z.array(HistoryChangeSchema).default([]),
+    }),
+  ),
+  nextPageToken: z.string().nullish(),
+})
 
 export function parseAll<T>(schema: z.ZodType<T>, items: unknown[], what: string): T[] {
   const parsed = z.array(schema).safeParse(items)

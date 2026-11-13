@@ -259,6 +259,21 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     return wrikeError(404, "method_not_found", `No fake route for ${method} ${path}`)
   }
 
+  /** `get_item_history` for the items in the scope, newest first, paged by `pageSize` with an opaque token. */
+  function itemHistory(args: { scope?: { itemIds?: string[] }; pageSize?: number; nextPageToken?: string }) {
+    const offset = args.nextPageToken ? Number(Buffer.from(args.nextPageToken, "base64url").toString()) : 0
+    const pageSize = args.pageSize ?? 50
+    let more = false
+    const taskChanges = (args.scope?.itemIds ?? []).map((itemId) => {
+      const task = data.tasks.find((candidate) => `w:itm:${candidate.permalink.split("=")[1]}` === itemId)
+      if (!task) return { itemId, success: false, error: "Item not found or access denied" }
+      const all = data.history[task.id] ?? []
+      more ||= offset + pageSize < all.length
+      return { itemId, success: true, title: task.title, baseType: "TASK", changes: all.slice(offset, offset + pageSize) }
+    })
+    return { taskChanges, truncated: more, ...(more ? { nextPageToken: Buffer.from(String(offset + pageSize)).toString("base64url") } : {}) }
+  }
+
   async function mcp(request: Request): Promise<Response> {
     if (request.method === "GET") return new Response(null, { status: 405 })
     if (request.method === "DELETE") return new Response(null, { status: 200 })
@@ -275,7 +290,12 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       case "ping":
         return result({})
       case "tools/list":
-        return result({ tools: [{ name: "get_my_inbox", description: "Inbox notifications", inputSchema: { type: "object" } }] })
+        return result({
+          tools: [
+            { name: "get_my_inbox", description: "Inbox notifications", inputSchema: { type: "object" } },
+            { name: "get_item_history", description: "Field history of items", inputSchema: { type: "object" } },
+          ],
+        })
       case "tools/call": {
         const failure = toolFailures.find((candidate) => candidate.tool === message.params?.name)
         if (failure) {
@@ -283,6 +303,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
           if (failure.times <= 0) toolFailures.splice(toolFailures.indexOf(failure), 1)
           return result({ ...(failure.isError ? { isError: true } : {}), content: [{ type: "text", text: failure.text }] })
         }
+        if (message.params?.name === "get_item_history") return result({ content: [{ type: "text", text: JSON.stringify(itemHistory(message.params.arguments ?? {})) }] })
         if (message.params?.name !== "get_my_inbox") {
           return result({ isError: true, content: [{ type: "text", text: `Unknown tool ${message.params?.name}` }] })
         }

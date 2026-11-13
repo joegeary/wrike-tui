@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId } from "../../src/domain/ids"
+import { describeChange } from "../../src/domain/history"
 import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
 import { createMcpClient } from "../../src/wrike/mcp"
@@ -293,6 +294,51 @@ describe("inbox over MCP", () => {
     await expect(client.inbox({ includeRead: false })).rejects.toMatchObject({ error: { kind: "invalid", message: "The Inbox tool failed: Item not accessible" } })
     fake.data.inbox[0]!.commentText = "We hit the rate limit again"
     expect((await client.inbox({ includeRead: false }))[0]!.commentText).toBe("We hit the rate limit again")
+  })
+})
+
+describe("history over MCP", () => {
+  const loginItem = () => legacyItemId(fake.data.tasks.find((task) => task.id === TASK.login)!.permalink.split("=")[1]!)!
+  const describeAll = (entries: { author: string | null; change: Parameters<typeof describeChange>[0] }[]) => entries.map((entry) => `${entry.author}: ${describeChange(entry.change)}`)
+
+  test("a task's changes come newest first, each kind read, an unknown kind named by its type", async () => {
+    const page = await client.history(loginItem(), { pageSize: 50 })
+    expect(page.next).toBeNull()
+    expect(describeAll(page.entries)).toEqual([
+      "Pat Example: Work Type: DB",
+      `Riley Demo: due ${fake.data.tasks.find((task) => task.id === TASK.login)!.dates.due!.slice(0, 10)}`,
+      "Pat Example: status New → In Progress",
+      "Pat Example: assigned Pat Example",
+      "Jordan Placeholder: unassigned Riley Demo",
+      "Sam Sample: moved into Platform",
+      "Sam Sample: moved out of Q4 Launch",
+      "Sam Sample: start 2026-11-13",
+      "Sam Sample: duration 2d",
+      "Riley Demo: effort changed",
+      "Pat Example: title Fix login loop → Fix login redirect loop",
+    ])
+    expect(page.entries[0]!.at).toBe("2026-11-12T15:40:00Z")
+  })
+
+  test("the call asks for one item by its permalink number, and pages with Wrike's token", async () => {
+    const first = await client.history(loginItem(), { pageSize: 4 })
+    expect(first.entries).toHaveLength(4)
+    expect(first.next).not.toBeNull()
+    const second = await client.history(loginItem(), { pageSize: 4, pageToken: first.next! })
+    expect(describeAll(second.entries)[0]).toBe("Jordan Placeholder: unassigned Riley Demo")
+  })
+
+  test("an item Wrike cannot read is an error with Wrike's words, a rate limit is rate_limited", async () => {
+    await expect(client.history(legacyItemId("1")!, { pageSize: 50 })).rejects.toMatchObject({
+      error: { kind: "invalid", message: "Wrike did not give the history: Item not found or access denied" },
+    })
+    fake.failTool({ tool: "get_item_history", text: "Rate limit exceeded" })
+    await expect(client.history(loginItem(), { pageSize: 50 })).rejects.toMatchObject({ error: { kind: "rate_limited" } })
+  })
+
+  test("a task with no history has none", async () => {
+    const sso = legacyItemId(fake.data.tasks.find((task) => task.id === TASK.sso)!.permalink.split("=")[1]!)!
+    expect(await client.history(sso, { pageSize: 50 })).toEqual({ entries: [], next: null })
   })
 })
 

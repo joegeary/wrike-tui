@@ -384,7 +384,35 @@ export function seed(today: string, now: string) {
     notification(8, "Status", 60 * 24 * 9, false, { task: TASK.tls }, riley),
   ]
 
-  return { contacts, workflows, spaces, spaceWorkflows, folders, tasks, comments, inbox }
+  // Field history in get_item_history's shape, newest first, by task. A task left out has none.
+  const usr = (person: { id: number; name: string }) => ({ id: `w:usr:${person.id}`, name: person.name })
+  const sam = { id: 1961701, name: "Sam Sample" }
+  const change = (minutes: number, author: { id: number; name: string }, type: string, action: string, payload: unknown) => ({
+    timestamp: minutesAgo(minutes),
+    author: usr(author),
+    type,
+    action,
+    payload,
+  })
+  const statusValue = (id: string, name: string) => ({ id: `w:wfst:${id}`, name, category: "Active" })
+  const folderRef = (title: string, n: number) => ({ id: `w:itm:${4598458000 + n}`, title, baseType: "FOLDER" })
+  const history: Record<string, ReturnType<typeof change>[]> = {
+    [TASK.login]: [
+      change(20, pat, "CUSTOM_FIELDS", "UPDATE", { customField: { id: "w:cf:1201", name: "Work Type" }, newString: "DB" }),
+      change(60, riley, "DUE_DATE", "UPDATE", { newValue: `${addDays(today, 2)}T17:00:00` }),
+      change(60 * 2, pat, "STATUS", "UPDATE", { oldValue: statusValue(STATUS.new, "New"), newValue: statusValue(STATUS.inProgress, "In Progress") }),
+      change(60 * 4, pat, "ASSIGNEES", "ADD", { addedUsers: [usr(pat)] }),
+      change(60 * 5, jordan, "ASSIGNEES", "DELETE", { removedUsers: [usr(riley)] }),
+      change(60 * 6, sam, "PARENTS", "ADD", { addedParents: [folderRef("Platform", 1)] }),
+      change(60 * 6 + 1, sam, "PARENTS", "DELETE", { removedParents: [folderRef("Q4 Launch", 2)] }),
+      change(60 * 24, sam, "START_DATE", "UPDATE", { newValue: `${addDays(today, 1)}T09:00:00` }),
+      change(60 * 24 + 1, sam, "DURATION", "UPDATE", { newValue: { durationInMinutes: 960 } }),
+      change(60 * 24 * 2, riley, "EFFORT", "UPDATE", { newValue: { totalEffort: 120 } }),
+      change(60 * 24 * 3, pat, "TITLE", "UPDATE", { oldValue: "Fix login loop", newValue: "Fix login redirect loop" }),
+    ],
+  }
+
+  return { contacts, workflows, spaces, spaceWorkflows, folders, tasks, comments, inbox, history }
 }
 
 export type FakeData = ReturnType<typeof seed>
