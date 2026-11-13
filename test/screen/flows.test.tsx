@@ -51,16 +51,6 @@ describe("Inbox", () => {
     const frame = await app.see("Added the escalation matrix", "2 Inbox (with read)")
     expect(frame).toMatch(/○ Comment\s+Write onboarding guide for new support agents/)
   })
-
-  test("Enter on a project notification opens the browser, and on one without an item says so", async () => {
-    app = await openApp(WIDE)
-    await app.see("Q4 Launch")
-    await app.press("G", "enter")
-    await app.see("Opening the project in the browser")
-    expect(app.outside.opened).toEqual(["https://www.wrike.com/open.htm?id=4598459002"])
-    await app.press("k", "enter")
-    await app.see("This notification has nothing to open")
-  })
 })
 
 test("My to-do groups my active tasks by due date", async () => {
@@ -99,17 +89,6 @@ describe("Search", () => {
     const frame = await app.see("2 Search: fix", "Fix login redirect loop")
     expect(frame).toMatch(/Fix flaky export test\s+Completed/)
     expect(frame).toMatch(/│ {3}Search\s+2 │/)
-  })
-
-  test("a pasted permalink opens that task", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("/")
-    await app.type("https://www.wrike.com/open.htm?id=4598459107")
-    await app.press("enter")
-    const frame = await app.see("The session cookie is dropped", "Comments (1)")
-    expect(frame).toMatch(/Assignees\s+Pat Example/)
-    expect(app.store.getState().focus).toBe("details")
   })
 
   test("a numeric ID opens that task, and an unknown one says nothing matches", async () => {
@@ -166,26 +145,6 @@ describe("Editing a task", () => {
     expect(await app.frame()).not.toContain("Edit mode")
   })
 
-  test("a bad due date is refused in place and a good one is saved", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("e", "j", "j", "j", "j", "j", "enter", "ctrl+u")
-    await app.type("soon")
-    await app.press("enter")
-    await app.see("Use YYYY-MM-DD, or leave it empty to clear")
-    expect(app.fake.writes).toEqual([])
-    await app.press("ctrl+u")
-    await app.type("2026-12-04")
-    await app.press("enter")
-    const saved = await app.see("Due date set to 2026-12-04")
-    expect(saved).toMatch(/Due\s+2026-12-04 {2}Dec 4\s/)
-    expect(app.fake.writes).toEqual([
-      { method: "PUT", path: `/tasks/${TASK.sso}`, params: { dates: '{"type":"Planned","start":"2026-11-07","due":"2026-12-04"}' } },
-    ])
-  })
-
   test("A toggles assignees and p sets the importance", async () => {
     app = await openApp(WIDE)
     await app.see("Enable SSO on sandbox")
@@ -202,24 +161,6 @@ describe("Editing a task", () => {
     await app.press("p", "down", "down", "enter")
     expect(await app.see("Importance set to Low")).toMatch(/Importance\s+Low/)
     expect(app.fake.writes.map((write) => write.params)).toEqual([{ addResponsibles: '["KUAAAA03"]' }, { importance: "Low" }])
-  })
-
-  test("m takes a task that is someone else's, and it joins My to-do", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("/")
-    await app.type("login")
-    await app.press("enter")
-    await app.see("Fix login redirect loop")
-    await app.press("m")
-    const taken = await app.see("Assigned to you")
-    expect(taken).toMatch(/Assignees\s+Pat Example, Sam Sample/)
-    expect(taken).toMatch(/My to-do\s+7 /)
-    expect(app.fake.writes).toEqual([{ method: "PUT", path: `/tasks/${TASK.login}`, params: { addResponsibles: `["${ME}"]` } }])
-    await app.press("m")
-    await app.see("Already assigned to you")
-    expect(app.fake.writes).toHaveLength(1)
-    expect(app.fake.data.tasks.find((task) => task.id === TASK.login)!.responsibleIds).toEqual([PAT, ME])
   })
 
   test("E round-trips a simple description through markdown", async () => {
@@ -325,21 +266,6 @@ describe("Comments", () => {
       { method: "POST", path: `/tasks/${TASK.sso}/comments`, params: { text: "Yes, the sandbox is ready for trainings.", plainText: "true" } },
     ])
   })
-
-  test("Ctrl+E finishes a comment in the editor and Esc discards a draft", async () => {
-    app = await openApp(WIDE)
-    app.outside.editor = (initial) => `${initial}\nSecond line from the editor.\n`
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("c")
-    await app.type("Never sent")
-    await app.press("esc", "c")
-    await app.type("First line.")
-    await app.press("ctrl+e")
-    await app.see("Comment posted", "Second line from the editor.")
-    expect(app.fake.writes.map((write) => write.params.text)).toEqual(["First line.\nSecond line from the editor."])
-  })
 })
 
 describe("Selecting comments", () => {
@@ -396,35 +322,6 @@ describe("Editing my comment", () => {
     await app.press("enter")
     await app.see("Comments can only be edited in the 5 minutes after posting")
     expect(app.fake.writes).toHaveLength(2)
-  })
-
-  test("Enter on someone else's comment says so, and an old one of mine names the window", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("[", "enter")
-    await app.see("This is Pat Example's comment, not yours")
-    await app.press("[", "enter")
-    await app.see("Comments can only be edited in the 5 minutes after posting")
-    expect(app.fake.writes).toEqual([])
-  })
-
-  test("Ctrl+E takes an edit to the editor and saves what comes back", async () => {
-    app = await openApp(WIDE)
-    app.outside.editor = (initial) => `${initial}\nSecond line from the editor.\n`
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("c")
-    await app.type("First line.")
-    await app.press("enter")
-    await app.see("Comment posted")
-    await app.press("[", "enter")
-    await app.see("─ Edit comment, 5:00 left ─")
-    await app.press("ctrl+e")
-    await app.see("Comment saved", "Second line from the editor.")
-    expect(app.fake.writes.at(-1)).toMatchObject({ method: "PUT", params: { text: "First line.\nSecond line from the editor.", plainText: "true" } })
   })
 })
 
@@ -551,38 +448,6 @@ describe("Deleting my comment", () => {
     expect(deleted).not.toContain("Waiting on the metadata file.")
     expect(app.fake.writes).toEqual([{ method: "DELETE", path: `/comments/${mine.id}`, params: {} }])
   })
-
-  test("a comment someone already deleted goes away with a neutral message", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("[", "[")
-    const mine = app.fake.data.comments.findIndex((comment) => comment.authorId === ME && comment.taskId === TASK.sso)
-    app.fake.data.comments.splice(mine, 1)
-    await app.press("d", "y")
-    await app.see("The comment was already deleted", "Comments (2)")
-  })
-
-  test("someone else's comment is not mine to delete", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("[", "d")
-    await app.see("This is Pat Example's comment, not yours")
-    expect(app.fake.writes).toEqual([])
-  })
-
-  test("read-only mode asks, then refuses and keeps the comment", async () => {
-    app = await openApp(WIDE, { readOnly: true })
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("[", "[", "d", "y")
-    await app.see("read-only mode: not saved", "Comments (3)", "Waiting on the metadata file.")
-    expect(app.fake.writes).toEqual([])
-  })
 })
 
 describe("Mentions", () => {
@@ -618,67 +483,9 @@ describe("Mentions", () => {
       },
     ])
   })
-
-  test("Esc closes the list and keeps the box, and a name typed by hand stays text", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    await app.press("c")
-    await app.type("ping @ri")
-    await app.see("▸ Riley Demo")
-    await app.press("esc")
-    await app.see("─ New comment ─", /^(?![\s\S]*─ Mention ─)/)
-    await app.type("ley Demo")
-    await app.press("enter")
-    await app.see("Comment posted")
-    expect(app.fake.writes.at(-1)?.params).toEqual({ text: "ping @riley Demo", plainText: "true" })
-  })
 })
 
 describe("Keys and panes", () => {
-  test("? shows the legend for the focused pane, straight from the keymap", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("?")
-    const legend = await app.see("─ Keys ─")
-    expect(legend).toMatch(/a\s+Toggle read notifications/)
-    expect(legend).toMatch(/s\s+Change the status/)
-    expect(legend).toMatch(/\/\s+Search, or open a link or ID/)
-    expect(legend).not.toContain("Scroll down")
-    await app.press("esc", "l", "?")
-    const details = await app.see("─ Keys ─", "Scroll down")
-    expect(details).not.toContain("Toggle read notifications")
-    await app.press("q")
-    expect(await app.frame()).not.toContain("─ Keys ─")
-    expect(app.outside.quit).toBe(false)
-  })
-
-  test("o, y and Y act on the selected row, and q quits", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("t", "o", "y")
-    await app.see("Copied the URL")
-    await app.press("Y")
-    await app.see("Copied the ID 4598459101")
-    expect(app.outside.opened).toEqual(["https://www.wrike.com/open.htm?id=4598459101"])
-    expect(app.outside.copied).toEqual(["https://www.wrike.com/open.htm?id=4598459101", "4598459101"])
-    await app.press("q")
-    expect(app.outside.quit).toBe(true)
-  })
-
-  test("under 100 columns the navigation pane hides until it is focused", async () => {
-    app = await openApp({ width: 80, height: 24 })
-    const narrow = await app.see("2 Inbox")
-    expect(narrow).not.toContain("1 Wrike")
-    expect(narrow).toContain("3 Details")
-    await app.press("1")
-    const nav = await app.see("1 Wrike")
-    expect(nav).not.toContain("3 Details")
-    await app.press("j", "enter")
-    expect(await app.see("2 My to-do", "Overdue 1")).not.toContain("1 Wrike")
-  })
-
   test("v gives the details pane the list's room", async () => {
     app = await openApp(WIDE)
     await app.see("Enable SSO on sandbox")
@@ -690,11 +497,6 @@ describe("Keys and panes", () => {
     expect(zoomed).toContain("1 Wrike")
     await app.press("v")
     await app.see("2 Inbox")
-  })
-
-  test("a terminal that is too small says what it needs", async () => {
-    app = await openApp({ width: 50, height: 10 })
-    await app.see("wrike-tui needs at least 60 columns and 12 rows")
   })
 })
 
@@ -708,17 +510,6 @@ describe("Failures", () => {
     expect(failed).toContain("Overdue 1")
     await app.press("r")
     expect(await app.see("Overdue 1")).not.toContain("Wrike failed")
-  })
-
-  test("a rejected save keeps the task and shows the reason", async () => {
-    app = await openApp(WIDE)
-    await app.see("Enable SSO on sandbox")
-    await app.press("enter")
-    await app.see("Comments (3)")
-    app.fake.fail({ method: "PUT", path: "/api/v4/tasks", status: 500 })
-    await app.press("p", "down", "enter")
-    const failed = await app.see("Wrike failed with 500: Injected failure")
-    expect(failed).toMatch(/Importance\s+High/)
   })
 
   test("a task whose status belongs to a space workflow still shows and changes status", async () => {

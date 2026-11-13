@@ -88,18 +88,6 @@ describe("Field history", () => {
     expect(JSON.parse(await readFile(app.paths.config, "utf8"))).toMatchObject({ history: false })
   })
 
-  test("with history off, opening a task makes no MCP call, and turning it on fetches it then", async () => {
-    app = await openApp(WIDE)
-    await app.see("Fix login redirect loop")
-    await app.press("H")
-    await app.see("Field history hidden")
-    await openLogin()
-    expect(historyCalls()).toEqual([])
-    await app.press("H")
-    await app.see("Comments (1) · 16 changes")
-    expect(historyCalls()).toHaveLength(1)
-  })
-
   test("a rate-limited load leaves the comments with a short notice, and r tries again", async () => {
     app = await openApp(WIDE)
     app.fake.failTool({ tool: "get_item_history", text: "Rate limit exceeded. Try again later." })

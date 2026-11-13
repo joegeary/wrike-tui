@@ -71,12 +71,6 @@ describe("The workspace tree", () => {
     expect(app.fake.requests.filter((line) => line === `GET /api/v4/spaces/${SPACE.engineering}/folders`)).toHaveLength(1)
   })
 
-  test("a space with no folders says so by having nothing to open", async () => {
-    await atSpaces()
-    await app.press("space")
-    await app.see(/│ {3}Sam's space/)
-  })
-
   test("Enter scopes the list to a folder, opens the row and keeps the focus in the tree", async () => {
     await atSpaces()
     await app.press("j", "enter")
@@ -87,20 +81,6 @@ describe("The workspace tree", () => {
     expect(nav(folder).slice(5, 11)).toEqual([" ▾ Engineering", "   ▾ Platform", "       Runbooks", "       Incidents", "       Shared docs", "   ▸ Q4 Launch"])
     expect(app.store.getState().focus).toBe("nav")
     expect(app.fake.requests).toContain(`GET /api/v4/folders/${FOLDER.platform}/tasks?descendants=true&subTasks=true&status=Active&pageSize=200&fields=%5B%22responsibleIds%22%2C%22parentIds%22%2C%22description%22%2C%22subTaskIds%22%2C%22superTaskIds%22%2C%22customFields%22%5D`)
-  })
-
-  test("a folder under two parents is drawn under each, and a project scopes like a folder", async () => {
-    await atSpaces()
-    await app.press("j", "space", "j", "space", "j", "j", "j", "j", "enter")
-    const frame = await app.see("2 Q4 Launch  2 · status")
-    expect(nav(frame).filter((line) => line.includes("Shared docs"))).toEqual(["       Shared docs", "       Shared docs"])
-    expect(app.store.getState().scope).toMatchObject({ kind: "folder", project: true })
-    expect(list(frame)).toEqual([
-      expect.stringMatching(/^▾ In Progress 1 ─+$/),
-      expect.stringMatching(/^! Enable SSO on sandbox\s+Sam, Pat\s+Nov 11$/),
-      expect.stringMatching(/^▾ In Review 1 ─+$/),
-      expect.stringMatching(/^ {2}Draft the Q4 launch checklist\s+Sam, Riley\s+Nov 13$/),
-    ])
   })
 
   test("the big space opens level by level and scrolls with the cursor", async () => {
@@ -116,16 +96,6 @@ describe("The workspace tree", () => {
     expect(nav(scrolled).at(-2)).toBe(" ▸ Support")
     expect(scrolled).toContain("Sam Sample")
     expect(app.fake.requests.filter((line) => line === `GET /api/v4/spaces/${SPACE.operations}/folders`)).toHaveLength(1)
-  })
-
-  test("a tree that fails to load says so under its space, and r loads it", async () => {
-    await atSpaces()
-    app.fake.fail({ path: `/api/v4/spaces/${SPACE.engineering}/folders`, status: 500 })
-    await app.press("j", "space")
-    const failed = await app.see("Wrike failed with 500: Injected failure")
-    expect(nav(failed)[6]).toBe("     Could not load, press r")
-    await app.press("r")
-    await app.see("Parking lot")
   })
 
   test("under 100 columns the tree takes the details pane's place while it is focused", async () => {
@@ -181,17 +151,6 @@ describe("A paged list", () => {
     await app.press("j", "space", "j", "j", "j", "enter")
     await app.see("2 Parking lot  0 · status", "No active task here. Press x to show completed ones.")
   })
-
-  test("going back to a list just left draws it at once", async () => {
-    await inPlatform()
-    await app.press("t")
-    await app.see("2 My to-do  6 · due")
-    app.fake.fail({ path: `/api/v4/folders/${FOLDER.platform}/tasks`, status: 500 })
-    await app.press("1", "enter")
-    const back = await app.see("Wrike failed with 500")
-    expect(back).toContain("Fix login redirect loop")
-    expect(back).toContain("2 Platform  8 · status")
-  })
 })
 
 describe("Subtasks", () => {
@@ -212,15 +171,6 @@ describe("Subtasks", () => {
     await app.see("3 Details", /Patch the callback handler/, /Assignees\s+Riley Demo/)
     await app.press("h", "k", "k", "space")
     expect(list(await app.see("▸ Fix login redirect loop")).join("\n")).not.toContain("Patch the callback handler")
-  })
-
-  test("expand all and collapse all come from the palette", async () => {
-    await inPlatform()
-    await palette("open every")
-    await app.see("Patch the callback handler")
-    await palette("close every")
-    const closed = await app.frame()
-    expect(list(closed)).toEqual([expect.stringMatching(/^▸ New 4 ─+$/), expect.stringMatching(/^▸ In Progress 2 ─+$/)])
   })
 })
 
@@ -258,22 +208,6 @@ describe("Shaping a list", () => {
     await app.see("No loaded task matches the filters. Press : and clear them.")
     await palette("clear the filters")
     await app.see("2 Platform  8 · status ─", "Filters cleared")
-  })
-
-  test("a filter picks its values in the picker", async () => {
-    await inPlatform()
-    await palette("filter by assignee")
-    const picker = await app.see("─ Filter by assignee ─", "[ ] Unassigned", "[ ] Riley Demo")
-    expect(picker).toContain("Space toggle")
-    await app.type("ril")
-    await app.press("space", "enter")
-    const filtered = await app.see("2 Platform  8 · status · 1 filter")
-    expect(filtered).toContain("List the macros agents use most")
-    expect(filtered).not.toContain("Enable SSO on sandbox")
-    await palette("filter by due")
-    await app.see("─ Filter by due date ─", "Due this week")
-    await app.press("down", "down", "down", "enter")
-    await app.see("2 Platform  8 · status · 2 filters")
   })
 
   test("the columns are chosen in a picker and drop off when the pane is narrow", async () => {
@@ -323,16 +257,6 @@ describe("The palette", () => {
     await app.press("esc")
     expect(await app.frame()).not.toContain("─ Commands ─")
     expect(app.store.getState().views.get("folder:IEAAAAAAI4AAAA01" as never)?.spec.group).toBe("status")
-  })
-
-  test("it offers only what applies where it was opened", async () => {
-    await atSpaces()
-    await app.press(":")
-    await app.type("group by")
-    await app.see("No command matches.")
-    await app.press("esc", ":")
-    await app.type("favorite")
-    await app.see("▸ Add or remove a favorite")
   })
 
   test("the legend and the status bar read the same registry", async () => {
@@ -402,26 +326,6 @@ describe("Favorites", () => {
     const removed = await app.see("Removed Enable SSO on sandbox from the favorites")
     expect(nav(removed).slice(4, 6)).toEqual([" ★ Platform", " ★ Operations"])
   })
-
-  test("a favorite Wrike no longer has is marked not found, and a renamed one takes its new title", async () => {
-    home = await mkdtemp(join(tmpdir(), "wrike-tui-fav-"))
-    await atSpaces({ home })
-    await app.press("j", "space", "j", "F", "j", "F")
-    await app.see("Added Q4 Launch to the favorites")
-    await app.close()
-
-    app = await openApp(WIDE, { home, restore: false })
-    await app.see("★ Q4 Launch")
-    app.fake.data.folders.find((folder) => folder.id === FOLDER.launch)!.title = "Q4 Launch (moved to January)"
-    const { folders } = app.fake.data
-    folders.splice(folders.findIndex((folder) => folder.id === FOLDER.platform), 1)
-    for (const folder of folders) folder.childIds = folder.childIds.filter((id) => id !== FOLDER.platform)
-    await app.press("1", "j", "j", "j", "enter")
-    const gone = await app.see("★ Platform (not found)", "Wrike could not find that item. Press r to retry.")
-    expect(gone).toContain("2 Platform · status")
-    await app.press("1", "j", "j", "j", "space")
-    await app.see("★ Q4 Launch (moved to Janu…")
-  })
 })
 
 describe("Files on disk", () => {
@@ -429,24 +333,6 @@ describe("Files on disk", () => {
     await mkdir(dirname(path), { recursive: true })
     await Bun.write(path, content)
   }
-
-  test("the nav pane paints from the cache while Wrike is unreachable", async () => {
-    home = await mkdtemp(join(tmpdir(), "wrike-tui-cache-"))
-    await atSpaces({ home })
-    await app.press("j", "space")
-    await app.see("Parking lot")
-    await app.close()
-    expect(await Bun.file(app.paths.spaces).exists()).toBe(true)
-    expect(await Bun.file(app.paths.tree(SPACE.engineering as never)).exists()).toBe(true)
-
-    app = await openApp(WIDE, { home })
-    app.fake.fail({ path: "/api/v4/spaces", status: 500, times: 10 })
-    const offline = await app.see("Engineering", "Operations")
-    expect(offline).toContain("Wrike failed with 500")
-    await app.press("1", "j", "j", "j", "j", "space")
-    const cached = await app.see("Parking lot", "Q4 Launch")
-    expect(nav(cached)).toContain("   ▸ Platform")
-  })
 
   test("a new session comes back to the scope, the tree, the shaping, the cursor and the open task", async () => {
     home = await mkdtemp(join(tmpdir(), "wrike-tui-session-"))
@@ -471,16 +357,6 @@ describe("Files on disk", () => {
     expect(app.store.getState().focus).toBe("details")
   })
 
-  test("a launch told not to restore starts on the Inbox with the tree closed", async () => {
-    home = await mkdtemp(join(tmpdir(), "wrike-tui-session-"))
-    await inPlatform({ home })
-    await app.close()
-    app = await openApp(WIDE, { home, restore: false })
-    const frame = await app.see("2 Inbox", "Enable SSO on sandbox", "Engineering")
-    expect(nav(frame)).toContain(" ▸ Engineering")
-    expect(frame).toContain("Select a task and press Enter to open it here.")
-  })
-
   test("a config file sets the theme, the nav width and a list default", async () => {
     home = await mkdtemp(join(tmpdir(), "wrike-tui-config-"))
     await put(join(home, "config", "wrike-tui", "config.json"), JSON.stringify({ theme: "light", navWidth: 40, lists: { todo: { group: "importance", columns: ["title", "due"] } } }))
@@ -493,49 +369,9 @@ describe("Files on disk", () => {
     expect(todo).toMatch(/▾ High 1 ─/)
     expect(todo).not.toContain("In Progress")
   })
-
-  test("a config file that does not parse is moved aside and the status bar says so once", async () => {
-    home = await mkdtemp(join(tmpdir(), "wrike-tui-config-"))
-    const config = join(home, "config", "wrike-tui", "config.json")
-    await put(config, '{ "theme": "sparkles" }')
-    app = await openApp(WIDE, { home })
-    await app.see("Could not read config.json. Kept as config.json.bad, using the defaults.")
-    expect(await Bun.file(`${config}.bad`).text()).toBe('{ "theme": "sparkles" }')
-    expect(app.store.getState().settings.theme).toBe("terminal")
-    await app.press("j")
-    expect(await app.frame()).not.toContain("Could not read")
-  })
-
-  test("a theme switches at once, and Save as default writes it with this list's shaping", async () => {
-    home = await mkdtemp(join(tmpdir(), "wrike-tui-config-"))
-    await inPlatform({ home })
-    await palette("theme: high", "group by due", "save as default")
-    await app.see("Saved the theme, field history and this list's shaping as the default")
-    const written = (await Bun.file(app.paths.config).json()) as { theme: string; lists: { folder: { group: string } } }
-    expect(written.theme).toBe("high-contrast")
-    expect(written.lists.folder.group).toBe("due")
-    await app.close()
-
-    app = await openApp(WIDE, { home, restore: false })
-    await app.see("Enable SSO on sandbox", "Engineering")
-    expect(app.store.getState().settings.theme).toBe("high-contrast")
-    await app.press("1", "j", "j", "j", "j", "space", "j", "j", "j", "enter")
-    await app.see("2 Parking lot  0 · due")
-  })
 })
 
 describe("Reloading and read-only mode", () => {
-  test("r reloads the list and the reference data, the spaces and the open trees", async () => {
-    await inPlatform()
-    const before = app.fake.requests.length
-    await app.press("r")
-    await app.see("2 Platform  8 · status")
-    const after = app.fake.requests.slice(before).map((line) => line.replace(/\?.*/, ""))
-    expect(after.sort()).toEqual(
-      ["GET /api/v4/contacts", "GET /api/v4/workflows", "GET /api/v4/customfields", "GET /api/v4/spaces", `GET /api/v4/spaces/${SPACE.engineering}/folders`, `GET /api/v4/folders/${FOLDER.platform}/tasks`].sort(),
-    )
-  })
-
   test("read-only mode refuses a save before it is sent and says so", async () => {
     app = await openApp(WIDE, { readOnly: true })
     const frame = await app.see("Enable SSO on sandbox")

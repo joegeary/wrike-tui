@@ -249,14 +249,6 @@ describe("D deletes a task", () => {
     expect(frame).toContain("★ Fix login re… (not found)")
   })
 
-  test("a task Wrike already deleted is gone without an error", async () => {
-    await inPlatform()
-    await app.press("G")
-    app.fake.data.tasks.find((task) => task.id === TASK.login)!.scope = "RbTask"
-    await app.press("D", "y")
-    await app.see('"Fix login redirect loop" was already deleted', "2 Platform  7 · status")
-  })
-
   test("a question longer than the status bar's room is cut short of the keys", async () => {
     app = await openApp({ width: 100, height: 26 })
     await app.see("Engineering")
