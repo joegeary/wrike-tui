@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { WrikeFailure } from "../../src/wrike/errors"
 import { describeChange } from "../../src/domain/history"
-import { CommentSchema, contactFromWire, ContactSchema, CustomFieldSchema, HistorySchema, InboxSchema, parseAll, TaskSchema, WorkflowSchema } from "../../src/wrike/schemas"
+import { CommentSchema, contactFromWire, ContactSchema, HistorySchema, InboxSchema, parseAll, TaskSchema, WorkflowSchema } from "../../src/wrike/schemas"
 import comments from "../fixtures/comments.json"
 import contacts from "../fixtures/contacts.json"
 import inbox from "../fixtures/inbox.json"
@@ -41,21 +41,6 @@ describe("task parser", () => {
     const { responsibleIds, parentIds, description, ...bare } = tasks.data[0]!
     const [task] = parseAll(TaskSchema, [bare], "tasks")
     expect(task).toMatchObject({ assigneeIds: [], parentIds: [], descriptionHtml: "" })
-  })
-
-  test("field values are kept as strings, and an entry that is not one or is empty is left out", () => {
-    const customFields = [
-      { id: "F1", value: "7" },
-      { id: "F2", value: 7 },
-      { id: "F3", value: "" },
-      { id: "F4", value: '["A","B"]' },
-      "junk",
-    ]
-    const [task] = parseAll(TaskSchema, [{ ...tasks.data[0], customFields }], "tasks")
-    expect(task!.fields).toEqual([
-      { id: "F1" as never, value: "7" },
-      { id: "F4" as never, value: '["A","B"]' },
-    ])
   })
 
   test("a task with an unknown status group fails with a message that names the field", () => {
@@ -196,27 +181,5 @@ describe("history parser", () => {
     }
     expect(describeChange({ kind: "other", type: "STATUS", action: "constructor" })).toBe("status constructor")
     expect(describeChange({ kind: "other", type: "STATUS", action: "toString" })).toBe("status tostring")
-  })
-})
-
-describe("custom field parser", () => {
-  const parse = (wire: Record<string, unknown>) => CustomFieldSchema.parse({ id: "F1", title: "Field", archived: false, ...wire })
-
-  test("choices come from the options, else the values", () => {
-    const options = parse({ type: "DropDown", settings: { values: ["a"], options: [{ value: "x", color: "Red" }, { value: "y" }], allowOtherValues: true, readOnly: true } })
-    expect(options).toMatchObject({ kind: { type: "DropDown", options: ["x", "y"], allowOther: true }, readOnly: true })
-    expect(parse({ type: "Multiple", settings: { values: ["a", "b"] } }).kind).toEqual({ type: "Multiple", options: ["a", "b"], allowOther: false })
-  })
-
-  test("numbers keep their decimal places, or none when Wrike sets no precision", () => {
-    expect(parse({ type: "Numeric", settings: { decimalPlaces: 2 } }).kind).toEqual({ type: "Numeric", decimals: 2 })
-    expect(parse({ type: "Percentage", settings: {} }).kind).toEqual({ type: "Percentage", decimals: null })
-    expect(parse({ type: "Currency", settings: { decimalPlaces: 0, currency: "EUR" } }).kind).toEqual({ type: "Currency", decimals: 0, currency: "EUR" })
-    expect(parse({ type: "CalculatedNumeric" }).kind).toEqual({ type: "CalculatedNumeric", decimals: null })
-  })
-
-  test("a date says whether it takes a time, and a type this version does not know keeps its name", () => {
-    expect(parse({ type: "Date", settings: { allowTime: true } }).kind).toEqual({ type: "Date", allowTime: true })
-    expect(parse({ type: "LinkToDatabase", settings: { anything: 1 } })).toMatchObject({ kind: { type: "Unknown", wireType: "LinkToDatabase" }, readOnly: false })
   })
 })

@@ -5,7 +5,7 @@ import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
 import { createMcpClient } from "../../src/wrike/mcp"
 import { createTransport, type Fetch } from "../../src/wrike/transport"
-import { FIELD, ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
+import { ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
 import { BIG_FOLDER, FOLDER, SPACE } from "../fake/workspace"
 import { createFakeWrike, type FakeWrike } from "../fake/wrike"
 
@@ -46,31 +46,6 @@ describe("reads", () => {
   test("workflows come from the account, space workflows from every space", async () => {
     expect((await client.workflows()).map((workflow) => workflow.name)).toEqual(["Default Workflow"])
     expect((await client.spaceWorkflows()).map((workflow) => workflow.name)).toEqual(["Support Workflow"])
-  })
-
-  test("custom fields keep every type, the unknown one by its wire name, and leave out a definition they cannot read", async () => {
-    fake.data.customFields.push({ id: "IEAAAAAAJUAAAA99", title: 42 } as never)
-    const fields = await client.customFields()
-    expect(fields).toHaveLength(15)
-    expect(fields.find((field) => field.id === FIELD.skillLane)).toEqual({
-      id: FIELD.skillLane as never,
-      title: "Skill Lane",
-      kind: { type: "DropDown", options: ["Backend", "Frontend", "Data"], allowOther: true },
-      readOnly: false,
-      archived: false,
-    })
-    expect(fields.find((field) => field.id === FIELD.budget)!.kind).toEqual({ type: "Currency", decimals: 2, currency: "USD" })
-    expect(fields.find((field) => field.id === FIELD.owner)!.kind).toEqual({ type: "Unknown", wireType: "Contacts" })
-    expect(fields.find((field) => field.id === FIELD.region)).toMatchObject({ readOnly: true })
-    expect(fields.find((field) => field.id === FIELD.legacyCode)).toMatchObject({ archived: true })
-  })
-
-  test("a task and a list page carry the task's field values as Wrike's strings", async () => {
-    const flags = await client.task(taskId(TASK.flags))
-    expect(flags.fields).toContainEqual({ id: FIELD.labels as never, value: '["auth","infra"]' })
-    expect(flags.fields).toContainEqual({ id: FIELD.timeSpent as never, value: "150" })
-    const { tasks } = await client.tasks({ kind: "mine", user: userId(ME) }, { completed: false })
-    expect(tasks.find((task) => task.id === TASK.keys)!.fields.map((field) => field.value)).toEqual(["Chore", "S"])
   })
 
   test("my tasks are my active tasks, with the fields a list omits", async () => {

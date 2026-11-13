@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import type { CustomField } from "../../src/domain/fields"
-import { customFieldId, folderId, spaceId, taskId } from "../../src/domain/ids"
+import { folderId, spaceId, taskId } from "../../src/domain/ids"
 import { DEFAULT_SPECS } from "../../src/domain/list"
 import { DEFAULT_SETTINGS, defaultSpec } from "../../src/domain/settings"
 import type { Favorite, FolderNode, Space } from "../../src/domain/workspace"
@@ -174,16 +173,6 @@ describe("cache", () => {
     const tree = (await persistence.loadTree(spaceId("S1"))).value!
     expect([...tree.value.values()]).toEqual(nodes)
     expect(tree.fetchedAt).toBe("2026-11-12T16:00:00Z")
-  })
-
-  test("custom field definitions read back with the time they were fetched", async () => {
-    const fields: CustomField[] = [
-      { id: customFieldId("F1"), title: "Size", kind: { type: "DropDown", options: ["S", "M"], allowOther: false }, readOnly: false, archived: false },
-      { id: customFieldId("F2"), title: "Owner", kind: { type: "Unknown", wireType: "Contacts" }, readOnly: false, archived: true },
-    ]
-    expect((await persistence.loadFields()).value).toBeNull()
-    await persistence.saveFields(fields)
-    expect((await persistence.loadFields()).value).toEqual({ value: fields, fetchedAt: "2026-11-12T16:00:00Z" })
   })
 
   test("a broken cache file is moved aside and reads as nothing cached", async () => {

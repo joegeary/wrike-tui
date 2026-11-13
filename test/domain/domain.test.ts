@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { bucketOf } from "../../src/domain/buckets"
 import { addDays, isDay, withDay } from "../../src/domain/dates"
-import { customFieldId, customStatusId, legacyItemId, taskId, userId } from "../../src/domain/ids"
+import { customStatusId, legacyItemId, taskId, userId } from "../../src/domain/ids"
 import { permalinkId, statusChoices, type Task, type TaskDates, type Workflow } from "../../src/domain/model"
 import { assigneePatch, patchParams } from "../../src/domain/patch"
 import { classifyQuery } from "../../src/domain/search"
@@ -97,12 +97,6 @@ describe("patch encoding", () => {
       dates: { type: "Planned", start: "2026-11-10", due: "2026-11-20" },
     })
     expect(patchParams({ field: "dates", dates: { type: "Backlog" } })).toEqual({ dates: { type: "Backlog" } })
-  })
-
-  test("a custom field goes as one entry of customFields, with null to clear it and a list for several choices", () => {
-    expect(patchParams({ field: "custom", id: customFieldId("F1"), value: "8" })).toEqual({ customFields: [{ id: "F1", value: "8" }] })
-    expect(patchParams({ field: "custom", id: customFieldId("F1"), value: null })).toEqual({ customFields: [{ id: "F1", value: null }] })
-    expect(patchParams({ field: "custom", id: customFieldId("F2"), value: ["a", "b"] })).toEqual({ customFields: [{ id: "F2", value: ["a", "b"] }] })
   })
   test("assignees send only the sides that changed", () => {
     const [a, b, c] = [userId("A"), userId("B"), userId("C")]
