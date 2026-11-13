@@ -130,8 +130,8 @@ export function open(state: State, target: OpenTarget, after: TaskCommand | null
   ]
 }
 
-/** Whether opening the task should fetch its history: never fetched, or the last try failed with nothing to show. */
-export const needsHistory = (held: Paged<HistoryEntry> | undefined) => held === undefined || (held.loading === null && held.error !== null && held.items.length === 0)
+/** Whether showing the task's history should fetch it: only the first time. After a failure, r asks again. */
+export const needsHistory = (held: Paged<HistoryEntry> | undefined) => held === undefined
 
 /** Fetches the newest page of a task's history again, or the page older than what is held. What is held stays drawn meanwhile. */
 export function loadHistory(state: State, task: Task, page: "first" | "more"): Update {

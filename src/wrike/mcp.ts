@@ -62,8 +62,9 @@ export function createMcpClient(options: McpOptions): McpClient {
       const scope = { type: "ITEMS", itemIds: [`w:itm:${item}`] }
       const args = { scope, requestedChanges: HISTORY_TYPES, pageSize, ...(pageToken ? { nextPageToken: pageToken } : {}) }
       const answer = await call("get_item_history", args, HistorySchema, "history")
+      // Wrike leaves out an item with no change of the requested types.
       const [found] = answer.taskChanges
-      if (!found) throw new WrikeFailure({ kind: "not_found" })
+      if (!found) return { entries: [], next: null }
       if (!found.success) throw new WrikeFailure(itemError(found.error))
       return { entries: found.changes, next: answer.nextPageToken ?? null }
     },

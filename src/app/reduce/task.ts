@@ -20,7 +20,7 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
   const pending = state.afterOpen
   const next: State = { ...state, afterOpen: null, openTaskId: details.task.id, details: { state: "ready", value: details } }
   let retitled = retitle(next, new Map([[favoriteKey({ kind: "task", id: details.task.id }), details.task.title]]), [])
-  // History is the one MCP call an open costs, and only the first time, or after a try that failed.
+  // History is the one MCP call an open costs, and only the first time. After a failure, r asks again.
   if (next.settings.history && needsHistory(next.histories.get(details.task.id))) retitled = then(retitled, (after) => loadHistory(after, details.task, "first"))
   return pending ? then(retitled, (after) => taskCommand(after, pending, details.task, "browse")) : retitled
 }
