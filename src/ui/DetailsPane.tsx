@@ -82,7 +82,7 @@ const ROW_CHROME = 5
 function Body({ state, details, width, onDraft }: { state: State; details: Details; width: number; onDraft: (text: string) => void }) {
   const theme = useTheme()
   const style = useMarkdownStyle(theme)
-  const { task, attachments, comments, folders } = details
+  const { task, attachments, attachmentsError, comments, folders } = details
   const { mode } = state
   // The cursor column shows only inside an edit session, so a picker opened from browse does not shift the fields.
   const editing = mode.kind === "edit" || ((mode.kind === "edit-text" || mode.kind === "picker") && mode.origin === "edit")
@@ -152,6 +152,12 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
       <Section title="Description" />
       {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
 
+      {attachmentsError ? (
+        <>
+          <Section title="Attachments" />
+          <text fg={theme.warning} wrapMode="word">{`Did not load: ${retryText(attachmentsError)}`}</text>
+        </>
+      ) : null}
       {attachments.length > 0 ? (
         <>
           <Section title={`Attachments (${attachments.length})`} />

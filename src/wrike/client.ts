@@ -15,6 +15,7 @@ import {
   FolderSchema,
   LegacyIdSchema,
   parseAll,
+  parseEach,
   parseSpaceTree,
   SpaceSchema,
   TaskSchema,
@@ -192,7 +193,7 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
     },
 
     async attachments(id) {
-      const attachments = parseAll(AttachmentSchema, await transport.request("GET", `/tasks/${id}/attachments`), "attachments")
+      const attachments = parseEach(AttachmentSchema, await transport.request("GET", `/tasks/${id}/attachments`))
       return attachments.sort((a, b) => a.createdDate.localeCompare(b.createdDate))
     },
 

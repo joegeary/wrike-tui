@@ -86,7 +86,8 @@ export type Compose = {
   dismissed: number | null
 }
 
-export type Details = { task: Task; attachments: Attachment[]; comments: Comment[]; folders: string[] }
+/** An open task and what is drawn with it. `attachmentsError` says why the attachments are missing when their call failed. */
+export type Details = { task: Task; attachments: Attachment[]; attachmentsError?: WrikeError; comments: Comment[]; folders: string[] }
 
 /** Something in the details pane that `]` and `[` step through, in the order the pane draws it: the attachments, then the comments. */
 export type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "comment"; id: CommentId }

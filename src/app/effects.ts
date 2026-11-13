@@ -28,10 +28,10 @@ async function attempt<T>(work: () => Promise<T>): Promise<Result<T>> {
 async function loadDetails(client: WrikeClient, target: OpenTarget): Promise<Details> {
   const id = target.kind === "task" ? target.id : await client.taskIdFromLegacy(target.id)
   if (!id) throw new WrikeFailure({ kind: "not_found" })
-  const [task, attachments, comments] = await Promise.all([client.task(id), client.attachments(id), client.comments(id)])
-  // Folder titles are decoration, and a parent the token cannot read must not hide the task.
+  // Attachments and folder titles are decoration: neither failing must hide the task. A failed attachments call is drawn as a notice.
+  const [task, attachments, comments] = await Promise.all([client.task(id), attempt(() => client.attachments(id)), client.comments(id)])
   const folders = await client.folders(task.parentIds).catch(() => [])
-  return { task, attachments, comments, folders }
+  return attachments.ok ? { task, attachments: attachments.value, comments, folders } : { task, attachments: [], attachmentsError: attachments.error, comments, folders }
 }
 
 /** One page of a paged list, or the single task a permalink or an ID names. */

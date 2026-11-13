@@ -331,6 +331,14 @@ export const HistorySchema = z.object({
   nextPageToken: z.string().nullish(),
 })
 
+/** The items that parse with `schema`. One Wrike describes in a shape this version cannot read is left out instead of failing the list. */
+export function parseEach<T>(schema: z.ZodType<T>, items: unknown[]): T[] {
+  return items.flatMap((item) => {
+    const parsed = schema.safeParse(item)
+    return parsed.success ? [parsed.data] : []
+  })
+}
+
 export function parseAll<T>(schema: z.ZodType<T>, items: unknown[], what: string): T[] {
   const parsed = z.array(schema).safeParse(items)
   if (parsed.success) return parsed.data
