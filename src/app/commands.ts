@@ -1,6 +1,6 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, mentionSuggestions, MULTI_PICKERS, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
+import { currentView, detailsItems, mentionSuggestions, MULTI_PICKERS, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
 export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
@@ -21,8 +21,8 @@ export type Command = {
   contexts: Context[]
   /** The command is offered only while this holds. */
   when?: (state: State) => boolean
-  /** A short label. A command with one is offered in the status bar. */
-  hint?: string | ((state: State) => string)
+  /** A short label for the status bar, or null where the command has nothing to offer there. */
+  hint?: string | ((state: State) => string | null)
   run: (state: State) => Action
 }
 
@@ -36,6 +36,7 @@ const onFavorite = (state: State) => navCursorRow(state)?.kind === "favorite"
 const onComment = (state: State) => selectedComment(state) !== null
 const onAttachment = (state: State) => selectedAttachment(state) !== null
 const selecting = (state: State) => onComment(state) || onAttachment(state)
+const hasItems = (state: State) => state.details.state === "ready" && detailsItems(state.details.value).length > 0
 const suggesting = (state: State) => mentionSuggestions(state) !== null
 const editingComment = (state: State) => state.mode.kind === "compose" && state.mode.editing !== null
 const olderHistory = (state: State) => {
@@ -79,7 +80,10 @@ export const COMMANDS: Command[] = [
   command("details.up", "Scroll up", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "up" })),
   command("details.top", "Scroll to the top", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "top" })),
   command("details.bottom", "Scroll to the bottom", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "bottom" })),
-  command("details.next", "Select the next item", "Navigate", ["details"], () => ({ type: "select", by: 1 }), { keywords: ["comments", "attachments", "files"] }),
+  command("details.next", "Select the next item", "Navigate", ["details"], () => ({ type: "select", by: 1 }), {
+    hint: (state) => (selecting(state) ? "next" : hasItems(state) ? "select" : null),
+    keywords: ["comments", "attachments", "files"],
+  }),
   command("details.previous", "Select the previous item", "Navigate", ["details"], () => ({ type: "select", by: -1 }), { keywords: ["comments", "attachments", "files"] }),
   command("details.unselect", "Clear the selection", "Navigate", ["details"], () => ({ type: "unselect" }), { when: selecting, hint: "unselect" }),
   // Enter acts on whatever is selected, so one command holds the key for both kinds.

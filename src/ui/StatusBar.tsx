@@ -11,7 +11,8 @@ function hints(state: State): Hint[] {
   return activeContexts(state).flatMap((context) =>
     boundCommands(context).flatMap(({ command, keys }) => {
       if (!command.hint || !isOffered(command, state)) return []
-      return [{ key: keyLabel(keys[0]!), text: typeof command.hint === "string" ? command.hint : command.hint(state) }]
+      const text = typeof command.hint === "string" ? command.hint : command.hint(state)
+      return text === null ? [] : [{ key: keyLabel(keys[0]!), text }]
     }),
   )
 }

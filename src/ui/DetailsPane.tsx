@@ -185,9 +185,11 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
   useEffect(() => scroll.current?.scrollTo(0), [state.openTaskId])
 
   const selected = state.selected
+  // A thumbnail arrives after the selection and makes the item taller, so the item is brought into view again then.
+  const preview = selected?.kind === "attachment" ? state.previews.get(selected.id)?.state : undefined
   useEffect(() => {
     if (selected) scroll.current?.scrollChildIntoView(itemAnchor(selected))
-  }, [selected])
+  }, [selected, preview])
 
   const shownDetails = details.state === "ready" ? details.value : details.state === "loading" ? details.previous : undefined
   const title = details.state === "loading" && shownDetails ? "Details (refreshing)" : "Details"

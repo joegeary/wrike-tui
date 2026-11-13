@@ -211,6 +211,28 @@ describe("Attachments", () => {
     ])
   })
 
+  test("with the files below the fold, ] brings the whole thumbnail into view once it arrives, not only the file's row", async () => {
+    app = await openApp({ width: 200, height: 30 })
+    const login = app.fake.data.tasks.find((task) => task.id === TASK.login)!
+    login.description += Array.from({ length: 40 }, (_, i) => `<br />Step ${i + 1}`).join("")
+    await openLogin()
+    const release = app.fake.hold("/api/v4/attachments/IEAAAAAAIYAAAA01/preview")
+    app.store.dispatch({ type: "key", key: "]" })
+    expect(await app.peek()).toMatch(/┃callback-loop\.png/)
+    release()
+    const frame = await app.see(/┃callback-loop\.png/, /┃[▀▄█]/)
+    const thumbnail = frame.split("\n").filter((line) => /┃[▀▄█▌▐▖▗▘▝▙▚▛▜▞▟]/.test(line))
+    expect(thumbnail).toHaveLength(8)
+  })
+
+  test("the legend offers ] to select once the open task has a file or a comment", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    expect(await app.see("Attachments (4)")).toMatch(/\] select/)
+    await app.press("]")
+    expect(await app.see(/┃callback-loop\.png/)).toMatch(/\] next/)
+  })
+
   test("a signed link reaches only the browser: a bad one is never opened, and no flash or session file holds one", async () => {
     const home = await mkdtemp(join(tmpdir(), "wrike-tui-link-"))
     app = await openApp(WIDE, { home })
