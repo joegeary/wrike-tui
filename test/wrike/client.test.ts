@@ -5,7 +5,7 @@ import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
 import { createMcpClient } from "../../src/wrike/mcp"
 import { createTransport, type Fetch } from "../../src/wrike/transport"
-import { ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
+import { FIELD, ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
 import { BIG_FOLDER, FOLDER, SPACE } from "../fake/workspace"
 import { createFakeWrike, type FakeWrike } from "../fake/wrike"
 
@@ -48,6 +48,31 @@ describe("reads", () => {
     expect((await client.spaceWorkflows()).map((workflow) => workflow.name)).toEqual(["Support Workflow"])
   })
 
+  test("custom fields keep every type, the unknown one by its wire name, and leave out a definition they cannot read", async () => {
+    fake.data.customFields.push({ id: "IEAAAAAAJUAAAA99", title: 42 } as never)
+    const fields = await client.customFields()
+    expect(fields).toHaveLength(15)
+    expect(fields.find((field) => field.id === FIELD.skillLane)).toEqual({
+      id: FIELD.skillLane as never,
+      title: "Skill Lane",
+      kind: { type: "DropDown", options: ["Backend", "Frontend", "Data"], allowOther: true },
+      readOnly: false,
+      archived: false,
+    })
+    expect(fields.find((field) => field.id === FIELD.budget)!.kind).toEqual({ type: "Currency", decimals: 2, currency: "USD" })
+    expect(fields.find((field) => field.id === FIELD.owner)!.kind).toEqual({ type: "Unknown", wireType: "Contacts" })
+    expect(fields.find((field) => field.id === FIELD.region)).toMatchObject({ readOnly: true })
+    expect(fields.find((field) => field.id === FIELD.legacyCode)).toMatchObject({ archived: true })
+  })
+
+  test("a task and a list page carry the task's field values as Wrike's strings", async () => {
+    const flags = await client.task(taskId(TASK.flags))
+    expect(flags.fields).toContainEqual({ id: FIELD.labels as never, value: '["auth","infra"]' })
+    expect(flags.fields).toContainEqual({ id: FIELD.timeSpent as never, value: "150" })
+    const { tasks } = await client.tasks({ kind: "mine", user: userId(ME) }, { completed: false })
+    expect(tasks.find((task) => task.id === TASK.keys)!.fields.map((field) => field.value)).toEqual(["Chore", "S"])
+  })
+
   test("my tasks are my active tasks, with the fields a list omits", async () => {
     const { tasks, next } = await client.tasks({ kind: "mine", user: userId(ME) }, { completed: false })
     expect(tasks.map((task) => task.title)).toEqual([
@@ -67,7 +92,7 @@ describe("reads", () => {
       subTasks: "true",
       sortField: "DueDate",
       pageSize: "200",
-      fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds"]',
+      fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds","customFields"]',
     })
   })
 
@@ -137,7 +162,7 @@ describe("reads", () => {
     let pages = 0
     for (let token: string | undefined, done = false; !done; pages++) {
       const page = await client.tasks(query, { completed: false, ...(token ? { pageToken: token } : {}) })
-      if (pages > 0) expect(Object.fromEntries(lastQuery())).toEqual({ nextPageToken: token!, fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds"]' })
+      if (pages > 0) expect(Object.fromEntries(lastQuery())).toEqual({ nextPageToken: token!, fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds","customFields"]' })
       for (const task of page.tasks) {
         expect(seen.has(task.id)).toBe(false)
         seen.add(task.id)

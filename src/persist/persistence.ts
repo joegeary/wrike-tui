@@ -1,11 +1,12 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Env } from "../auth/config"
+import type { CustomField } from "../domain/fields"
 import type { SpaceId } from "../domain/ids"
 import { DEFAULT_SETTINGS, type Settings } from "../domain/settings"
 import type { Favorite, Space, SpaceTree } from "../domain/workspace"
 import { readJson, writeJson, type Loaded } from "./files"
-import { ConfigSchema, FavoritesSchema, SessionSchema, SpacesCacheSchema, TreeCacheSchema, type SessionFile } from "./schemas"
+import { ConfigSchema, FavoritesSchema, FieldsCacheSchema, SessionSchema, SpacesCacheSchema, TreeCacheSchema, type SessionFile } from "./schemas"
 
 export type Cached<T> = { value: T; fetchedAt: string }
 
@@ -20,9 +21,11 @@ export type Persistence = {
   saveSpaces(spaces: Space[]): Promise<void>
   loadTree(space: SpaceId): Promise<Loaded<Cached<SpaceTree> | null>>
   saveTree(space: SpaceId, tree: SpaceTree): Promise<void>
+  loadFields(): Promise<Loaded<Cached<CustomField[]> | null>>
+  saveFields(fields: CustomField[]): Promise<void>
 }
 
-export type PersistencePaths = { config: string; session: string; favorites: string; spaces: string; tree(space: SpaceId): string }
+export type PersistencePaths = { config: string; session: string; favorites: string; spaces: string; fields: string; tree(space: SpaceId): string }
 
 /** Config is shared by every account. Session, favorites and cache are kept per account. */
 export function persistencePaths(env: Env, accountId: string): PersistencePaths {
@@ -35,6 +38,7 @@ export function persistencePaths(env: Env, accountId: string): PersistencePaths 
     session: join(state, "session.json"),
     favorites: join(state, "favorites.json"),
     spaces: join(cache, "spaces.json"),
+    fields: join(cache, "fields.json"),
     tree: (space) => join(cache, `tree-${space}.json`),
   }
 }
@@ -64,5 +68,11 @@ export function createPersistence(paths: PersistencePaths, now: () => string = (
       return { value: value ? { value: new Map(value.nodes.map((node) => [node.id, node])), fetchedAt: value.fetchedAt } : null, movedAside }
     },
     saveTree: (space, tree) => writeJson(paths.tree(space), { version: 1, fetchedAt: now(), nodes: [...tree.values()] }, "compact"),
+
+    async loadFields() {
+      const { value, movedAside } = await readJson(paths.fields, FieldsCacheSchema, null)
+      return { value: value ? { value: value.fields, fetchedAt: value.fetchedAt } : null, movedAside }
+    },
+    saveFields: (fields) => writeJson(paths.fields, { version: 1, fetchedAt: now(), fields }, "compact"),
   }
 }

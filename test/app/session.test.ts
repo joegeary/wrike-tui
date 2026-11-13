@@ -64,6 +64,7 @@ describe("the session", () => {
     const [started, effects] = start(initialState(profile, clock, boot({ session, spaces, trees: new Map([[ENG, engTree]]) })))
     expect(effects).toEqual([
       { kind: "load-reference" },
+      { kind: "load-fields", request: 1 },
       { kind: "load-inbox", request: 1, includeRead: false },
       { kind: "load-tasks", request: 1, key: key("todo"), source: { kind: "mine", user: profile.userId }, completed: false, pageToken: null },
       { kind: "load-spaces", request: 1, cached: false },
@@ -117,7 +118,7 @@ describe("what a launch reads from disk", () => {
 
   test("nothing on disk is a fresh start", async () => {
     expect(await loadBoot(persistence, { readOnly: false, restore: true })).toEqual({
-      settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, session: null, spaces: null, trees: new Map(), flash: null,
+      settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, session: null, spaces: null, fields: null, trees: new Map(), flash: null,
     })
   })
 

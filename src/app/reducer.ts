@@ -5,6 +5,7 @@ import { paletteCommands } from "./palette"
 import { clamp, TODO } from "./reduce/core"
 import { changeSpec, collapseAll, expandAll, filterText, listPicker, moveCursor, openRow, saveDefaults, search, submitFilter, submitListPicker, submitSearch, toggleRead, toggleRow } from "./reduce/lists"
 import {
+  fieldsLoaded,
   historyLoaded,
   inboxLoaded,
   referenceLoaded,
@@ -87,6 +88,9 @@ function step(state: State, action: Action): Update {
 
     case "space-workflows-loaded":
       return spaceWorkflowsLoaded(state, action)
+
+    case "fields-loaded":
+      return fieldsLoaded(state, action)
 
     case "inbox-loaded":
       return inboxLoaded(state, action)

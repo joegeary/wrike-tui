@@ -1,5 +1,6 @@
 import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
+import type { CustomField } from "../domain/fields"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
 import type { AttachmentId, CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
@@ -94,7 +95,7 @@ export type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "co
 export type Clock = { now: string; today: string }
 export type Flash = { tone: "info" | "error"; text: string }
 
-/** What a response is checked against: `inbox`, `details`, `spaces`, `tree:<spaceId>`, `list:<scopeKey>` or `history:<taskId>`. */
+/** What a response is checked against: `inbox`, `details`, `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>` or `history:<taskId>`. */
 export type RequestKey = string
 
 export type State = {
@@ -130,6 +131,8 @@ export type State = {
   previews: ReadonlyMap<AttachmentId, Loadable<Uint8Array>>
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
+  /** The account's custom field definitions, painted from the disk cache at launch and fetched with the contacts and workflows. */
+  customFields: Loadable<CustomField[]>
   /** Space workflows load once, the first time a task's status is not in the account workflows. */
   spaceWorkflows: "unloaded" | "loading" | "loaded"
   mode: Mode
@@ -156,6 +159,7 @@ export type ScrollTo = "up" | "down" | "top" | "bottom"
 export type Effect =
   | { kind: "load-reference" }
   | { kind: "load-space-workflows" }
+  | { kind: "load-fields"; request: number }
   | { kind: "load-inbox"; request: number; includeRead: boolean }
   | { kind: "load-tasks"; request: number; key: ScopeKey; source: TaskSource; completed: boolean; pageToken: string | null }
   | { kind: "load-spaces"; request: number; cached: boolean }
@@ -177,6 +181,7 @@ export type Effect =
   | { kind: "save-config"; settings: Settings }
   | { kind: "cache-spaces"; spaces: Space[] }
   | { kind: "cache-tree"; space: SpaceId; tree: SpaceTree }
+  | { kind: "cache-fields"; fields: CustomField[] }
   | { kind: "quit" }
 
 export type SpecChange =
@@ -246,6 +251,7 @@ export type Action =
   | { type: "composed"; text: string | null }
   | { type: "reference-loaded"; result: Result<{ contacts: Contact[]; workflows: Workflow[] }> }
   | { type: "space-workflows-loaded"; result: Result<Workflow[]> }
+  | { type: "fields-loaded"; request: number; result: Result<CustomField[]> }
   | { type: "inbox-loaded"; request: number; clock: Clock; result: Result<InboxEntry[]> }
   | { type: "tasks-loaded"; key: ScopeKey; request: number; clock: Clock; more: boolean; jump: boolean; result: Result<TaskPage> }
   | { type: "spaces-loaded"; request: number; from: "cache" | "wrike"; result: Result<Space[]> }
@@ -282,6 +288,8 @@ export type Boot = {
   session: SessionFile | null
   /** The cached spaces list and the cached trees of the spaces the session has open. */
   spaces: Space[] | null
+  /** The cached custom field definitions. */
+  fields: CustomField[] | null
   trees: ReadonlyMap<SpaceId, SpaceTree>
 }
 
@@ -312,6 +320,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     previews: new Map(),
     contacts: new Map(),
     workflows: [],
+    customFields: boot.fields ? { state: "loading", previous: boot.fields } : { state: "idle" },
     spaceWorkflows: "unloaded",
     mode: { kind: "browse" },
     flash: boot.flash,

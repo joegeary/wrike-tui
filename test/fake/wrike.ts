@@ -184,6 +184,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       return json({ kind: "contacts", data: contacts })
     }
     if (method === "GET" && path === "/workflows") return json({ kind: "workflows", data: data.workflows })
+    if (method === "GET" && path === "/customfields") return json({ kind: "customfields", data: data.customFields })
     if (method === "GET" && path === "/spaces") return json({ kind: "spaces", data: data.spaces })
     const spaceWorkflows = /^\/spaces\/([^/]+)\/workflows$/.exec(path)
     if (method === "GET" && spaceWorkflows) return json({ kind: "workflows", data: data.spaceWorkflows[spaceWorkflows[1]!] ?? [] })

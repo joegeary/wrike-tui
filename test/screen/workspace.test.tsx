@@ -86,7 +86,7 @@ describe("The workspace tree", () => {
     const folder = await app.see("2 Platform  8 · status", "Runbooks")
     expect(nav(folder).slice(5, 11)).toEqual([" ▾ Engineering", "   ▾ Platform", "       Runbooks", "       Incidents", "       Shared docs", "   ▸ Q4 Launch"])
     expect(app.store.getState().focus).toBe("nav")
-    expect(app.fake.requests).toContain(`GET /api/v4/folders/${FOLDER.platform}/tasks?descendants=true&subTasks=true&status=Active&pageSize=200&fields=%5B%22responsibleIds%22%2C%22parentIds%22%2C%22description%22%2C%22subTaskIds%22%2C%22superTaskIds%22%5D`)
+    expect(app.fake.requests).toContain(`GET /api/v4/folders/${FOLDER.platform}/tasks?descendants=true&subTasks=true&status=Active&pageSize=200&fields=%5B%22responsibleIds%22%2C%22parentIds%22%2C%22description%22%2C%22subTaskIds%22%2C%22superTaskIds%22%2C%22customFields%22%5D`)
   })
 
   test("a folder under two parents is drawn under each, and a project scopes like a folder", async () => {
@@ -532,7 +532,7 @@ describe("Reloading and read-only mode", () => {
     await app.see("2 Platform  8 · status")
     const after = app.fake.requests.slice(before).map((line) => line.replace(/\?.*/, ""))
     expect(after.sort()).toEqual(
-      ["GET /api/v4/contacts", "GET /api/v4/workflows", "GET /api/v4/spaces", `GET /api/v4/spaces/${SPACE.engineering}/folders`, `GET /api/v4/folders/${FOLDER.platform}/tasks`].sort(),
+      ["GET /api/v4/contacts", "GET /api/v4/workflows", "GET /api/v4/customfields", "GET /api/v4/spaces", `GET /api/v4/spaces/${SPACE.engineering}/folders`, `GET /api/v4/folders/${FOLDER.platform}/tasks`].sort(),
     )
   })
 

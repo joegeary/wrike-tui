@@ -1,3 +1,4 @@
+import type { FieldValue } from "./fields"
 import type { AttachmentId, CommentId, CustomStatusId, LegacyItemId, TaskId, UserId } from "./ids"
 
 export const STATUS_GROUPS = ["Active", "Completed", "Deferred", "Cancelled"] as const
@@ -34,6 +35,8 @@ export type Task = {
   superTaskIds: TaskId[]
   permalink: string
   descriptionHtml: string
+  /** The custom fields set on the task, in Wrike's order. */
+  fields: FieldValue[]
   createdDate: string
   updatedDate: string
 }

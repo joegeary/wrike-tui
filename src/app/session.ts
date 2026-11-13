@@ -63,15 +63,16 @@ export function movedAsideFlash(paths: (string | null)[]): Flash | null {
 
 /**
  * Reads everything a launch starts from: the config, the favorites, the
- * session, and the cached spaces and trees the session has open, so the first
- * frame already shows the workspace.
+ * session, the cached custom fields, and the cached spaces and trees the
+ * session has open, so the first frame already shows the workspace.
  */
 export async function loadBoot(persistence: Persistence, options: { readOnly: boolean; restore: boolean }): Promise<Boot> {
-  const [config, favorites, session, spaces] = await Promise.all([
+  const [config, favorites, session, spaces, fields] = await Promise.all([
     persistence.loadConfig(),
     persistence.loadFavorites(),
     options.restore ? persistence.loadSession() : { value: null, movedAside: null },
     persistence.loadSpaces(),
+    persistence.loadFields(),
   ])
   const open = (session.value?.nav.expanded ?? []).flatMap((path) => {
     const space = pathSpace(path as NavPath)
@@ -85,8 +86,9 @@ export async function loadBoot(persistence: Persistence, options: { readOnly: bo
     readOnly: options.readOnly,
     session: session.value,
     spaces: spaces.value?.value ?? null,
+    fields: fields.value?.value ?? null,
     trees,
-    flash: movedAsideFlash([config.movedAside, favorites.movedAside, session.movedAside, spaces.movedAside, ...cached.map(([, tree]) => tree.movedAside)]),
+    flash: movedAsideFlash([config.movedAside, favorites.movedAside, session.movedAside, spaces.movedAside, fields.movedAside, ...cached.map(([, tree]) => tree.movedAside)]),
   }
 }
 

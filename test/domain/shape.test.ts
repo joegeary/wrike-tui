@@ -23,6 +23,7 @@ function task(id: string, extra: Partial<Task> = {}): Task {
     superTaskIds: [],
     permalink: "https://www.wrike.com/open.htm?id=1",
     descriptionHtml: "",
+    fields: [],
     createdDate: "2026-10-01T00:00:00Z",
     updatedDate: "2026-11-01T00:00:00Z",
     ...extra,

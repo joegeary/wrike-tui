@@ -87,6 +87,8 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       })
       return dispatch({ type: "reference-loaded", result })
     }
+    case "load-fields":
+      return dispatch({ type: "fields-loaded", request: effect.request, result: await attempt(() => client.customFields()) })
     case "load-space-workflows":
       return dispatch({ type: "space-workflows-loaded", result: await attempt(() => client.spaceWorkflows()) })
     case "load-inbox": {
@@ -169,6 +171,8 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return deps.persistence.saveSpaces(effect.spaces).catch(() => {})
     case "cache-tree":
       return deps.persistence.saveTree(effect.space, effect.tree).catch(() => {})
+    case "cache-fields":
+      return deps.persistence.saveFields(effect.fields).catch(() => {})
     case "quit":
       return deps.quit()
   }

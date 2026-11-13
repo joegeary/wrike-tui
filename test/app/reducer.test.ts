@@ -3,8 +3,9 @@ import { navRows, type NavPath } from "../../src/app/nav"
 import { reduce, start } from "../../src/app/reducer"
 import { currentList, currentView, listCursor, listRows, navCursorRow, navRowsOf, pickerOptions, selectedRow, selectedTask } from "../../src/app/selectors"
 import { initialState, LIST_LIMIT, type State } from "../../src/app/state"
-import { commentId, customStatusId, folderId, taskId, userId } from "../../src/domain/ids"
+import { commentId, customFieldId, customStatusId, folderId, taskId, userId } from "../../src/domain/ids"
 import { DEFAULT_SPECS, NOBODY } from "../../src/domain/list"
+import type { CustomField } from "../../src/domain/fields"
 import type { Workflow } from "../../src/domain/model"
 import type { Favorite } from "../../src/domain/workspace"
 import {
@@ -75,6 +76,7 @@ describe("startup", () => {
     const [state, effects] = start(initialState(profile, clock, boot()))
     expect(effects).toEqual([
       { kind: "load-reference" },
+      { kind: "load-fields", request: 1 },
       { kind: "load-inbox", request: 1, includeRead: false },
       { kind: "load-tasks", request: 1, key: key("todo"), source: { kind: "mine", user: ME }, completed: false, pageToken: null },
       { kind: "load-spaces", request: 1, cached: true },
@@ -95,9 +97,26 @@ describe("startup", () => {
 
   test("r reloads the list, the reference data, the spaces and the open space trees", () => {
     const { effects } = play(withTree(), "r")
-    expect(effects.map((effect) => effect.kind)).toEqual(["load-reference", "load-spaces", "load-tree", "load-inbox"])
-    expect(effects[1]).toMatchObject({ cached: false })
-    expect(effects[2]).toMatchObject({ space: ENG, cached: false })
+    expect(effects.map((effect) => effect.kind)).toEqual(["load-reference", "load-fields", "load-spaces", "load-tree", "load-inbox"])
+    expect(effects[2]).toMatchObject({ cached: false })
+    expect(effects[3]).toMatchObject({ space: ENG, cached: false })
+  })
+
+  test("cached field definitions draw at once, a matching fetch writes nothing, a new one is cached, a failure keeps them", () => {
+    const size: CustomField = { id: customFieldId("F1"), title: "Size", kind: { type: "DropDown", options: ["S"], allowOther: false }, readOnly: false, archived: false }
+    const [started] = start(initialState(profile, clock, boot({ fields: [size] })))
+    expect(started.customFields).toEqual({ state: "loading", previous: [size] })
+    const same = play(started, { type: "fields-loaded", request: 1, result: { ok: true, value: [{ ...size }] } })
+    expect(same.state.customFields).toEqual({ state: "ready", value: [size] })
+    expect(same.effects).toEqual([])
+    const renamed = { ...size, title: "T-shirt size" }
+    const [reloading] = start(same.state)
+    const fresh = play(reloading, { type: "fields-loaded", request: 2, result: { ok: true, value: [renamed] } })
+    expect(fresh.effects).toEqual([{ kind: "cache-fields", fields: [renamed] }])
+    const [again] = start(fresh.state)
+    const failed = play(again, { type: "fields-loaded", request: 3, result: { ok: false, error: { kind: "rate_limited" } } })
+    expect(failed.state.customFields).toEqual({ state: "error", error: { kind: "rate_limited" }, previous: [renamed] })
+    expect(failed.state.flash?.tone).toBe("error")
   })
 
   test("reloaded workflows replace the old ones instead of piling up", () => {
