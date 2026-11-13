@@ -31,6 +31,13 @@ describe("commentBody", () => {
     })
   })
 
+  test("a run of spaces in a comment with a mention keeps its width, since HTML would collapse it", () => {
+    const draft = "@Joe Geary a  b   c\n  indented"
+    const mentions: Mention[] = [{ at: 0, id: JOE, name: "Joe Geary" }]
+    expect(commentBody(draft, mentions).text).toBe(`${anchor("KUAB6OAK", "Joe Geary")} a &nbsp;b &nbsp; c<br />&nbsp;&nbsp;indented`)
+    expect(editableComment(commentBody(draft, mentions).text, nameOf)).toEqual({ text: draft, mentions })
+  })
+
   test("only picked mentions become anchors, so a typed @name stays text", () => {
     const draft = "@Pat Example and @Joe Geary"
     expect(commentBody(draft, [{ at: 17, id: JOE, name: "Joe Geary" }]).text).toBe(`@Pat Example and ${anchor("KUAB6OAK", "Joe Geary")}`)
