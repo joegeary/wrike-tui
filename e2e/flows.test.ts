@@ -289,7 +289,7 @@ describe("the client", () => {
     await tmux.keys("i", "g", "Enter")
     await tmux.see("narrow-inbox-task", "2 Inbox", /│ Enable SSO on sandbox for staff/, "Description")
     await tmux.keys("l", "G")
-    await tmux.see("narrow-details-scrolled", "Comments (5)", "Longer note.", /^(?![\s\S]*Importance)/)
+    await tmux.see("narrow-details-scrolled", "Longer note.", "Edited in the e2e editor.", /^(?![\s\S]*Importance)/)
     await tmux.keys("g")
     await tmux.see("narrow-details-top", "Importance")
     await tmux.keys("s")
