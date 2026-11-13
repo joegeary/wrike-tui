@@ -198,7 +198,7 @@ describe("token sources and logout", () => {
   test("auth logout removes the token and the profile", async () => {
     await tmux.run("clear")
     await tmux.run(`${BINARY} auth logout`)
-    await tmux.see("auth-logout", "Logged out. The stored token and profile are removed.")
+    await tmux.see("auth-logout", "Logged out. The stored login and profile are removed.")
     await tmux.run(`${BINARY} auth status`)
     await tmux.see("auth-status-logged-out", "Not logged in.")
     expect(await Bun.secrets.get({ service: KEYRING_SERVICE, name: "token" })).toBeNull()

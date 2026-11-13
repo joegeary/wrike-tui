@@ -138,7 +138,7 @@ async function logout(io: Io): Promise<number> {
   await io.tokens.delete()
   await io.oauth?.clientSecret.delete()
   await deleteProfile(io.env)
-  io.out("Logged out. The stored login, the OAuth client secret and the profile are removed.")
+  io.out("Logged out. The stored login and profile are removed.")
   if (io.env.WRIKE_TOKEN) io.out("WRIKE_TOKEN is still set in this environment and still works.")
   return 0
 }
