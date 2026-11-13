@@ -189,10 +189,28 @@ An example `config.json`. Every part is optional.
 `theme` is `terminal`, `dark`, `light` or `high-contrast`. `lists` takes the
 kinds `todo`, `search`, `space`, `folder` and `project`.
 
-A description opens in your editor as markdown when its formatting survives a
-round trip through markdown. A description with underline, highlight, images or
-tables opens as raw HTML, so that saving never strips formatting you did not
-touch. Close the editor without a change to cancel.
+A description opens in your editor as markdown when saving it unchanged would
+write back the same HTML. Otherwise it opens as raw HTML, so that saving never
+strips formatting you did not touch. Close the editor without a change to
+cancel.
+
+Markdown covers Wrike's formatting with a few additions:
+
+| In Wrike | In the editor |
+| --- | --- |
+| Checklist | `- [ ] open` and `- [x] done` |
+| Table | A pipe table whose first row is the header; `<br>` breaks a line in a cell |
+| Text color | `{color:#D81B60}text{color}` |
+| Highlight | `=={#ffcc80}text==`; a bare `==text==` takes `#F8BBD0` |
+| Underline | `++text++` |
+| Image | `![](src)` |
+| A link's `rel` | `[text](url){rel=nofollow}` |
+| Bold, italic | `**b**` and `*i*`; `__strong__` and `_em_` keep Wrike's other tags |
+
+Each blank line is a blank line in Wrike. One blank line ends a list or a
+heading, and two spaces at the end of a line before a list or heading keep
+the break Wrike stored there. A space markdown would drop, at the end of a
+line or inside bold, reads `&#32;`.
 
 Copy uses the OSC 52 terminal sequence, so it works over SSH when your terminal
 allows it. Inside tmux, `set-clipboard` must be `external` (the default) or

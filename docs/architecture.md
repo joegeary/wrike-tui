@@ -248,29 +248,78 @@ filter both use it.
 bare number and a title apart. A permalink or a number opens the task it
 finds.
 
-**Descriptions.** `htmlToMarkdown` renders a description for reading.
-`editableDescription(html)` decides the edit format. When the HTML uses only
-tags that survive a round trip through markdown (`p`, `br`, `h1` to `h6`,
-`b`, `strong`, `i`, `em`, `s`, `a`, `ul`, `ol`, `li`, and `code` and `pre`
-holding only text), the editor gets markdown and `markdownToHtml` converts it
-back. When the HTML holds anything else (`u`, a highlight `span`, `img`,
-`table`, a checklist, a mention anchor with a `class`), the editor gets the
-raw HTML, so a save never strips formatting the user did not touch. The status
-bar says which format was saved.
+**Descriptions.** `src/domain/description/` converts a description between
+Wrike's HTML and a markdown dialect. `htmlToMarkdown` (`markdown.ts`) walks
+the HTML with domino and writes markdown. `markdownToHtml` (`html.ts`) reads
+it back with marked and writes only the tags and attributes Wrike stores.
 
-`markdownToHtml` writes only tags Wrike stores. A paragraph break becomes
-`<br /><br />` and a fenced block becomes a bare `<pre>`, which is how Wrike
-writes them. Angle brackets in the markdown stay text, so `Bearer <token>`
-survives. Only an explicit `[text](url)` makes a link; a bare URL or an
-`<address>` stays plain text, as it was in Wrike.
+`editableDescription(html)` decides the edit format by trying it: it converts
+the description to markdown and back, and opens markdown only when the result
+is `sameHtml` as the stored HTML. Anything else opens as raw HTML, so a save
+never strips formatting the user did not touch. Leading and trailing breaks
+and spaces, which markdown cannot spell, ride along outside the markdown and
+come back on save. A description of nothing but blank lines stays HTML. The
+status bar says which format was saved.
 
-These rules were checked against 200 real task descriptions, read only: 152
-open as markdown and come back with the same text, links and formatting, and
-40 open as raw HTML. The cases in `test/domain/description.test.ts` come from
-what that check found.
+`sameHtml` (`src/domain/html-equivalence.ts`) compares parsed DOMs: the same
+elements, attributes with the same values, and the same text. Only spelling
+the parser erases may differ: which entity encodes a character, `<br>` against
+`<br />`, attribute order and quoting. Whitespace, empty elements and `<b>`
+against `<strong>` all count.
 
-Comments render as markdown through `htmlToMarkdown`, so a link reads as its
-label with the URL beside it.
+The dialect:
+
+| Wrike HTML | Markdown |
+| --- | --- |
+| `<b>`, `<strong>` | `**b**`, `__strong__` |
+| `<i>`, `<em>` | `*i*`, `_em_` |
+| `<s>` | `~~s~~` |
+| `<u>` | `++u++` |
+| `<span style="color: #hex;">` | `{color:#hex}text{color}` |
+| `<span style="background-color: #hex;">` | `=={#hex}text==` (a bare `==text==` takes `#F8BBD0`) |
+| `<a href rel>` | `[text](url){rel=value}` |
+| `<img src />` | `![](src)` |
+| `<code>`, `<pre>` | a code span, a fence |
+| `<h1>` to `<h6>` | `#` to `######` |
+| `<ul>`, `<ol>` | `- item`, `1. item`; a second list in a row switches to `*` or `1)` |
+| `<ul style="list-style-type: circle;">`, then `square;` | a bullet list nested one, then two, bullet lists deep |
+| `<ul class="checklist" style="list-style-type: none;">` with `<li><label><input type="checkbox" />` | `- [ ] text`, `- [x] text` |
+| `<table><tr><td>` | a GFM pipe table; the first row is the header, `<br>` breaks a cell |
+
+Wrike separates lines and blocks with runs of `<br>`, and the count shows on
+screen. `flow.ts` holds the one table both directions use. A single `<br>`
+inside text is a hard break. Two or more between lines are that many newlines,
+so each blank line in the editor is a blank line in Wrike. A block ends at a
+blank line, and each further blank line after it is a `<br>`. A `<br>` just
+before a block draws nothing, so it is spelled with the two trailing spaces of
+a hard break.
+
+Text that would read as markup is escaped, but only where markdown would read
+it: `snake_case` and `2 * 3` stay as written, `2\*3\*4` does not. A space
+markdown would drop, at the end of a line or inside bold, is written `&#32;`
+(`&nbsp;` for a non-breaking one). Angle brackets stay text, so
+`Bearer <token>` survives. Only an explicit `[text](url)` makes a link; a bare
+URL or an `<address>` stays plain text. Hrefs and image sources go back exactly
+as written.
+
+`test/fixtures/descriptions.json` holds the shapes of 1,122 real descriptions,
+every word, link and image replaced. `bun test/corpus-report.ts` prints how they
+open. 1,065 open as markdown and every one of them saves back unchanged, which
+`test/domain/description-corpus.test.ts` holds as a gate with a floor on the
+count. The other 57 open as raw HTML: lists with Wrike's `bullet`, `indent` and
+`number` classes and their `rel`, which no markdown structure implies; spans
+and paragraphs with other styles; a `<br>` inside a heading or at the end of a
+list item; table rows shorter than the header; markup inside `<code>`; `<b>`
+and `<i>` nested the other way round from how markdown reads `***`; a
+`<strong>` ending in a space right before a letter; HTML comments and empty
+elements; and descriptions of nothing but blank lines.
+
+`displayMarkdown` (`display.ts`) renders a description or a comment for the
+details pane from the same HTML. OpenTUI's markdown shows backslash escapes
+and character references as typed, and a terminal cannot show colors,
+highlights or underline, so it drops those, draws checklist boxes as ☐ and ☑,
+marks an image `(image)`, turns a break in a table cell into a space, and shows
+at most one blank line in a row.
 
 ## Workspace
 
