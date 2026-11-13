@@ -75,7 +75,7 @@ describe("line breaks", () => {
     ["text right under a list", "<ul><li>x</li></ul>a", "- x\n\na"],
     ["a blank line after a list", "<ul><li>x</li></ul><br />a", "- x\n\n\na"],
     ["text right under a heading", "<h5>H</h5>a", "##### H\n\na"],
-    ["a list inside a list item", "<ul><li>x<br /><ul><li>y</li></ul></li></ul>", "- x  \n  - y"],
+    ["a list inside a list item", '<ul><li>x<br /><ul style="list-style-type: circle;"><li>y</li></ul></li></ul>', "- x  \n  - y"],
     ["spaces at the ends of a line", "a <br /> b", "a&#32;  \n&#32;b"],
     ["a space inside bold", "<b>a </b> b", "**a&#32;** b"],
   ])("%s", (_name, html, markdown) => {
@@ -160,5 +160,20 @@ describe("tables", () => {
   })
   test("a table typed in the editor saves without header cells", () => {
     expect(markdownToHtml("| a | b |\n| --- | --- |\n| c | d |")).toBe("<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>")
+  })
+})
+
+describe("nested bullet lists", () => {
+  test("take Wrike's circles, then squares, from how deep they sit", () => {
+    const html =
+      '<ul><li>a<ul style="list-style-type: circle;"><li>b<ul style="list-style-type: square;"><li>c</li></ul></li></ul></li></ul>'
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "- a\n  - b\n    - c" })
+    expect(descriptionFromEdit(editableDescription(html))).toBe(html)
+  })
+  test("a bullet list in a numbered list is plain", () => {
+    expect(markdownToHtml("1. a\n   - b")).toBe("<ol><li>a<ul><li>b</li></ul></li></ol>")
+  })
+  test("a list style Wrike would not derive from depth stays in HTML", () => {
+    expect(editableDescription('<ul style="list-style-type: square;"><li>a</li></ul>').format).toBe("html")
   })
 })

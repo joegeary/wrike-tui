@@ -8,7 +8,7 @@ const measure = measureCorpus()
 console.log(corpusSummary(measure))
 
 // Raise this when a change opens more of the corpus as markdown. It never goes down.
-const MARKDOWN_FLOOR = 892
+const MARKDOWN_FLOOR = 941
 
 test("every description that opens as markdown saves back unchanged when the editor changes nothing", () => {
   const first = measure.lost[0]

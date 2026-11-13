@@ -37,7 +37,7 @@ const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: ()
 
 /** The HTML Wrike stores for markdown written in the dialect htmlToMarkdown writes. */
 export function markdownToHtml(markdown: string): string {
-  return flow(wrikeMarked.lexer(markdown.trim()))
+  return flow(wrikeMarked.lexer(markdown.trim()), 0)
 }
 
 const parser = new Parser(wrikeMarked.defaults)
@@ -49,9 +49,10 @@ const trailingNewlines = (raw: string) => raw.length - raw.replace(/\n+$/, "").l
 
 /**
  * The blocks of a document or a list item, with the <br>s the newlines between them spell.
- * `opening` wraps the first part, which is how a checklist item puts its text in a label.
+ * `bullets` counts the bullet lists around them. `opening` wraps the first part, which is
+ * how a checklist item puts its text in a label.
  */
-function flow(tokens: Token[], opening = (html: string) => html): string {
+function flow(tokens: Token[], bullets: number, opening = (html: string) => html): string {
   let html = ""
   let previous: { part: Part; hardBreak: boolean } | null = null
   let newlines = 0
@@ -62,14 +63,14 @@ function flow(tokens: Token[], opening = (html: string) => html): string {
     }
     const part: Part = token.type === "paragraph" || token.type === "text" || token.type === "html" ? "text" : "block"
     if (previous) html += "<br />".repeat(Math.max(0, breaksBetween(previous.part, part, newlines, previous.hardBreak)))
-    html += previous ? render(token) : opening(render(token))
+    html += previous ? render(token, bullets) : opening(render(token, bullets))
     previous = { part, hardBreak: HARD_BREAK.test(token.raw) }
     newlines = trailingNewlines(token.raw)
   }
   return html
 }
 
-function render(token: Token): string {
+function render(token: Token, bullets: number): string {
   switch (token.type) {
     case "paragraph":
     case "text":
@@ -84,10 +85,11 @@ function render(token: Token): string {
       return tag("pre", escapeHtml(token.text))
     case "list": {
       const { items, ordered } = token as Tokens.List
-      const html = items.map(listItem).join("")
+      const html = items.map((item) => listItem(item, ordered ? bullets : bullets + 1)).join("")
       if (items.some((item) => item.task)) return `<ul class="checklist" style="list-style-type: none;">${html}</ul>`
-      if (!ordered) return tag("ul", html)
-      return token.start === 1 ? tag("ol", html) : `<ol start="${token.start}">${html}</ol>`
+      if (ordered) return token.start === 1 ? tag("ol", html) : `<ol start="${token.start}">${html}</ol>`
+      const style = NESTED_BULLETS[bullets]
+      return style ? `<ul style="list-style-type: ${style};">${html}</ul>` : tag("ul", html)
     }
     case "table": {
       const { header, rows } = token as Tokens.Table
@@ -103,10 +105,13 @@ function render(token: Token): string {
 const tableCell = (tokens: Token[]) =>
   tokens.map((token) => (token.type === "html" && /^<br\s*\/?>$/i.test(token.raw) ? "<br />" : inline([token]))).join("")
 
+/** Wrike's editor marks a bullet list inside another by how deep it sits: circles, then squares. */
+const NESTED_BULLETS: (string | undefined)[] = [undefined, "circle", "square"]
+
 /** A task list item is a Wrike checklist item: a checkbox and the item's text inside a label. */
-function listItem(item: Tokens.ListItem): string {
-  if (!item.task) return tag("li", flow(item.tokens))
+function listItem(item: Tokens.ListItem, bullets: number): string {
+  if (!item.task) return tag("li", flow(item.tokens, bullets))
   const checkbox = `<input type="checkbox"${item.checked ? ' checked="checked"' : ""} />`
   const content = item.tokens.filter((token) => token.type !== "checkbox")
-  return tag("li", content.length === 0 ? tag("label", checkbox) : flow(content, (first) => tag("label", checkbox + first)))
+  return tag("li", content.length === 0 ? tag("label", checkbox) : flow(content, bullets, (first) => tag("label", checkbox + first)))
 }
