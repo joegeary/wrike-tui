@@ -218,6 +218,23 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     return json({ kind: "tasks", data: [task] })
   }
 
+  /**
+   * `PUT /tasks/{a},{b},...`: up to 100 tasks given one change. Wrike refuses
+   * importance here with a 400, which the client avoids by sending it one task
+   * at a time.
+   */
+  async function updateTasks(ids: string[], form: URLSearchParams): Promise<Response> {
+    if (form.has("importance")) return wrikeError(400, "invalid_parameter", "Parameter 'importance' is not allowed")
+    if (ids.length > 100) return wrikeError(400, "invalid_parameter", "Parameter 'taskIds' value is invalid")
+    const tasks = ids.map((id) => data.tasks.find((candidate) => candidate.id === id))
+    if (tasks.some((task) => task === undefined)) return wrikeError(404, "resource_not_found", "Task not found")
+    if (tasks.some((task) => task!.scope === RECYCLED)) return deletedTask()
+    const answers = tasks.map((task) => updateTask(task!, form))
+    const failed = answers.find((answer) => answer.status !== 200)
+    if (failed) return failed
+    return json({ kind: "tasks", data: tasks })
+  }
+
   let created = 0
 
   /** `POST /folders/{id}/tasks`: the folder or space in the path holds the task, and `superTasks` makes it a subtask of another. */
@@ -328,6 +345,9 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       const ids = folders[1]!.split(",")
       return json({ kind: "folders", data: data.folders.filter((folder) => ids.includes(folder.id)) })
     }
+
+    const batch = /^\/tasks\/([^/]+,[^/]+)$/.exec(path)
+    if (batch && method === "PUT") return updateTasks(batch[1]!.split(","), form)
 
     const taskPath = /^\/tasks\/([^/]+)(\/comments|\/attachments)?$/.exec(path)
     if (taskPath) {

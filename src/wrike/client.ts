@@ -6,7 +6,7 @@ import { folderId, taskId, userId } from "../domain/ids"
 import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import { patchParams, type Params, type TaskPatch } from "../domain/patch"
 import type { Space, SpaceTree } from "../domain/workspace"
-import { WrikeFailure } from "./errors"
+import { toWrikeError, WrikeFailure, type WrikeError } from "./errors"
 import {
   AttachmentSchema,
   AttachmentUrlSchema,
@@ -44,6 +44,12 @@ export type WrikeClient = {
   taskIdFromLegacy(id: LegacyItemId): Promise<TaskId | null>
   task(id: TaskId): Promise<Task>
   updateTask(id: TaskId, patch: TaskPatch): Promise<Task>
+  /**
+   * One change to several tasks, `PUT /tasks/{a},{b},...` with up to 100 IDs.
+   * Wrike refuses importance in a batch, so importance goes one task at a
+   * time. A request that fails fails only the tasks it carried.
+   */
+  updateTasks(ids: readonly TaskId[], patch: TaskPatch): Promise<BatchResult>
   createTask(task: NewTask): Promise<Task>
   /** Moves the task to the Recycle Bin. A task already there is "already-deleted", which is not an error. */
   deleteTask(id: TaskId): Promise<"deleted" | "already-deleted">
@@ -71,6 +77,11 @@ export type TaskQuery =
   | { kind: "folder"; id: FolderId }
 
 export type TaskPage = { tasks: Task[]; next: string | null }
+
+export type BatchResult = { saved: Task[]; failed: { ids: TaskId[]; error: WrikeError }[] }
+
+/** The most task IDs Wrike takes in one `PUT /tasks/{ids}`. */
+export const BATCH_SIZE = 100
 
 export const PAGE_SIZE = 200
 /** Wrike's thumbnails are small, so a larger answer is refused rather than held in memory. */
@@ -183,6 +194,21 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
 
     async updateTask(id, patch) {
       return one(parseAll(TaskSchema, await transport.request("PUT", `/tasks/${id}`, patchParams(patch)), "task"))
+    },
+
+    async updateTasks(ids, patch) {
+      // Wrike answers 400 "Parameter 'importance' is not allowed" to importance in a batch.
+      const size = patch.field === "importance" ? 1 : BATCH_SIZE
+      const result: BatchResult = { saved: [], failed: [] }
+      for (let at = 0; at < ids.length; at += size) {
+        const batch = ids.slice(at, at + size)
+        try {
+          result.saved.push(...parseAll(TaskSchema, await transport.request("PUT", `/tasks/${batch.join(",")}`, patchParams(patch)), "tasks"))
+        } catch (thrown) {
+          result.failed.push({ ids: batch, error: toWrikeError(thrown) })
+        }
+      }
+      return result
     },
 
     async createTask(task) {
