@@ -24,28 +24,39 @@ export function createMcpClient(options: McpOptions): McpClient {
   let connection: Promise<Client> | null = null
 
   function connect(): Promise<Client> {
-    connection ??= (async () => {
-      const client = new Client({ name: pkg.name, version: pkg.version })
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL(options.url), {
-          requestInit: { headers: { Authorization: `Bearer ${options.token}` } },
-          fetch: options.fetch,
-        }),
-      )
-      return client
-    })()
-    // A failed connect must not poison every later refresh.
-    connection.catch(() => (connection = null))
+    if (!connection) {
+      const opening = (async () => {
+        const client = new Client({ name: pkg.name, version: pkg.version })
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(options.url), {
+            requestInit: { headers: { Authorization: `Bearer ${options.token}` } },
+            fetch: options.fetch,
+          }),
+        )
+        return client
+      })()
+      connection = opening
+      // A failed connect must not poison every later refresh.
+      opening.catch(() => drop(opening))
+    }
     return connection
+  }
+
+  /** Forgets a connection a call failed on and closes it, unless another call already replaced it. */
+  function drop(used: Promise<Client>): void {
+    if (connection !== used) return
+    connection = null
+    used.then((client) => client.close()).catch(() => {})
   }
 
   /** Calls a tool and parses the JSON in its text with `schema`. `what` names the data in error messages. */
   async function call<T>(name: string, args: Record<string, unknown>, schema: z.ZodType<T>, what: string): Promise<T> {
+    const used = connect()
     let result: unknown
     try {
-      result = await (await connect()).callTool({ name, arguments: args })
+      result = await (await used).callTool({ name, arguments: args })
     } catch (thrown) {
-      connection = null
+      drop(used)
       throw new WrikeFailure(mcpError(thrown))
     }
     const parsed = schema.safeParse(toolJson(result, what))
