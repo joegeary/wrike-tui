@@ -1,8 +1,9 @@
 import { parseColor, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
-import { contactName, openHistory, statusOf, taskFields, type ShownField } from "../app/selectors"
-import { EDIT_FIELDS, type Details, type EditField, type State } from "../app/state"
+import { contactName, editRows, openHistory, statusOf, taskFields, type ShownField } from "../app/selectors"
+import type { CustomFieldId } from "../domain/ids"
+import type { Details, EditField, State } from "../app/state"
 import { isDay } from "../domain/dates"
 import { displayMarkdown } from "../domain/description"
 import { fieldText } from "../domain/fields"
@@ -17,7 +18,7 @@ import { scrollBox } from "./scroll"
 import { statusColor, useTheme, type Theme } from "./theme"
 import { TextInput } from "./TextInput"
 
-const LABEL_WIDTH = 12
+const LABEL_WIDTH = 13
 /** Custom field titles run longer than the built-in labels, so their column grows to fit them, up to this. */
 const MAX_FIELD_LABEL = 24
 
@@ -47,12 +48,12 @@ function useMarkdownStyle(theme: Theme): SyntaxStyle {
 }
 
 /** `active` is undefined outside edit mode, where no row carries a cursor column. */
-function Field(props: { label: string; active?: boolean; labelWidth?: number; children: ReactNode }) {
+function Field(props: { label: string; active?: boolean; labelWidth?: number; anchor?: string; children: ReactNode }) {
   const theme = useTheme()
   const cursor = props.active === undefined ? "" : props.active ? "▸ " : "  "
   const width = props.labelWidth ?? LABEL_WIDTH
   return (
-    <box flexDirection="row">
+    <box flexDirection="row" {...(props.anchor ? { id: props.anchor } : {})}>
       <text fg={props.active ? theme.accent : theme.dim} width={width + cursor.length} wrapMode="none">
         {`${cursor}${truncate(props.label, width - 1)}`}
       </text>
@@ -81,6 +82,9 @@ function Section({ title }: { title: string }) {
   )
 }
 
+/** The ID of a custom field's row, which the edit walk scrolls into view. */
+const fieldAnchor = (id: CustomFieldId) => `field:${id}`
+
 /** A field's value as text, and a date with the same short day the due date shows. */
 function fieldValue(shown: ShownField, today: string): string {
   const text = fieldText(shown.field?.kind, shown.value)
@@ -88,18 +92,29 @@ function fieldValue(shown: ShownField, today: string): string {
   return shown.field?.kind.type === "Date" && isDay(day) ? `${text}  ${shortDay(day, today)}` : text
 }
 
-/** The task's custom fields under their titles. A task with none draws no section. */
-function Fields(props: { state: State; fields: ShownField[]; editing: boolean }) {
+/**
+ * The task's custom fields under their titles. A task with none draws no
+ * section. The field being typed into draws its input in place, and one the
+ * task does not have yet draws in its place by title while it is typed.
+ */
+function Fields(props: { state: State; task: Details["task"]; active: (id: CustomFieldId) => boolean | undefined; onDraft: (text: string) => void }) {
   const theme = useTheme()
-  if (props.fields.length === 0) return null
-  const longest = Math.max(...props.fields.map((shown) => Bun.stringWidth(shown.field?.title ?? shown.id)))
+  const { mode } = props.state
+  const typing = mode.kind === "edit-text" && mode.field === "custom" && mode.edit.taskIds.includes(props.task.id) ? mode : null
+  const fields = taskFields(props.state, props.task, typing?.edit.id ?? null)
+  if (fields.length === 0) return null
+  const longest = Math.max(...fields.map((shown) => Bun.stringWidth(shown.field?.title ?? shown.id)))
   const labelWidth = Math.min(MAX_FIELD_LABEL, Math.max(LABEL_WIDTH, longest + 2))
   return (
     <>
       <Section title="Fields" />
-      {props.fields.map((shown) => (
-        <Field key={shown.id} label={shown.field?.title ?? shown.id} labelWidth={labelWidth} active={props.editing ? false : undefined}>
-          <Value fg={shown.field ? theme.text : theme.dim}>{fieldValue(shown, props.state.clock.today)}</Value>
+      {fields.map((shown) => (
+        <Field key={shown.id} anchor={fieldAnchor(shown.id)} label={shown.field?.title ?? shown.id} labelWidth={labelWidth} active={props.active(shown.id)}>
+          {typing?.edit.id === shown.id ? (
+            <TextInput value={typing.draft} onInput={props.onDraft} />
+          ) : (
+            <Value fg={shown.field ? theme.text : theme.dim}>{fieldValue(shown, props.state.clock.today)}</Value>
+          )}
         </Field>
       ))}
     </>
@@ -116,7 +131,9 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
   const { mode } = state
   // The cursor column shows only inside an edit session, so a picker opened from browse does not shift the fields.
   const editing = mode.kind === "edit" || ((mode.kind === "edit-text" || mode.kind === "picker") && mode.origin === "edit")
-  const active = (field: EditField) => (editing ? mode.kind === "edit" && EDIT_FIELDS[mode.field] === field : undefined)
+  const row = mode.kind === "edit" ? editRows(state)[mode.field] : undefined
+  const active = (field: EditField) => (editing ? row?.kind === "core" && row.field === field : undefined)
+  const activeField = (id: CustomFieldId) => (editing ? row?.kind === "custom" && row.id === id : undefined)
   const typing = (field: EditField) => (mode.kind === "edit-text" && mode.field === field ? mode : null)
   const status = statusOf(state, task)
   const [start, due] = [startDay(task.dates), dueDay(task.dates)]
@@ -178,7 +195,7 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
       <Field label="Permalink" active={editing ? false : undefined}>
         <text fg={theme.link} wrapMode="char" flexShrink={1}>{task.permalink}</text>
       </Field>
-      <Fields state={state} fields={taskFields(state, task)} editing={editing} />
+      <Fields state={state} task={task} active={activeField} onDraft={onDraft} />
 
       <Section title="Description" />
       {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
@@ -221,6 +238,13 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
   useEffect(() => {
     if (selected) scroll.current?.scrollChildIntoView(itemAnchor(selected))
   }, [selected, preview])
+
+  // The walk can step into custom fields below the pane's fold, so the row it is on is kept in view.
+  const walked = state.mode.kind === "edit" ? editRows(state)[state.mode.field] : undefined
+  const walkedField = walked?.kind === "custom" ? walked.id : null
+  useEffect(() => {
+    if (walkedField) scroll.current?.scrollChildIntoView(fieldAnchor(walkedField))
+  }, [walkedField])
 
   const shownDetails = details.state === "ready" ? details.value : details.state === "loading" ? details.previous : undefined
   const title = details.state === "loading" && shownDetails ? "Details (refreshing)" : "Details"

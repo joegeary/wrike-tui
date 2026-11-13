@@ -1,6 +1,6 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, detailsItems, mentionSuggestions, MULTI_PICKERS, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
+import { currentView, detailsItems, isMultiPicker, mentionSuggestions, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
 export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
@@ -43,7 +43,7 @@ const olderHistory = (state: State) => {
   const history = openHistory(state)
   return history !== null && history.next !== null && history.loading === null
 }
-const multi = (state: State) => state.mode.kind === "picker" && MULTI_PICKERS.has(state.mode.field)
+const multi = (state: State) => state.mode.kind === "picker" && isMultiPicker(state, state.mode)
 
 const command = (id: string, title: string, group: CommandGroup, contexts: Context[], run: Command["run"], extra: Partial<Command> = {}): Command => ({
   id,

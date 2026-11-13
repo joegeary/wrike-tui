@@ -1,8 +1,8 @@
 import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
-import type { CustomField } from "../domain/fields"
+import type { CustomField, FieldWrite } from "../domain/fields"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
-import type { AttachmentId, CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, CustomFieldId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Attachment, Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
@@ -51,7 +51,25 @@ export const TASK_PICKERS = ["status", "importance", "assignees"] as const
 export type TaskPicker = (typeof TASK_PICKERS)[number]
 export const LIST_PICKERS = ["filter-assignee", "filter-status", "filter-importance", "filter-due", "columns"] as const
 export type ListPicker = (typeof LIST_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker
+export type PickerField = TaskPicker | ListPicker | "custom"
+
+/**
+ * A custom field being changed and the tasks the value goes to. The details
+ * pane passes the open task. The editor never reads the task list itself, so
+ * a caller can pass several and the one value chosen is written to each.
+ */
+export type FieldEdit = { id: CustomFieldId; taskIds: readonly TaskId[] }
+
+/** A row the edit walk steps through: a field every task has, then the task's custom fields as drawn. */
+export type EditRow = { kind: "core"; field: EditField } | { kind: "custom"; id: CustomFieldId }
+
+type Typing = { kind: "edit-text"; draft: string; error?: string; origin: Origin }
+/** A value typed in place. `custom` is a custom field, whose text is checked against its type. */
+export type EditTextMode = Typing & ({ field: TextField } | { field: "custom"; edit: FieldEdit })
+
+type Picking = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin }
+/** A list of choices that filters as it is typed into. `custom` is a custom field's choices. */
+export type PickerMode = Picking & ({ field: TaskPicker | ListPicker } | { field: "custom"; edit: FieldEdit })
 
 export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
@@ -65,8 +83,8 @@ export type Mode =
   | { kind: "search-input"; draft: string }
   | { kind: "filter-input"; draft: string }
   | { kind: "edit"; field: number }
-  | { kind: "edit-text"; field: TextField; draft: string; error?: string; origin: Origin }
-  | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
+  | EditTextMode
+  | PickerMode
   | Compose
   /** Asks before the selected comment is deleted. Only `y` deletes it. */
   | { kind: "confirm-delete"; id: CommentId }
@@ -169,7 +187,8 @@ export type Effect =
   | { kind: "load-preview"; id: AttachmentId }
   /** Asks Wrike for a signed link to the file and hands it to the browser. */
   | { kind: "open-attachment"; id: AttachmentId; name: string }
-  | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
+  /** `check` names a custom field write, whose value is looked for in Wrike's answer. */
+  | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string; check?: FieldCheck }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
   | { kind: "edit-description"; task: Task }
@@ -259,11 +278,14 @@ export type Action =
   | { type: "details-loaded"; request: number; result: Result<Details> }
   | { type: "history-loaded"; taskId: TaskId; request: number; more: boolean; result: Result<HistoryPage> }
   | { type: "preview-loaded"; id: AttachmentId; result: Result<Uint8Array> }
-  | { type: "task-saved"; done: string; result: Result<Task> }
+  | { type: "task-saved"; done: string; check?: FieldCheck; result: Result<Task> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
 export type Update = [State, Effect[]]
+
+/** A custom field write to look for in Wrike's answer, since Wrike answers 200 and drops a field that does not apply to the task. */
+export type FieldCheck = { id: CustomFieldId; title: string; value: FieldWrite }
 
 /** The value to show: the loaded one, or the last good one while a reload runs or after it failed. */
 export function shown<T>(loadable: Loadable<T> | undefined): T | undefined {

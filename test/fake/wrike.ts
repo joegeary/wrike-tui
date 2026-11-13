@@ -30,6 +30,9 @@ const OPTIONAL_LIST_FIELDS = [
   "hasAttachments", "superTaskIds", "subTaskIds", "dependencyIds", "metadata", "customFields",
 ] as const
 
+/** Field types whose write Wrike accepted with 200 and then did not store on a task where the field does not apply. */
+const DROPPED_WHERE_NOT_APPLYING = new Set(["Checkbox", "Currency", "Duration"])
+
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 const wrikeError = (status: number, error: string, errorDescription: string) => json({ error, errorDescription }, status)
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -165,6 +168,33 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
         type: dates.type,
         ...(dates.start ? { start: `${dates.start.slice(0, 10)}T09:00:00` } : {}),
         ...(dates.due ? { due: `${dates.due.slice(0, 10)}T17:00:00` } : {}),
+      }
+    }
+    if (form.has("customFields")) {
+      let entries: unknown
+      try {
+        entries = JSON.parse(form.get("customFields")!)
+      } catch {
+        return invalid("customFields")
+      }
+      if (!Array.isArray(entries)) return invalid("customFields")
+      for (const entry of entries as { id?: unknown; value?: unknown }[]) {
+        const definition = data.customFields.find((field) => field.id === entry.id)
+        if (!definition) return invalid("customFields")
+        // Wrike answers 200 for a read-only field, and for some types on a task they do not apply to, and stores nothing.
+        if (definition.type === "CalculatedNumeric" || definition.settings.readOnly === true) continue
+        if (DROPPED_WHERE_NOT_APPLYING.has(definition.type) && data.notApplying[task.id]?.includes(definition.id)) continue
+        const at = task.customFields.findIndex((field) => field.id === definition.id)
+        if (entry.value === null) {
+          if (at >= 0) task.customFields.splice(at, 1)
+          continue
+        }
+        // An empty string leaves the field as it was. Any other string is stored as sent, whatever the field's type.
+        if (entry.value === "") continue
+        // Several choices read back as a JSON-array string, and one as plain text.
+        const value = Array.isArray(entry.value) ? (entry.value.length === 1 ? String(entry.value[0]) : JSON.stringify(entry.value)) : String(entry.value)
+        if (at >= 0) task.customFields[at] = { id: definition.id, value }
+        else task.customFields.push({ id: definition.id, value })
       }
     }
     const added = form.has("addResponsibles") ? (JSON.parse(form.get("addResponsibles")!) as string[]) : []

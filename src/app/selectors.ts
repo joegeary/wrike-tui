@@ -1,5 +1,5 @@
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
-import type { CustomField } from "../domain/fields"
+import { choicesOf, type CustomField } from "../domain/fields"
 import type { HistoryEntry } from "../domain/history"
 import type { CustomFieldId, CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
@@ -9,7 +9,20 @@ import { defaultSpec } from "../domain/settings"
 import { cursorIndex, shapeList, type ListRow, type RowId, type ShapeContext } from "../domain/shape"
 import type { SpaceTree } from "../domain/workspace"
 import { cursorRow, navRows, type NavRow, type SelectableNavRow } from "./nav"
-import { shown, type Details, type DetailsItem, type ListView, type Loadable, type Mode, type Paged, type PickerField, type State } from "./state"
+import {
+  EDIT_FIELDS,
+  shown,
+  type Details,
+  type DetailsItem,
+  type EditRow,
+  type FieldEdit,
+  type ListView,
+  type Loadable,
+  type Paged,
+  type PickerField,
+  type PickerMode,
+  type State,
+} from "./state"
 
 export type PaneRow = ListRow | { kind: "entry"; id: RowId; entry: InboxEntry }
 
@@ -208,14 +221,47 @@ export const fieldDefs = memo((loadable: Loadable<CustomField[]>): ReadonlyMap<C
 /** A field as the details pane draws it. `field` is null when no loaded definition has its ID. */
 export type ShownField = { id: CustomFieldId; field: CustomField | null; value: string }
 
-/** The task's set fields by title, and those whose definition is not loaded last by ID. */
-export function taskFields(state: State, task: Task): ShownField[] {
+/**
+ * The task's set fields by title, and those whose definition is not loaded
+ * last by ID. `adding` is a field being typed that the task does not have
+ * yet, drawn in its place with no value.
+ */
+export function taskFields(state: State, task: Task, adding: CustomFieldId | null = null): ShownField[] {
   const defs = fieldDefs(state.customFields)
   const title = (shown: ShownField) => shown.field?.title ?? `\uffff${shown.id}`
-  return task.fields
+  const values = adding && !task.fields.some((value) => value.id === adding) ? [...task.fields, { id: adding, value: "" }] : task.fields
+  return values
     .map((value): ShownField => ({ id: value.id, field: defs.get(value.id) ?? null, value: value.value }))
     .sort((a, b) => title(a).localeCompare(title(b), undefined, { sensitivity: "base", numeric: true }))
 }
+
+/** What the edit walk steps through on the open task: the fields every task has, then its custom fields as the pane draws them. */
+export function editRows(state: State): EditRow[] {
+  const task = openTask(state)
+  const custom = task ? taskFields(state, task).map((shown): EditRow => ({ kind: "custom", id: shown.id })) : []
+  return [...EDIT_FIELDS.map((field): EditRow => ({ kind: "core", field })), ...custom]
+}
+
+/** A task the client holds: the open one, else the first list that has it. */
+export function heldTask(state: State, id: TaskId): Task | null {
+  const opened = openTask(state)
+  if (opened?.id === id) return opened
+  for (const list of state.lists.values()) {
+    const found = list.items.find((task) => task.id === id)
+    if (found) return found
+  }
+  return null
+}
+
+/** The value the edited tasks share for the field, or null when it is not set on them or they differ. */
+export function sharedValue(state: State, edit: FieldEdit): string | null {
+  const values = edit.taskIds.map((id) => heldTask(state, id)?.fields.find((value) => value.id === edit.id)?.value ?? null)
+  const [first = null] = values
+  return values.every((value) => value === first) ? first : null
+}
+
+/** True when some edited task has the field set, so clearing it would change something. */
+export const anySet = (state: State, edit: FieldEdit) => edit.taskIds.some((id) => heldTask(state, id)?.fields.some((value) => value.id === edit.id))
 
 export function statusOf(state: State, task: Task): CustomStatus | null {
   return findStatus(state.workflows, task.statusId)
@@ -255,7 +301,7 @@ export function navCursorRow(state: State): SelectableNavRow | null {
 
 export type PickerOption = { id: string; label: string; detail?: string; color?: string }
 
-export const MULTI_PICKERS: ReadonlySet<PickerField> = new Set<PickerField>([
+const MULTI_PICKERS: ReadonlySet<PickerField> = new Set<PickerField>([
   "assignees",
   "filter-assignee",
   "filter-status",
@@ -279,8 +325,36 @@ export const DUE_LABELS: Record<DueRange, string> = { overdue: "Overdue", today:
 /** The choice in the due picker that removes the filter. */
 export const ANY_DUE = "any"
 
+/** True when the picker takes several choices: Space toggles them and Enter applies them all. */
+export function isMultiPicker(state: State, mode: PickerMode): boolean {
+  return mode.field === "custom" ? fieldDefs(state.customFields).get(mode.edit.id)?.kind.type === "Multiple" : MULTI_PICKERS.has(mode.field)
+}
+
+/** Option IDs in a custom field's picker: a choice is `v:` and its value, the rest name what Enter does. */
+export const CHOICE = "v:"
+export const OTHER_VALUE = "other"
+export const CLEAR_FIELD = "clear"
+
+/** A custom field's choices. A choice already set that the field no longer lists stays, so it can be kept or removed. */
+function fieldOptions(state: State, mode: PickerMode & { field: "custom" }, matches: (text: string) => boolean): PickerOption[] {
+  const field = fieldDefs(state.customFields).get(mode.edit.id)
+  if (field?.kind.type !== "DropDown" && field?.kind.type !== "Multiple") return []
+  const current = sharedValue(state, mode.edit)
+  const held = current === null ? [] : field.kind.type === "Multiple" ? choicesOf(current) : [current]
+  const chosen = mode.chosen.flatMap((id) => (id.startsWith(CHOICE) ? [id.slice(CHOICE.length)] : []))
+  const values = [...new Set([...field.kind.options, ...(field.kind.type === "Multiple" ? [...held, ...chosen] : [])])]
+  const options = values.filter(matches).map((value): PickerOption => ({ id: CHOICE + value, label: value }))
+  if (field.kind.type === "Multiple") return options
+  const other = current !== null && !field.kind.options.includes(current) ? current : null
+  return [
+    ...options,
+    ...(field.kind.allowOther ? [{ id: OTHER_VALUE, label: "Other value...", ...(mode.query ? { detail: mode.query } : other ? { detail: other } : {}) }] : []),
+    ...(anySet(state, mode.edit) ? [{ id: CLEAR_FIELD, label: "Clear the field" }] : []),
+  ]
+}
+
 /** The options of the open picker after its filter. The status picker needs the open task. */
-export function pickerOptions(state: State, mode: Mode & { kind: "picker" }): PickerOption[] {
+export function pickerOptions(state: State, mode: PickerMode): PickerOption[] {
   const matches = (text: string) => text.toLowerCase().includes(mode.query.toLowerCase())
   const people = () =>
     [...state.contacts.values()]
@@ -315,5 +389,7 @@ export function pickerOptions(state: State, mode: Mode & { kind: "picker" }): Pi
       return [{ id: ANY_DUE, label: "Any date" }, ...DUE_RANGES.map((range) => ({ id: range, label: DUE_LABELS[range] }))].filter((option) => matches(option.label))
     case "columns":
       return COLUMN_KEYS.filter((column) => column !== "title" && matches(COLUMN_LABELS[column])).map((column) => ({ id: column, label: COLUMN_LABELS[column] }))
+    case "custom":
+      return fieldOptions(state, mode, matches)
   }
 }

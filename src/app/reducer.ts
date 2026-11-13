@@ -36,9 +36,10 @@ import {
 } from "./reduce/comments"
 import { openAttachment, previewLoaded } from "./reduce/attachments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
-import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
-import { currentList, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
-import { EDIT_FIELDS, PANES, type Action, type State, type Update } from "./state"
+import { closeEditor } from "./reduce/fields"
+import { choiceToggle, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
+import { currentList, editRows, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
+import { PANES, type Action, type State, type Update } from "./state"
 
 export { start }
 
@@ -197,7 +198,7 @@ function step(state: State, action: Action): Update {
       return onLink(state, action.act)
 
     case "field-move":
-      return state.mode.kind === "edit" ? [{ ...state, mode: { kind: "edit", field: clamp(state.mode.field + action.by, EDIT_FIELDS.length) } }, []] : [state, []]
+      return state.mode.kind === "edit" ? [{ ...state, mode: { kind: "edit", field: clamp(state.mode.field + action.by, editRows(state).length) } }, []] : [state, []]
     case "field-open":
       return openField(state)
     case "choice-move":
@@ -268,7 +269,7 @@ function submit(state: State): Update {
       return submitEditText(state, mode)
     case "picker": {
       const { field } = mode
-      if (field !== "status" && field !== "importance" && field !== "assignees") return submitListPicker(state, mode, field)
+      if (field !== "status" && field !== "importance" && field !== "assignees" && field !== "custom") return submitListPicker(state, mode, field)
       return submitTaskPicker(state, mode, field)
     }
     case "browse":
@@ -281,7 +282,7 @@ function submit(state: State): Update {
 
 function cancel(state: State): Update {
   const mode = state.mode
-  if (mode.kind === "edit-text" || mode.kind === "picker") return [closeEditor(state, mode.origin, mode.field), []]
+  if (mode.kind === "edit-text" || mode.kind === "picker") return [closeEditor(state, mode), []]
   if (mode.kind === "confirm-delete") return keepComment(state)
   return [{ ...state, mode: { kind: "browse" } }, []]
 }

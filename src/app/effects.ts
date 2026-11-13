@@ -129,7 +129,12 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return runEffect({ kind: "open-url", url: link.value }, deps, dispatch)
     }
     case "update-task":
-      return dispatch({ type: "task-saved", done: effect.done, result: await attempt(() => client.updateTask(effect.taskId, effect.patch)) })
+      return dispatch({
+        type: "task-saved",
+        done: effect.done,
+        ...(effect.check ? { check: effect.check } : {}),
+        result: await attempt(() => client.updateTask(effect.taskId, effect.patch)),
+      })
     case "save-comment": {
       const { taskId, editing, body } = effect
       const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))

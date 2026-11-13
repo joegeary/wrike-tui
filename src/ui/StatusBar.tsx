@@ -1,6 +1,8 @@
 import { isOffered } from "../app/commands"
 import { activeContexts, boundCommands, keyLabel } from "../app/keymap"
+import { fieldDefs, isMultiPicker } from "../app/selectors"
 import type { State } from "../app/state"
+import { fieldEditor } from "../domain/fields"
 import { fit } from "./format"
 import { useTheme, type Color, type Theme } from "./theme"
 
@@ -22,10 +24,16 @@ function message(state: State, theme: Theme): { text: string; color: Color } {
   if (mode.kind === "edit-text" && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
   if (mode.kind === "confirm-delete") return { text: "Delete this comment? y deletes, any other key keeps it", color: theme.warning }
+  if (mode.kind === "picker" && isMultiPicker(state, mode) && mode.field === "custom") return { text: "Type to filter. With nothing chosen, Enter clears the field.", color: theme.dim }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
   if (mode.kind === "palette") return { text: "Type to find a command", color: theme.dim }
   if (mode.kind === "filter-input") return { text: "Shows tasks whose title contains this. Empty clears it.", color: theme.dim }
   if (mode.kind === "edit") return { text: "Edit mode", color: theme.heading }
+  if (mode.kind === "edit-text" && mode.field === "custom") {
+    const field = fieldDefs(state.customFields).get(mode.edit.id)
+    const editor = field ? fieldEditor(field) : null
+    return { text: editor?.kind === "type" ? editor.hint : "", color: theme.dim }
+  }
   if (mode.kind === "edit-text" && mode.field !== "title") return { text: "YYYY-MM-DD, empty clears the date", color: theme.dim }
   return { text: "", color: theme.dim }
 }

@@ -1,4 +1,5 @@
-import type { CustomStatusId, UserId } from "./ids"
+import type { FieldWrite } from "./fields"
+import type { CustomFieldId, CustomStatusId, UserId } from "./ids"
 import type { Importance, TaskDates } from "./model"
 
 export type TaskPatch =
@@ -8,9 +9,10 @@ export type TaskPatch =
   | { field: "assignees"; add: UserId[]; remove: UserId[] }
   | { field: "dates"; dates: TaskDates }
   | { field: "description"; html: string }
+  | { field: "custom"; id: CustomFieldId; value: FieldWrite }
 
 /** A request parameter before encoding. Arrays and objects travel as JSON strings. */
-export type ParamValue = string | number | boolean | readonly string[] | { readonly [key: string]: unknown }
+export type ParamValue = string | number | boolean | readonly unknown[] | { readonly [key: string]: unknown }
 export type Params = Record<string, ParamValue>
 
 export function patchParams(patch: TaskPatch): Params {
@@ -30,6 +32,9 @@ export function patchParams(patch: TaskPatch): Params {
       return { dates: datesParam(patch.dates) }
     case "description":
       return { description: patch.html }
+    case "custom":
+      // null clears the field. An empty string would leave it as it was.
+      return { customFields: [{ id: patch.id, value: patch.value }] }
   }
 }
 
