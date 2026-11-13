@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { ME, TASK } from "../fake/data"
+import { ME, STATUS, TASK } from "../fake/data"
 import { FOLDER } from "../fake/workspace"
 import { openApp } from "./harness"
 
@@ -37,6 +37,13 @@ async function inPlatform(options: Parameters<typeof openApp>[1] = {}) {
 async function selectedUrl(): Promise<string | undefined> {
   await app.press("2", "y")
   return app.outside.copied.at(-1)
+}
+
+async function palette(command: string) {
+  await app.press(":")
+  await app.see("─ Commands ─")
+  await app.type(command)
+  await app.press("enter")
 }
 
 const created = () => app.fake.data.tasks.at(-1)!
@@ -169,5 +176,43 @@ describe("N creates a subtask", () => {
     expect(app.fake.writes).toEqual([
       { method: "POST", path: `/folders/${FOLDER.incidents}/tasks`, params: { title: "Capture the HAR", superTasks: `["${TASK.reproduce}"]` } },
     ])
+  })
+})
+
+describe("Cancel the task", () => {
+  test("moves the task to its workflow's Cancelled status, and it leaves My to-do like any closed task", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("t", "2", "G")
+    await app.see("2 My to-do  6")
+    await palette("cancel the task")
+    const frame = await app.see("Cancelled: status set to Cancelled", "2 My to-do  5")
+    expect(app.fake.writes).toEqual([{ method: "PUT", path: `/tasks/${TASK.flags}`, params: { customStatus: STATUS.cancelled } }])
+    expect(list(frame).some((line) => line.includes("Clean up stale feature flags"))).toBe(false)
+  })
+
+  test("a workflow with several Cancelled statuses asks which", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("t", "2")
+    await app.see("2 My to-do  6")
+    await app.press("G", "k", "k", "k", "enter")
+    await app.see(/Status\s+● Triage/)
+    await palette("cancel the task")
+    const picker = await app.see("─ Cancel the task ─", "Won't fix")
+    expect(picker).toMatch(/▸ ● Duplicate\s+Cancelled/)
+    expect(picker).not.toContain("Resolved")
+    await app.press("down", "enter")
+    await app.see("Cancelled: status set to Won't fix", /Status\s+● Won't fix/)
+    expect(app.fake.writes).toEqual([{ method: "PUT", path: `/tasks/${TASK.onboarding}`, params: { customStatus: STATUS.wontFix } }])
+  })
+
+  test("read-only mode refuses", async () => {
+    app = await openApp(WIDE, { readOnly: true })
+    await app.see("Enable SSO on sandbox")
+    await app.press("t", "2", "G")
+    await palette("cancel the task")
+    await app.see("read-only mode: not saved")
+    expect(app.fake.writes).toEqual([])
   })
 })
