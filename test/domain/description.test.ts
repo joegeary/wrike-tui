@@ -232,3 +232,17 @@ describe("links", () => {
     expect(roundTrip(html)).toBe(html)
   })
 })
+
+describe("escaping", () => {
+  test.each([
+    ["an underscore inside a word", "snake_case_name", "snake_case_name"],
+    ["a star between spaces", "2 * 3", "2 * 3"],
+    ["a backslash before a letter", "C:\\temp", "C:\\temp"],
+    ["stars that could pair up", "2*3*4", "2\\*3\\*4"],
+    ["underscores at a word edge", "_draft_", "\\_draft\\_"],
+    ["a backslash before punctuation", "a\\*", "a\\\\\\*"],
+  ])("%s", (_name, html, markdown) => {
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: markdown })
+    expect(descriptionFromEdit(editableDescription(html))).toBe(html)
+  })
+})

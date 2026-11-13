@@ -164,8 +164,10 @@ function destination(url: string): string {
 
 // Anything markdown would read as markup stays text. Anchored rules apply at the start of each line.
 const ESCAPES: [RegExp, string][] = [
-  [/\\/g, "\\\\"],
-  [/([*_`~[\]])/g, "\\$1"],
+  [/\\(?=[!-/:-@[-`{-~]|$)/g, "\\\\"],
+  [/([`~[\]])/g, "\\$1"],
+  [/\*(?! )|(?<! )\*/g, "\\*"],
+  [/(?<![\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, "\\_"],
   [/&(?=#?\w+;)/g, "\\&"],
   [/([=+])(?=\1)/g, "\\$1"],
   [/\{(?=color[:}]|rel=)/g, "\\{"],
