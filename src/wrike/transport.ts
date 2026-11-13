@@ -7,6 +7,34 @@ export type Method = "GET" | "PUT" | "POST" | "DELETE"
 
 export type Page = { data: unknown[]; next: string | null }
 
+/** Where the access token comes from: a fixed token, or an OAuth login that renews itself. */
+export type TokenProvider = {
+  /** The token to send, renewed first when it is about to run out. */
+  current(): Promise<string>
+  /** Called when Wrike answered 401 to `refused`. The token to send again with, or null when there is none. */
+  renew(refused: string): Promise<string | null>
+}
+
+export const fixedToken = (token: string): TokenProvider => ({ current: async () => token, renew: async () => null })
+
+/**
+ * A fetch that sends the provider's token as a Bearer header. A 401 renews
+ * the token and sends the request once more, so a body must be a string.
+ */
+export function withToken(provider: TokenProvider, fetcher: Fetch = fetch, scheme = "Bearer"): Fetch {
+  const send = (input: string | URL | Request, init: RequestInit | undefined, token: string) =>
+    fetcher(input, { ...init, headers: withHeader(init?.headers, "Authorization", `${scheme} ${token}`) })
+  return async (input, init) => {
+    const token = await provider.current()
+    const response = await send(input, init, token)
+    if (response.status !== 401) return response
+    const renewed = await provider.renew(token)
+    if (renewed === null) return response
+    await response.body?.cancel()
+    return send(input, init, renewed)
+  }
+}
+
 export type Transport = {
   /** Resolves to the `data` array of Wrike's response envelope. */
   request(method: Method, path: string, params?: Params): Promise<unknown[]>
@@ -19,7 +47,7 @@ export type Transport = {
 export type TransportOptions = {
   /** Full API base, for example `https://www.wrike.com/api/v4`. */
   baseUrl: string
-  token: string
+  token: string | TokenProvider
   fetch?: Fetch
   sleep?: (ms: number) => Promise<void>
   /** Refuses every request that is not a GET, before it reaches the network. */
@@ -41,8 +69,17 @@ export function encodeParams(params: Params): URLSearchParams {
   return encoded
 }
 
+/** Plain object headers stay a plain object, which is what the REST transport has always sent. */
+function withHeader(headers: HeadersInit | undefined, name: string, value: string): HeadersInit {
+  if (headers === undefined || (!(headers instanceof Headers) && !Array.isArray(headers))) return { ...headers, [name]: value }
+  const merged = new Headers(headers)
+  merged.set(name, value)
+  return merged
+}
+
 export function createTransport(options: TransportOptions): Transport {
-  const fetcher = options.fetch ?? fetch
+  const provider = typeof options.token === "string" ? fixedToken(options.token) : options.token
+  const fetcher = withToken(provider, options.fetch, "bearer")
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const base = options.baseUrl.replace(/\/+$/, "")
 
@@ -52,13 +89,12 @@ export function createTransport(options: TransportOptions): Transport {
     try {
       return await fetcher(`${base}${path}${query}`, {
         method,
-        headers: {
-          Authorization: `bearer ${options.token}`,
-          ...(method === "GET" ? {} : { "Content-Type": "application/x-www-form-urlencoded" }),
-        },
+        headers: method === "GET" ? {} : { "Content-Type": "application/x-www-form-urlencoded" },
         body: method === "GET" ? undefined : encoded.toString(),
       })
     } catch (thrown) {
+      // A login that cannot be renewed is its own error, not a network one.
+      if (thrown instanceof WrikeFailure) throw thrown
       throw new WrikeFailure({ kind: "network", message: thrown instanceof Error ? thrown.message : String(thrown) })
     }
   }

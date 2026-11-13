@@ -1,10 +1,12 @@
 import type { Env } from "../auth/config"
+import { oauthProvider } from "../auth/oauth"
 import { deleteProfile, readProfile, writeProfile } from "../auth/profile"
-import { loadSession, probe, type Session } from "../auth/session"
+import { loadSession, oauthHost, probe, type Session } from "../auth/session"
 import { resolveToken, type TokenStore } from "../auth/token"
 import { VERSION } from "../version"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Fetch } from "../wrike/transport"
+import { oauthLogin, storedApp, type OAuthIo } from "./oauth"
 import { update } from "./update"
 
 export type Io = {
@@ -15,18 +17,21 @@ export type Io = {
   readSecret(prompt: string): Promise<string | null>
   launch(session: Session): Promise<void>
   fetch?: Fetch
+  /** What OAuth needs. Without it `auth login --oauth` is refused and an OAuth login cannot renew itself. */
+  oauth?: OAuthIo
 }
 
 const USAGE = `wrike-tui ${VERSION}
 A keyboard-first terminal client for Wrike.
 
 Usage:
-  wrike-tui               Open the client
-  wrike-tui auth login    Store a Wrike permanent access token in the OS keyring
-  wrike-tui auth status   Show who is logged in and where the token comes from
-  wrike-tui auth logout   Remove the stored token and profile
-  wrike-tui update        Replace this binary with the newest release
-                          (--check only says whether one is out)
+  wrike-tui                     Open the client
+  wrike-tui auth login          Store a Wrike permanent access token in the OS keyring
+  wrike-tui auth login --oauth  Sign in through the browser with an app from Wrike's App Console
+  wrike-tui auth status         Show who is logged in and where the token comes from
+  wrike-tui auth logout         Remove the stored login, client secret and profile
+  wrike-tui update              Replace this binary with the newest release
+                                (--check only says whether one is out)
   wrike-tui --version
 
 Environment:
@@ -34,6 +39,7 @@ Environment:
   WRIKE_HOST    Use this Wrike host instead of the stored one
 
 Get a token in Wrike: profile icon, Apps & Integrations, API tab.
+For --oauth, register an app in Wrike's App Console; the README says how.
 Press ? inside the client for the keys.`
 
 const NOT_LOGGED_IN = "Not logged in. Run `wrike-tui auth login`, or set WRIKE_TOKEN."
@@ -46,6 +52,9 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (command === "update" && rest.length === 0 && (sub === undefined || sub === "--check")) {
     return update(sub === "--check", io)
   }
+  if (command === "auth" && sub === "login" && rest.length === 1 && rest[0] === "--oauth") {
+    return io.oauth ? oauthLogin(io, io.oauth) : (io.err("OAuth login is not available here."), 1)
+  }
   if (command === "auth" && rest.length === 0) {
     if (sub === "login") return login(io)
     if (sub === "status") return status(io)
@@ -57,7 +66,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
 
 async function open(io: Io): Promise<number> {
   try {
-    const session = await loadSession(io.env, io.tokens, io.fetch)
+    const session = await loadSession(io.env, io.tokens, io.fetch, () => storedApp(io))
     if (!session) return io.err(NOT_LOGGED_IN), 1
     await io.launch(session)
     return 0
@@ -87,22 +96,30 @@ async function status(io: Io): Promise<number> {
   const token = await resolveToken(io.env, io.tokens)
   if (!token) return io.err(NOT_LOGGED_IN), 1
   const source = token.source === "env" ? "WRIKE_TOKEN" : "the OS keyring"
+  // Asking an OAuth login for its token renews it first when it ran out.
+  const provider = token.kind === "oauth" ? oauthProvider({ login: token.login, store: io.tokens, app: () => storedApp(io), fetch: io.fetch }) : null
   try {
-    const profile = await probe(token.token, io.env, io.fetch)
-    io.out(`Logged in as ${profile.name} on ${profile.host}. The token comes from ${source}.`)
+    const current = provider ? await provider.current() : token.token
+    const profile = await probe(current, oauthHost(io.env, token), io.fetch)
+    if (!provider) io.out(`Logged in as ${profile.name} on ${profile.host}. The token comes from ${source}.`)
+    else io.out(`Logged in as ${profile.name} on ${profile.host} with OAuth. The access token expires ${when(provider.login().expiresAt)} and renews itself.`)
     return 0
   } catch (thrown) {
     const stored = token.source === "keyring" ? await readProfile(io.env) : null
     const who = stored ? ` for ${stored.name}` : ""
-    io.err(`The token${who} from ${source} did not work. ${describeError(toWrikeError(thrown))}`)
+    const what = provider ? "The OAuth login" : "The token"
+    io.err(`${what}${who} from ${source} did not work. ${describeError(toWrikeError(thrown))}`)
     return 1
   }
 }
 
+const when = (iso: string) => `at ${new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
+
 async function logout(io: Io): Promise<number> {
   await io.tokens.delete()
+  await io.oauth?.clientSecret.delete()
   await deleteProfile(io.env)
-  io.out("Logged out. The stored token and profile are removed.")
+  io.out("Logged out. The stored login, the OAuth client secret and the profile are removed.")
   if (io.env.WRIKE_TOKEN) io.out("WRIKE_TOKEN is still set in this environment and still works.")
   return 0
 }

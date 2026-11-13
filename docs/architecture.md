@@ -7,8 +7,8 @@ wrike-tui is TypeScript on Bun, rendered by OpenTUI through
 
 Data flows one way. Each layer depends only on the layers under it.
 
-    src/cli/        argv parsing, `auth login|logout|status`, `update`, launching
-                    the TUI
+    src/cli/        argv parsing, `auth login [--oauth]|logout|status`, `update`,
+                    launching the TUI
     src/ui/         React components that render state and dispatch actions,
                     and the terminal handoffs (editor, browser, clipboard)
     src/app/        the app state machine (reducer, with its handlers in
@@ -46,6 +46,40 @@ type Profile = { host: string; accountId: string; userId: UserId; name: string }
 A token from the keyring starts with the stored profile and makes no request.
 A token from `WRIKE_TOKEN` is probed on every start, because the stored
 profile may belong to a different token.
+
+**OAuth.** The keyring entry holds either a permanent token as a plain string
+or an OAuth login as JSON:
+
+```ts
+type OAuthLogin = { kind: "oauth"; accessToken: string; refreshToken: string; expiresAt: string; host: string }
+```
+
+`auth login --oauth` reads the client ID from `config.json` (`oauth.clientId`)
+or a prompt that saves it there, and the client secret from the keyring entry
+`oauth-client-secret` or a prompt without echo. It serves the redirect on
+`127.0.0.1:<oauth.port>` (default 8765) and opens
+`https://login.wrike.com/oauth2/authorize/v4` with a random `state`. A pasted
+address works as well, for a redirect the loopback server cannot receive. The
+code goes to `https://login.wrike.com/oauth2/token`, the token response's `host`
+picks the data center to probe, and the login and profile are stored. The
+secret is stored only after Wrike accepted it.
+
+REST and MCP take a `TokenProvider` instead of a string (`src/wrike/transport.ts`).
+`withToken` wraps a fetch to send its token as a Bearer header and, on a 401,
+asks it once for a renewed one and sends the request again. A permanent token
+is a fixed provider that never renews. The OAuth provider (`src/auth/oauth.ts`)
+refreshes when the access token is less than a minute from expiry or after a
+401, with one refresh in flight that every caller waits for. Before it
+refreshes it rereads the keyring, so a refresh token another wrike-tui already
+rotated is adopted rather than spent twice. It saves the new tokens, since
+Wrike rotates the refresh token. A refused refresh, or a missing client ID or
+secret, ends the login: every later request fails with `expired` ("Your Wrike
+login expired. Run `wrike-tui auth login --oauth`.") without another attempt. A
+401 on a token this run just got is not refreshed again.
+
+Wrike's MCP server is documented for permanent tokens. When it answers 401 to
+an OAuth login, the MCP client reports that the MCP server refused the OAuth
+login, so the Inbox and history say why they are empty.
 
 These variables exist for development and tests.
 
@@ -1155,7 +1189,7 @@ through a temp file and a rename.
 
 | File | Holds | Written |
 | --- | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | `theme`, `navWidth` (16 to 60, default 30), `completed`, `history` (default true), and `lists`: a partial `ListSpec` per kind of scope (`todo`, `search`, `space`, `folder`, `project`) | by hand, and by the palette's "Save as default", which writes the theme in use, the history toggle and the current list's shaping for scopes of its kind |
+| `$XDG_CONFIG_HOME/wrike-tui/config.json` | `theme`, `navWidth` (16 to 60, default 30), `completed`, `history` (default true), `lists`: a partial `ListSpec` per kind of scope (`todo`, `search`, `space`, `folder`, `project`), and `oauth`: `clientId`, `port`, `redirectUri` | by hand, by `auth login --oauth`, which writes `oauth.clientId`, and by the palette's "Save as default", which writes the theme in use, the history toggle and the current list's shaping for scopes of its kind and keeps every key it does not own |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/session.json` | the scope, the nav cursor and expanded paths, the focus, the zoom, the open task, the read toggle, and the `ListSpec`, cursor, closed groups and open subtasks of up to 50 scopes | at quit, and every 30 seconds when it changed |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/favorites.json` | the favorites, in order | after each change |
 | `$XDG_CACHE_HOME/wrike-tui/<accountId>/spaces.json` and `tree-<spaceId>.json` | the spaces list and each opened space's tree, with the time fetched | after a fetch that differs from what was held |

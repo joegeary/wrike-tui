@@ -5,7 +5,7 @@ import type { CustomField } from "../domain/fields"
 import type { SpaceId } from "../domain/ids"
 import { DEFAULT_SETTINGS, type Settings } from "../domain/settings"
 import type { Favorite, Space, SpaceTree } from "../domain/workspace"
-import { readJson, writeJson, type Loaded } from "./files"
+import { readJson, readObject, writeJson, type Loaded } from "./files"
 import { ConfigSchema, FavoritesSchema, FieldsCacheSchema, SessionSchema, SpacesCacheSchema, TreeCacheSchema, type SessionFile } from "./schemas"
 
 export type Cached<T> = { value: T; fetchedAt: string }
@@ -27,6 +27,8 @@ export type Persistence = {
 
 export type PersistencePaths = { config: string; session: string; favorites: string; spaces: string; fields: string; tree(space: SpaceId): string }
 
+export const configPath = (env: Env) => join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "wrike-tui", "config.json")
+
 /** Config is shared by every account. Session, favorites and cache are kept per account. */
 export function persistencePaths(env: Env, accountId: string): PersistencePaths {
   const home = homedir()
@@ -34,7 +36,7 @@ export function persistencePaths(env: Env, accountId: string): PersistencePaths 
   const state = join(env.XDG_STATE_HOME || join(home, ".local", "state"), "wrike-tui", account)
   const cache = join(env.XDG_CACHE_HOME || join(home, ".cache"), "wrike-tui", account)
   return {
-    config: join(env.XDG_CONFIG_HOME || join(home, ".config"), "wrike-tui", "config.json"),
+    config: configPath(env),
     session: join(state, "session.json"),
     favorites: join(state, "favorites.json"),
     spaces: join(cache, "spaces.json"),
@@ -46,7 +48,8 @@ export function persistencePaths(env: Env, accountId: string): PersistencePaths 
 export function createPersistence(paths: PersistencePaths, now: () => string = () => new Date().toISOString()): Persistence {
   return {
     loadConfig: () => readJson(paths.config, ConfigSchema, DEFAULT_SETTINGS),
-    saveConfig: (settings) => writeJson(paths.config, settings),
+    // Keys the settings do not hold, such as `oauth`, stay in the file.
+    saveConfig: async (settings) => writeJson(paths.config, { ...(await readObject(paths.config)), ...settings }),
 
     loadSession: () => readJson<SessionFile | null>(paths.session, SessionSchema, null),
     saveSession: (session) => writeJson(paths.session, session),

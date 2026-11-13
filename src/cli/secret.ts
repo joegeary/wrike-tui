@@ -1,3 +1,5 @@
+import { createInterface } from "node:readline"
+
 const CTRL_C = 0x03
 const CTRL_D = 0x04
 const BACKSPACE = [0x08, 0x7f]
@@ -35,4 +37,28 @@ export async function readSecret(prompt: string): Promise<string | null> {
     stdin.pause()
     process.stderr.write("\n")
   }
+}
+
+/** Reads one line with echo on. Null when it is empty, on Ctrl-C, at the end of input, or when `signal` aborts. */
+export function readLine(prompt: string, signal?: AbortSignal): Promise<string | null> {
+  const lines = createInterface({ input: process.stdin, output: process.stderr })
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (value: string | null) => {
+      if (done) return
+      done = true
+      signal?.removeEventListener("abort", onAbort)
+      lines.close()
+      resolve(value)
+    }
+    const onAbort = () => {
+      process.stderr.write("\n")
+      finish(null)
+    }
+    if (signal?.aborted) return finish(null)
+    signal?.addEventListener("abort", onAbort)
+    lines.on("SIGINT", () => finish(null))
+    lines.on("close", () => finish(null))
+    lines.question(prompt, (answer) => finish(answer.trim() || null))
+  })
 }

@@ -20,6 +20,14 @@ export async function readJson<T>(path: string, schema: z.ZodType<T>, fallback: 
   return { value: fallback, movedAside: aside }
 }
 
+/** The JSON object in a file, with every key kept. Empty when the file is missing, null when it holds something else. */
+export async function readObject(path: string): Promise<Record<string, unknown> | null> {
+  const file = Bun.file(path)
+  if (!(await file.exists())) return {}
+  const value: unknown = await file.json().catch(() => null)
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
 /** Writes through a temp file and a rename, so a crash never leaves half a file. */
 export async function writeJson(path: string, value: unknown, layout: "readable" | "compact" = "readable"): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
