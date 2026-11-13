@@ -4,8 +4,9 @@ import { dueDay, IMPORTANCES, permalinkId, startDay, type Importance, type Task 
 import { assigneePatch, type TaskPatch } from "../../domain/patch"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
-import { openTask, pickerOptions, selectedEntry, selectedTask } from "../selectors"
+import { openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
 import { EDIT_FIELDS, type Action, type Mode, type OpenTarget, type Origin, type PickerField, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
+import { withPreview } from "./attachments"
 import { newComment } from "./comments"
 import { failure, info, markMissing, retitle, TODO, then } from "./core"
 import { historyStale, isCurrent, loadHistory, needsHistory, open } from "./load"
@@ -22,6 +23,8 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
   let retitled = retitle(next, new Map([[favoriteKey({ kind: "task", id: details.task.id }), details.task.title]]), [])
   // History is the one MCP call an open costs, and only the first time. After a failure, r asks again.
   if (next.settings.history && needsHistory(next.histories.get(details.task.id))) retitled = then(retitled, (after) => loadHistory(after, details.task, "first"))
+  // A selected image whose thumbnail r dropped, or the limit did, is fetched again.
+  retitled = then(retitled, (after) => withPreview(after, selectedAttachment(after)))
   return pending ? then(retitled, (after) => taskCommand(after, pending, details.task, "browse")) : retitled
 }
 

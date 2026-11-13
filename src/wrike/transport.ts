@@ -12,8 +12,8 @@ export type Transport = {
   request(method: Method, path: string, params?: Params): Promise<unknown[]>
   /** One page of a list, with the token that asks for the page after it. */
   requestPage(method: Method, path: string, params?: Params): Promise<Page>
-  /** The body of a GET that answers with a file instead of JSON, held in memory and never written anywhere. */
-  bytes(path: string): Promise<Uint8Array>
+  /** The body of a GET that answers with a file instead of JSON, held in memory and never written anywhere. Null when it is over `limit` bytes. */
+  bytes(path: string, limit: number): Promise<Uint8Array | null>
 }
 
 export type TransportOptions = {
@@ -88,8 +88,25 @@ export function createTransport(options: TransportOptions): Transport {
   return {
     requestPage,
     request: async (method, path, params) => (await requestPage(method, path, params)).data,
-    bytes: async (path) => new Uint8Array(await (await respond("GET", path, {})).arrayBuffer()),
+    bytes: async (path, limit) => readCapped(await respond("GET", path, {}), limit),
   }
+}
+
+/** The body when it is at most `limit` bytes, or null as soon as it is known to be larger, without reading the rest. */
+async function readCapped(response: Response, limit: number): Promise<Uint8Array | null> {
+  if (Number(response.headers.get("content-length")) > limit) {
+    await response.body?.cancel()
+    return null
+  }
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for await (const chunk of response.body ?? []) {
+    size += chunk.byteLength
+    // Leaving the loop cancels the stream.
+    if (size > limit) return null
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
 }
 
 /** How long a `Retry-After` header asks to wait: seconds or an HTTP date. Null when it says neither. */

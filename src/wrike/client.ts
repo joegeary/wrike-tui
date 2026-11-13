@@ -47,7 +47,7 @@ export type WrikeClient = {
   folders(ids: string[]): Promise<string[]>
   /** A task's files, oldest first. */
   attachments(id: TaskId): Promise<Attachment[]>
-  /** Wrike's small PNG of an image attachment. */
+  /** Wrike's small PNG of an image attachment, refused when it is over 1 MB. */
   attachmentPreview(id: AttachmentId): Promise<Uint8Array>
   /** A temporary signed link to the file, which opens without the token. */
   attachmentUrl(id: AttachmentId): Promise<string>
@@ -65,6 +65,8 @@ export type TaskQuery =
 export type TaskPage = { tasks: Task[]; next: string | null }
 
 export const PAGE_SIZE = 200
+/** Wrike's thumbnails are small, so a larger answer is refused rather than held in memory. */
+const PREVIEW_LIMIT = 1024 * 1024
 
 /** The calls that go to Wrike's MCP server, and the end of its session. */
 export type McpClient = Pick<WrikeClient, "inbox" | "history"> & { close(): Promise<void> }
@@ -197,7 +199,11 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
       return attachments.sort((a, b) => a.createdDate.localeCompare(b.createdDate))
     },
 
-    attachmentPreview: (id) => transport.bytes(`/attachments/${id}/preview`),
+    async attachmentPreview(id) {
+      const preview = await transport.bytes(`/attachments/${id}/preview`, PREVIEW_LIMIT)
+      if (!preview) throw new WrikeFailure({ kind: "invalid", message: "The preview is larger than 1 MB" })
+      return preview
+    },
 
     async attachmentUrl(id) {
       return one(parseAll(AttachmentUrlSchema, await transport.request("GET", `/attachments/${id}/url`), "attachment link")).url

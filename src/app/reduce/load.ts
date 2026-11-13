@@ -22,6 +22,7 @@ import {
   type TaskSource,
   type Update,
 } from "../state"
+import { retryPreviews } from "./attachments"
 import { failure, markMissing, retitle, then, TODO } from "./core"
 
 export const loading = <T>(from: Loadable<T> | undefined): Loadable<T> => {
@@ -174,7 +175,7 @@ export function showScope(state: State, scope: Scope, focus: Pane): Update {
 }
 
 export function refresh(state: State): Update {
-  let update: Update = [state, [{ kind: "load-reference" }]]
+  let update: Update = [{ ...state, previews: retryPreviews(state.previews) }, [{ kind: "load-reference" }]]
   update = then(update, (next) => loadSpaces(next, false))
   for (const [space, tree] of state.trees) {
     if (state.nav.expanded.has(spacePath(space)) && tree.state !== "loading") update = then(update, (next) => loadTree(next, space))
