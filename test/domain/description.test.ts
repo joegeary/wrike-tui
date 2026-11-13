@@ -93,7 +93,6 @@ describe("editableDescription", () => {
   test.each([
     ["underline", "plain <u>under</u>"],
     ["highlight", 'a <span style="color:#ff0000">red</span> word'],
-    ["image", '<img src="https://example.test/a.png">'],
     ["mention anchor", '<a class="stream-user-id" rel="KUAAAA01">@Sam</a>'],
   ])("%s opens as raw HTML and saves untouched", (_name, html) => {
     expect(editableDescription(html)).toEqual({ format: "html", text: html })
@@ -175,5 +174,13 @@ describe("nested bullet lists", () => {
   })
   test("a list style Wrike would not derive from depth stays in HTML", () => {
     expect(editableDescription('<ul style="list-style-type: square;"><li>a</li></ul>').format).toBe("html")
+  })
+})
+
+describe("images", () => {
+  test("open as ![](src) and save back with the same src", () => {
+    const html = 'Before<br /><img src="//storage.example.test/thumb100/a b.png?x=1&amp;y=2" /><br />After'
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: "Before  \n![](<//storage.example.test/thumb100/a b.png?x=1&y=2>)  \nAfter" })
+    expect(descriptionFromEdit(editableDescription(html))).toBe(html)
   })
 })

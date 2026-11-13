@@ -121,7 +121,7 @@ function inline(node: Node): string {
       // A checklist item: the checkbox opens its label, which reads as a task list item.
       return node.hasAttribute("checked") ? "[x] " : "[ ] "
     case "IMG":
-      return `![](${destination(node.getAttribute("src") ?? "")})`
+      return `![${escapeText(node.getAttribute("alt") ?? "")}](${destination(node.getAttribute("src") ?? "")})`
     case "BR":
       return HARD_BREAK
     default:

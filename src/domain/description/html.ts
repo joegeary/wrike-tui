@@ -12,6 +12,11 @@ class WrikeRenderer extends Renderer {
   override del(token: Tokens.Del): string {
     return tag("s", this.parser.parseInline(token.tokens))
   }
+  // Wrike stores an image as a bare <img src>, so the URL goes back exactly as written.
+  override image(token: Tokens.Image): string {
+    const alt = token.text ? ` alt="${escapeAttribute(token.text)}"` : ""
+    return `<img src="${escapeAttribute(token.href)}"${alt} />`
+  }
   // listItem writes the checkbox inside the item's label.
   override checkbox(): string {
     return ""
@@ -28,6 +33,7 @@ class WrikeRenderer extends Renderer {
 const tag = (name: string, content: string) => `<${name}>${content}</${name}>`
 
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+const escapeAttribute = (text: string) => escapeHtml(text).replace(/"/g, "&quot;")
 
 // Only an explicit [text](url) makes a link. A bare URL or <address> stays the text it was in Wrike.
 const wrikeMarked = new Marked({ tokenizer: { autolink: () => undefined, url: () => undefined } }).setOptions({
