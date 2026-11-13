@@ -217,11 +217,11 @@ const InboxEntrySchema = z
 
 export const InboxSchema = z.object({ inbox: z.array(InboxEntrySchema) })
 
-/** Wrike's times as the rest of the app writes them: ISO in UTC, to the second. A time without a zone is UTC. */
-function isoTime(raw: string | number): string {
+/** Wrike's times as the rest of the app writes them: ISO in UTC, to the second. A time without a zone is UTC. Null for one that is not a time. */
+function isoTime(raw: string | number): string | null {
   const text = typeof raw === "string" && !/(?:Z|[+-]\d\d:?\d\d)$/.test(raw) ? `${raw}Z` : raw
   const time = new Date(text)
-  return Number.isNaN(time.getTime()) ? String(raw) : time.toISOString().replace(/\.\d+Z$/, "Z")
+  return Number.isNaN(time.getTime()) ? null : time.toISOString().replace(/\.\d+Z$/, "Z")
 }
 
 type Values<T> = { from: T | null; to: T | null }

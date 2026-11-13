@@ -61,7 +61,7 @@ export function Comments({ state, comments, history, style }: { state: State; co
           return (
             <box key={`change:${index}:${entry.at}`} paddingLeft={1} marginTop={gap}>
               <text fg={theme.dim} wrapMode="word">
-                {`${entry.author ?? "Unknown user"}  ${stamp(entry.at)}  ${describeChange(entry.change)}`}
+                {[entry.author ?? "Unknown user", entry.at === null ? null : stamp(entry.at), describeChange(entry.change)].filter((part) => part !== null).join("  ")}
               </text>
             </box>
           )

@@ -134,6 +134,7 @@ describe("history parser", () => {
     expect(entry).toEqual({ at: "2026-11-12T18:24:31Z", author: null, change: { kind: "other", type: "RECURRENCE", action: "ENABLE" } })
     expect(describeChange(entry.change)).toBe("recurrence enable")
     expect(one({ timestamp: Date.UTC(2026, 10, 12, 18, 24, 31, 500), payload: {} }).at).toBe("2026-11-12T18:24:31Z")
+    expect(one({ timestamp: "yesterday-ish", payload: {} }).at).toBeNull()
   })
 
   const drawn = (change: Record<string, unknown>) => describeChange(one(change).change)

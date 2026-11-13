@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { listCursor, listRows, openHistory } from "../../src/app/selectors"
+import { commentStream, listCursor, listRows, openHistory } from "../../src/app/selectors"
 import type { Action, Effect, Result, State } from "../../src/app/state"
 import type { HistoryEntry, HistoryPage } from "../../src/domain/history"
-import type { Task } from "../../src/domain/model"
+import { commentId, userId } from "../../src/domain/ids"
+import type { Comment, Task } from "../../src/domain/model"
 import { detailsOf, inTodo, later, overdue, play, requestOf, undated } from "../support/app"
 
 type Load = Effect & { kind: "load-history" }
@@ -88,5 +89,28 @@ describe("field history", () => {
     const answered = play(shown.state, answer(load, page([change("2026-11-12T10:00:00Z", "B")]))).state
     expect(play(answered, "H", "H").effects).toEqual([])
     expect(titles(play(answered, "H", "H").state)).toEqual(["B"])
+  })
+})
+
+describe("the comment stream", () => {
+  const comment = (id: string, createdDate: string): Comment => ({ id: commentId(id), authorId: userId("PAT"), text: id, createdDate })
+  const order = (comments: Comment[], newestFirst: HistoryEntry[]) =>
+    commentStream(comments, newestFirst).map((item) => (item.kind === "comment" ? item.comment.id : item.entry.change.kind === "title" ? item.entry.change.to : "?"))
+
+  test("changes and comments go by time, and a change from a comment's second comes after it", () => {
+    const comments = [comment("c1", "2026-11-12T10:00:00Z"), comment("c2", "2026-11-12T12:00:00Z")]
+    expect(order(comments, [change("2026-11-12T12:00:00Z", "same second"), change("2026-11-12T11:00:00Z", "between"), change("2026-11-12T09:00:00Z", "first")])).toEqual([
+      "first",
+      "c1",
+      "between",
+      "c2",
+      "same second",
+    ])
+  })
+
+  test("a change without a time stays next to its neighbours on the page, and the rest keep their order", () => {
+    const comments = [comment("c1", "2026-11-12T10:00:00Z"), comment("c2", "2026-11-12T12:00:00Z")]
+    const untimed: HistoryEntry = { ...change("", "untimed"), at: null }
+    expect(order(comments, [change("2026-11-12T11:00:00Z", "late"), untimed, change("2026-11-12T09:00:00Z", "early")])).toEqual(["early", "untimed", "c1", "late", "c2"])
   })
 })

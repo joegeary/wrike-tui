@@ -16,8 +16,12 @@ export type HistoryChange =
   | { kind: "field"; name: string; from: string | null; to: string | null }
   | { kind: "other"; type: string; action: string }
 
-/** `at` is an ISO time like a comment's `createdDate`. The author is a name, because history names people by their MCP ID. */
-export type HistoryEntry = { at: string; author: string | null; change: HistoryChange }
+/**
+ * `at` is an ISO time like a comment's `createdDate`, or null when Wrike sent
+ * one that is not a time. The author is a name, because history names people
+ * by their MCP ID.
+ */
+export type HistoryEntry = { at: string | null; author: string | null; change: HistoryChange }
 
 /** One page of history, newest first, and Wrike's token for the older page after it. */
 export type HistoryPage = { entries: HistoryEntry[]; next: string | null }

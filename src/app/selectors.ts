@@ -122,14 +122,19 @@ export function openHistory(state: State): Paged<HistoryEntry> | null {
 
 export type StreamItem = { kind: "comment"; comment: Comment } | { kind: "change"; entry: HistoryEntry }
 
-/** Comments and history by time, oldest first. Comments keep their order, and a change from the same second as a comment comes after it. */
+/**
+ * Comments and history by time, oldest first. Comments keep their order, and
+ * a change from the same second as a comment comes after it. A change without
+ * a time follows the one before it on Wrike's page.
+ */
 export function commentStream(comments: Comment[], newestFirst: HistoryEntry[]): StreamItem[] {
   const changes = newestFirst.toReversed()
+  const before = (entry: HistoryEntry, time: number) => entry.at === null || Date.parse(entry.at) < time
   const stream: StreamItem[] = []
   let at = 0
   for (const comment of comments) {
     const time = Date.parse(comment.createdDate)
-    while (at < changes.length && Date.parse(changes[at]!.at) < time) stream.push({ kind: "change", entry: changes[at++]! })
+    while (at < changes.length && before(changes[at]!, time)) stream.push({ kind: "change", entry: changes[at++]! })
     stream.push({ kind: "comment", comment })
   }
   for (; at < changes.length; at++) stream.push({ kind: "change", entry: changes[at]! })
