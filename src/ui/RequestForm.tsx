@@ -14,6 +14,9 @@ const MAX_CHOICES = 8
 
 const PLACEHOLDERS: Partial<Record<FormField["kind"]["type"], string>> = { text: "Type the answer", date: "YYYY-MM-DD", number: "a number" }
 
+/** About how many lines the helper text wraps to, each paragraph at least one. */
+const helperLines = (text: string, width: number) => text.trim().split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(Bun.stringWidth(line) / width)), 0)
+
 /** The editor of the field being filled: a line, a box of lines, a list of choices, or why the terminal cannot fill it. */
 function Editor({ mode, field, inner, theme, onDraft }: { mode: FormMode & FormFilling; field: FormField; inner: number; theme: Theme; onDraft: (text: string) => void }) {
   const { kind } = field
@@ -76,7 +79,9 @@ function Review({ mode, inner, theme }: { mode: FormMode & FormFilling; inner: n
 /** A request form over the panes, one field at a time, then a review that sends it. */
 export function RequestForm({ state, mode, screen, onDraft }: { state: State; mode: FormMode; screen: { width: number; height: number }; onDraft: (text: string) => void }) {
   const theme = useTheme()
-  const inner = Math.min(WIDTH, screen.width) - 4
+  // On a narrow terminal the form takes the whole width, so no pane border peeks out beside its own.
+  const width = screen.width < WIDTH + 8 ? screen.width : WIDTH
+  const inner = width - 4
   const title = `Request: ${truncate(mode.form.title, inner - 12)}`
   const body = (() => {
     switch (mode.phase) {
@@ -109,7 +114,7 @@ export function RequestForm({ state, mode, screen, onDraft }: { state: State; mo
               {`${field.title}${field.mandatory ? " *" : ""}`}
             </text>
             {field.helperText ? (
-              <text fg={theme.dim} wrapMode="word" width={inner} height={Math.min(4, Math.ceil(Bun.stringWidth(field.helperText) / inner) + 1)}>
+              <text fg={theme.dim} wrapMode="word" width={inner} height={Math.min(4, helperLines(field.helperText, inner))}>
                 {field.helperText.trim()}
               </text>
             ) : null}
@@ -122,7 +127,7 @@ export function RequestForm({ state, mode, screen, onDraft }: { state: State; mo
     }
   })()
   return (
-    <Overlay title={title} width={WIDTH} height={HEIGHT} screen={screen}>
+    <Overlay title={title} width={width} height={HEIGHT} screen={screen}>
       <box flexDirection="column" paddingLeft={1} paddingRight={1}>
         {body}
       </box>
