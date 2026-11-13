@@ -216,3 +216,49 @@ describe("Cancel the task", () => {
     expect(app.fake.writes).toEqual([])
   })
 })
+
+describe("D deletes a task", () => {
+  test("asks in the status bar, says what happens to the subtasks, and only y deletes", async () => {
+    await inPlatform()
+    await app.press("G", "F", "D")
+    await app.see('Delete "Fix login redirect loop"? It goes to the Recycle Bin. Its 2 subtasks stay as top-level tasks. y deletes, any other key keeps it')
+    await app.press("n")
+    await app.see("Kept the task")
+    expect(app.fake.writes).toEqual([])
+
+    await app.press("enter")
+    await app.see("The session cookie is dropped")
+    await app.press("D", "y")
+    const frame = await app.see('Deleted "Fix login redirect loop". It is in the Recycle Bin', "Select a task and press Enter to open it here.", "2 Platform  7 · status")
+    expect(app.fake.writes).toEqual([{ method: "DELETE", path: `/tasks/${TASK.login}`, params: {} }])
+    const rows = list(frame)
+    expect(rows.some((line) => line.includes("Fix login redirect loop"))).toBe(false)
+    expect(rows).toContainEqual(expect.stringMatching(/^ {2}Reproduce the redirect loop on s/))
+    expect(rows).toContainEqual(expect.stringMatching(/^ {2}Patch the callback handler/))
+    expect(frame).toContain("★ Fix login re… (not found)")
+  })
+
+  test("a task Wrike already deleted is gone without an error", async () => {
+    await inPlatform()
+    await app.press("G")
+    app.fake.data.tasks.find((task) => task.id === TASK.login)!.scope = "RbTask"
+    await app.press("D", "y")
+    await app.see('"Fix login redirect loop" was already deleted', "2 Platform  7 · status")
+  })
+
+  test("a task without subtasks says nothing of them, and Esc keeps it", async () => {
+    await inPlatform()
+    await app.press("j", "D")
+    await app.see('Delete "Clean up stale feature flags"? It goes to the Recycle Bin. y deletes')
+    await app.press("esc")
+    await app.see("Kept the task")
+  })
+
+  test("read-only mode refuses before asking", async () => {
+    await inPlatform({ readOnly: true })
+    await app.press("G", "D")
+    const frame = await app.see("read-only mode: not saved")
+    expect(frame).not.toContain("Recycle Bin")
+    expect(app.fake.writes).toEqual([])
+  })
+})
