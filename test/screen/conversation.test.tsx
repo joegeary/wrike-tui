@@ -181,6 +181,21 @@ describe("Attachments", () => {
     expect(listed).not.toContain("Did not load")
   })
 
+  test("a name with line breaks is drawn on one line", async () => {
+    app = await openApp(WIDE)
+    app.fake.data.attachments.find((file) => file.id === "IEAAAAAAIYAAAA02")!.name = "har\ncapture\t  notes.txt"
+    await openLogin()
+    const frame = await app.see("Attachments (4)")
+    const lines = frame.split("\n").map((line) => line.split("│").at(-2)?.trim() ?? "")
+    const at = lines.indexOf("Attachments (4)")
+    expect(lines.slice(at + 1, at + 5)).toEqual([
+      "callback-loop.png  PNG image  178 KB  Pat Example  Nov 12",
+      "har capture notes.txt  text  47 KB  Pat Example  Nov 12",
+      "whiteboard.jpg  JPEG image  2.2 MB  Pat Example  Nov 12",
+      "Login flow notes  Google  Riley Demo  Nov 12",
+    ])
+  })
+
   test("] selects the first file and draws its thumbnail, and Enter opens it through Wrike's signed link", async () => {
     app = await openApp(WIDE)
     await openLogin()
