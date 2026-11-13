@@ -1,6 +1,6 @@
 import { isOffered } from "../app/commands"
 import { activeContexts, boundCommands, keyLabel } from "../app/keymap"
-import type { State } from "../app/state"
+import type { DeleteTarget, State, TaskPlan } from "../app/state"
 import { fit } from "./format"
 import { useTheme, type Color, type Theme } from "./theme"
 
@@ -19,15 +19,31 @@ function hints(state: State): Hint[] {
 
 function message(state: State, theme: Theme): { text: string; color: Color } {
   const { mode } = state
-  if (mode.kind === "edit-text" && mode.error) return { text: mode.error, color: theme.error }
+  if ((mode.kind === "edit-text" || mode.kind === "new-task") && mode.error) return { text: mode.error, color: theme.error }
   if (state.flash) return { text: state.flash.text, color: state.flash.tone === "error" ? theme.error : theme.success }
-  if (mode.kind === "confirm-delete") return { text: "Delete this comment? y deletes, any other key keeps it", color: theme.warning }
+  if (mode.kind === "confirm-delete") return { text: deleteQuestion(mode.target), color: theme.warning }
+  if (mode.kind === "new-task") return { text: planText(mode.plan), color: theme.dim }
   if (mode.kind === "picker") return { text: "Type to filter", color: theme.dim }
   if (mode.kind === "palette") return { text: "Type to find a command", color: theme.dim }
   if (mode.kind === "filter-input") return { text: "Shows tasks whose title contains this. Empty clears it.", color: theme.dim }
   if (mode.kind === "edit") return { text: "Edit mode", color: theme.heading }
   if (mode.kind === "edit-text" && mode.field !== "title") return { text: "YYYY-MM-DD, empty clears the date", color: theme.dim }
   return { text: "", color: theme.dim }
+}
+
+const quoted = (title: string) => `"${title.length > 40 ? `${title.slice(0, 39)}…` : title}"`
+
+/** The question a delete confirm asks. */
+function deleteQuestion(target: DeleteTarget): string {
+  if (target.kind === "comment") return "Delete this comment? y deletes, any other key keeps it"
+  const subtasks =
+    target.subtasks === 0 ? "" : target.subtasks === 1 ? " Its subtask stays as a top-level task." : ` Its ${target.subtasks} subtasks stay as top-level tasks.`
+  return `Delete ${quoted(target.title)}? It goes to the Recycle Bin.${subtasks} y deletes, any other key keeps it`
+}
+
+function planText(plan: TaskPlan): string {
+  const what = plan.parent ? `A subtask of ${plan.parent.title}` : "A new task"
+  return `${what} in ${plan.folder.title}${plan.assignees.length > 0 ? ", assigned to you" : ""}`
 }
 
 const READ_ONLY = "read-only "

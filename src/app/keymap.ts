@@ -64,6 +64,10 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("task", "task.copy-url", "y"),
   ...bind("task", "task.copy-id", "Y"),
   ...bind("task", "favorite.toggle", "F"),
+  ...bind("task", "task.new", "n"),
+  ...bind("task", "task.subtask", "N"),
+  ...bind("task", "task.delete", "D"),
+  ...bind("task", "task.file", "L"),
 
   ...bind("edit", "edit.down", "j", "down"),
   ...bind("edit", "edit.up", "k", "up"),
@@ -127,6 +131,7 @@ export function activeContexts(state: Pick<State, "mode" | "focus">): Context[] 
     case "search-input":
     case "filter-input":
     case "edit-text":
+    case "new-task":
       return ["text"]
     case "compose":
       return ["mention", "compose"]

@@ -130,6 +130,12 @@ export const COMMANDS: Command[] = [
   command("task.assign-me", "Assign to me", "Task", ["task"], () => ({ type: "task", command: "assign-me" }), { hint: "mine" }),
   command("task.comment", "Write a comment", "Task", ["task"], () => ({ type: "task", command: "comment" }), { hint: "comment" }),
   command("task.description", "Description in $EDITOR", "Task", ["task"], () => ({ type: "task", command: "description" })),
+  command("task.new", "New task", "Task", ["task"], () => ({ type: "new-task" }), { keywords: ["create", "add"] }),
+  command("task.subtask", "New subtask", "Task", ["task"], () => ({ type: "task", command: "subtask" }), { keywords: ["create", "add", "child"] }),
+  command("task.cancel", "Cancel the task", "Task", ["task"], () => ({ type: "task", command: "cancel" }), { keywords: ["status", "close", "drop"] }),
+  command("task.delete", "Delete the task", "Task", ["task"], () => ({ type: "task", command: "delete" }), { keywords: ["remove", "recycle", "trash"] }),
+  command("task.file", "File in another folder", "Task", ["task"], () => ({ type: "task", command: "file" }), { keywords: ["folder", "project", "add", "parent", "tag"] }),
+  command("task.unfile", "Take out of a folder", "Task", ["task"], () => ({ type: "task", command: "unfile" }), { keywords: ["folder", "project", "remove", "parent", "untag"] }),
   command("task.browser", "Open in the browser", "Task", ["task"], () => ({ type: "link", act: "browser" })),
   command("task.copy-url", "Copy the URL", "Task", ["task"], () => ({ type: "link", act: "copy-url" }), { keywords: ["permalink", "link"] }),
   command("task.copy-id", "Copy the ID", "Task", ["task"], () => ({ type: "link", act: "copy-id" })),
@@ -163,7 +169,7 @@ export const COMMANDS: Command[] = [
   command("picker.apply", "Apply", "App", ["picker"], () => ({ type: "submit" }), { hint: "apply" }),
   command("picker.cancel", "Cancel", "App", ["picker"], () => ({ type: "cancel" }), { hint: "cancel" }),
 
-  command("text.save", "Save", "App", ["text"], () => ({ type: "submit" }), { hint: "save" }),
+  command("text.save", "Save", "App", ["text"], () => ({ type: "submit" }), { hint: (state) => (state.mode.kind === "new-task" ? "create" : "save") }),
   command("text.discard", "Discard", "App", ["text"], () => ({ type: "cancel" }), { hint: "discard" }),
 
   command("mention.down", "Next person", "Task", ["mention"], () => ({ type: "choice-move", by: 1 }), { when: suggesting }),

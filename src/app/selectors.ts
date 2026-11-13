@@ -2,11 +2,11 @@ import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
 import type { HistoryEntry } from "../domain/history"
 import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
-import { findStatus, IMPORTANCES, statusChoices, type Attachment, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
+import { cancelStatuses, findStatus, IMPORTANCES, statusChoices, type Attachment, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
 import { scopeKey, taskScopeKind, type Scope, type ScopeKey } from "../domain/scope"
 import { defaultSpec } from "../domain/settings"
 import { cursorIndex, shapeList, type ListRow, type RowId, type ShapeContext } from "../domain/shape"
-import type { SpaceTree } from "../domain/workspace"
+import { sortSpaces, type SpaceTree } from "../domain/workspace"
 import { cursorRow, navRows, type NavRow, type SelectableNavRow } from "./nav"
 import { shown, type Details, type DetailsItem, type ListView, type Loadable, type Mode, type Paged, type PickerField, type State } from "./state"
 
@@ -263,6 +263,41 @@ export const DUE_LABELS: Record<DueRange, string> = { overdue: "Overdue", today:
 /** The choice in the due picker that removes the filter. */
 export const ANY_DUE = "any"
 
+/**
+ * Where a task can go, as picker options: the folder the last task went to,
+ * the favorite folders and projects, then every folder and project of the
+ * loaded trees, space by space. Spaces themselves are offered only when
+ * `spaces` holds, because only creating a task is known to work in one.
+ */
+const folderOptions = memo(
+  (spaces: State["spaces"], trees: State["trees"], favorites: State["favorites"], last: State["lastFolder"], withSpaces: boolean): PickerOption[] => {
+    const options: PickerOption[] = []
+    const seen = new Set<string>()
+    const add = (id: string, label: string, detail: string) => {
+      if (seen.has(id)) return
+      seen.add(id)
+      options.push({ id, label, detail })
+    }
+    if (last) add(last.id, last.title, "last used")
+    for (const favorite of favorites) {
+      if (favorite.kind === "folder") add(favorite.id, favorite.title, favorite.project ? "favorite project" : "favorite")
+      if (favorite.kind === "space" && withSpaces) add(favorite.id, favorite.title, "favorite space")
+    }
+    const known = sortSpaces(shown(spaces) ?? [])
+    const order = [...known.map((space) => space.id), ...[...trees.keys()].filter((id) => !known.some((space) => space.id === id))]
+    for (const space of order) {
+      const tree = shown(trees.get(space))
+      const title = known.find((candidate) => candidate.id === space)?.title ?? "Space"
+      for (const node of tree?.values() ?? []) {
+        if (node.kind === "space") {
+          if (withSpaces) add(node.id, title, "space")
+        } else add(node.id, node.title, node.kind === "project" ? `${title} project` : title)
+      }
+    }
+    return options
+  },
+)
+
 /** The options of the open picker after its filter. The status picker needs the open task. */
 export function pickerOptions(state: State, mode: Mode & { kind: "picker" }): PickerOption[] {
   const matches = (text: string) => text.toLowerCase().includes(mode.query.toLowerCase())
@@ -299,5 +334,25 @@ export function pickerOptions(state: State, mode: Mode & { kind: "picker" }): Pi
       return [{ id: ANY_DUE, label: "Any date" }, ...DUE_RANGES.map((range) => ({ id: range, label: DUE_LABELS[range] }))].filter((option) => matches(option.label))
     case "columns":
       return COLUMN_KEYS.filter((column) => column !== "title" && matches(COLUMN_LABELS[column])).map((column) => ({ id: column, label: COLUMN_LABELS[column] }))
+    case "folder":
+    case "subtask-folder":
+    case "file": {
+      // A task is filed in folders and projects. The ones it is in already are left out.
+      const current = new Set(mode.field === "file" ? (openTask(state)?.parentIds ?? []) : [])
+      return folderOptions(state.spaces, state.trees, state.favorites, state.lastFolder, mode.field !== "file").filter(
+        (option) => !current.has(option.id) && (matches(option.label) || matches(option.detail ?? "")),
+      )
+    }
+    case "unfile": {
+      const task = openTask(state)
+      const folders = state.details.state === "ready" ? state.details.value.folders : []
+      return folders.filter((folder) => task?.parentIds.includes(folder.id) && matches(folder.title)).map((folder) => ({ id: folder.id, label: folder.title }))
+    }
+    case "cancel": {
+      const task = openTask(state)
+      return (task ? cancelStatuses(state.workflows, task.statusId) : [])
+        .filter((status) => matches(status.name))
+        .map((status) => ({ id: status.id, label: status.name, detail: status.group, color: status.color }))
+    }
   }
 }

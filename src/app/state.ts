@@ -3,7 +3,7 @@ import type { CommentBody, Mention } from "../domain/comment"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
 import type { AttachmentId, CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
-import type { Attachment, Comment, Contact, FolderRef, InboxEntry, Task, Workflow } from "../domain/model"
+import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
 import type { Scope, ScopeKey } from "../domain/scope"
 import type { Settings, ThemeName } from "../domain/settings"
@@ -50,9 +50,16 @@ export const TASK_PICKERS = ["status", "importance", "assignees"] as const
 export type TaskPicker = (typeof TASK_PICKERS)[number]
 export const LIST_PICKERS = ["filter-assignee", "filter-status", "filter-importance", "filter-due", "columns"] as const
 export type ListPicker = (typeof LIST_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker
+/**
+ * Pickers that create, file or close work: where a new task or subtask goes,
+ * another folder for the open task, one of its folders to leave, and which
+ * Cancelled status when its workflow has several.
+ */
+export const WORK_PICKERS = ["folder", "subtask-folder", "file", "unfile", "cancel"] as const
+export type WorkPicker = (typeof WORK_PICKERS)[number]
+export type PickerField = TaskPicker | ListPicker | WorkPicker
 
-export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description"] as const
+export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "subtask", "delete", "file", "unfile", "cancel"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
 export type TaskCommand = (typeof TASK_COMMANDS)[number]
 
@@ -67,10 +74,18 @@ export type Mode =
   | { kind: "edit-text"; field: TextField; draft: string; error?: string; origin: Origin }
   | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
   | Compose
-  /** Asks before the selected comment is deleted. Only `y` deletes it. */
-  | { kind: "confirm-delete"; id: CommentId }
+  /** The title of a new task, typed in the list pane. The plan says where it goes. */
+  | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
+  /** Asks before a comment or a task is deleted. Only `y` deletes it. */
+  | { kind: "confirm-delete"; target: DeleteTarget }
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
+
+/** Where a new task goes and who gets it. Only the title is still to come. */
+export type TaskPlan = { folder: FolderRef; parent: { id: TaskId; title: string } | null; assignees: UserId[] }
+
+/** What a delete confirm asks about. A task names how many subtasks it leaves behind. */
+export type DeleteTarget = { kind: "comment"; id: CommentId } | { kind: "task"; id: TaskId; title: string; subtasks: number }
 
 /** The comment box, for a new comment or for an edit of one of mine. */
 export type Compose = {
@@ -134,6 +149,8 @@ export type State = {
   spaceWorkflows: "unloaded" | "loading" | "loaded"
   mode: Mode
   flash: Flash | null
+  /** The folder the last task of this session was created in, which the folder picker offers first. */
+  lastFolder: FolderRef | null
   /** A task command pressed on a list row, held until that task's details arrive. */
   afterOpen: TaskCommand | null
   /** The latest request number per target. A response carrying an older number is dropped. */
@@ -166,6 +183,9 @@ export type Effect =
   /** Asks Wrike for a signed link to the file and hands it to the browser. */
   | { kind: "open-attachment"; id: AttachmentId; name: string }
   | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
+  /** `key` is the list the task was created from, which shows it. Null from the Inbox. */
+  | { kind: "create-task"; key: ScopeKey | null; task: NewTask }
+  | { kind: "delete-task"; id: TaskId; title: string }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
   | { kind: "edit-description"; task: Task }
@@ -224,6 +244,7 @@ export type Intent =
   | { type: "mention-close" }
   | { type: "confirm" }
   | { type: "task"; command: TaskCommand }
+  | { type: "new-task" }
   | { type: "link"; act: "browser" | "copy-url" | "copy-id" }
   | { type: "field-move"; by: number }
   | { type: "field-open" }
@@ -255,6 +276,8 @@ export type Action =
   | { type: "preview-loaded"; id: AttachmentId; result: Result<Uint8Array> }
   /** `folders` comes with a save that filed the task, named again by Wrike. */
   | { type: "task-saved"; done: string; result: Result<Task>; folders?: FolderRef[] }
+  | { type: "task-created"; key: ScopeKey | null; result: Result<Task> }
+  | { type: "task-deleted"; id: TaskId; title: string; result: Result<"deleted" | "already-deleted"> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
@@ -316,6 +339,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     spaceWorkflows: "unloaded",
     mode: { kind: "browse" },
     flash: boot.flash,
+    lastFolder: null,
     afterOpen: null,
     requests: new Map(),
   }

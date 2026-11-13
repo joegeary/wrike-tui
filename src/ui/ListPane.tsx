@@ -165,12 +165,19 @@ function GroupRow({ row, width, selected, theme }: { row: ListRow & { kind: "gro
   )
 }
 
+/** The line the list pane types into: a search, a title filter, or the title of a new task. */
+const TYPING = {
+  "search-input": { lead: "/ ", placeholder: "title, permalink or task ID" },
+  "filter-input": { lead: "f ", placeholder: "title contains" },
+  "new-task": { lead: "+ ", placeholder: "title of the new task" },
+} as const
+
 export function ListPane(props: { state: State; width: number; height: number; onDraft: (text: string) => void }) {
   const { state } = props
   const theme = useTheme()
   const inner = props.width - 2
   const { mode } = state
-  const typing = mode.kind === "search-input" || mode.kind === "filter-input" ? mode : null
+  const typing = mode.kind === "search-input" || mode.kind === "filter-input" || mode.kind === "new-task" ? mode : null
   const rows = listRows(state)
   const heights = rows.map(rowHeight)
   const cursor = listCursor(state)
@@ -190,8 +197,8 @@ export function ListPane(props: { state: State; width: number; height: number; o
     <Pane number={2} title={paneTitle(state, titleRoom(props.width))} width={props.width} focused={state.focus === "list" && state.mode.kind === "browse"}>
       {typing ? (
         <box flexDirection="row" height={1}>
-          <text fg={theme.accent}>{typing.kind === "search-input" ? "/ " : "f "}</text>
-          <TextInput value={typing.draft} placeholder={typing.kind === "search-input" ? "title, permalink or task ID" : "title contains"} onInput={props.onDraft} />
+          <text fg={theme.accent}>{TYPING[typing.kind].lead}</text>
+          <TextInput value={typing.draft} placeholder={TYPING[typing.kind].placeholder} onInput={props.onDraft} />
         </box>
       ) : null}
       <Notice state={state} width={inner} theme={theme} empty={rows.length === 0} />

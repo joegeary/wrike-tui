@@ -1,6 +1,6 @@
 import { withDay } from "../../domain/dates"
 import { customStatusId, userId, type TaskId } from "../../domain/ids"
-import { dueDay, IMPORTANCES, permalinkId, startDay, type Importance, type Task } from "../../domain/model"
+import { dueDay, IMPORTANCES, permalinkId, startDay, type FolderRef, type Importance, type Task } from "../../domain/model"
 import { assigneePatch, type TaskPatch } from "../../domain/patch"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
@@ -8,8 +8,9 @@ import { openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTas
 import { EDIT_FIELDS, type Action, type Mode, type OpenTarget, type Origin, type PickerField, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
 import { withPreview } from "./attachments"
 import { newComment } from "./comments"
-import { failure, info, markMissing, retitle, TODO, then } from "./core"
+import { failure, info, markMissing, putTask, retitle, save, then } from "./core"
 import { historyStale, isCurrent, loadHistory, needsHistory, open } from "./load"
+import { workCommand } from "./work"
 
 export function detailsLoaded(state: State, action: Action & { type: "details-loaded" }): Update {
   if (!isCurrent(state, "details", action.request)) return [state, []]
@@ -31,27 +32,15 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
 export function taskSaved(state: State, action: Action & { type: "task-saved" }): Update {
   if (!action.result.ok) return [{ ...state, flash: failure(describeError(action.result.error)) }, []]
   const task = action.result.value
-  const saved = retitle({ ...replaceTask(state, task), flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
+  const put = withFolders(putTask(state, task), task, action.folders)
+  const saved = retitle({ ...put, flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
   return then(saved, (next) => historyStale(next, task))
 }
 
-/** Puts a saved task everywhere it is listed. A list of active tasks loses one that is closed, and My to-do gains one that became mine. */
-function replaceTask(state: State, task: Task): State {
-  const mine = task.assigneeIds.includes(state.profile.userId)
-  const lists = new Map(state.lists)
-  for (const [key, list] of lists) {
-    const completed = state.views.get(key)?.spec.completed ?? false
-    const belongs = (completed || task.statusGroup === "Active") && (key !== TODO || mine)
-    const held = list.items.some((candidate) => candidate.id === task.id)
-    if (!held && !(key === TODO && belongs)) continue
-    const swapped = held ? list.items.map((candidate) => (candidate.id === task.id ? task : candidate)) : [...list.items, task]
-    lists.set(key, { ...list, items: belongs ? swapped : swapped.filter((candidate) => candidate.id !== task.id) })
-  }
-  const details =
-    state.details.state === "ready" && state.details.value.task.id === task.id
-      ? ({ state: "ready", value: { ...state.details.value, task } } as const)
-      : state.details
-  return { ...state, details, lists }
+/** The open task's folder line, named again after a save that filed it. */
+function withFolders(state: State, task: Task, folders: FolderRef[] | undefined): State {
+  if (!folders || state.details.state !== "ready" || state.details.value.task.id !== task.id) return state
+  return { ...state, details: { state: "ready", value: { ...state.details.value, folders } } }
 }
 
 /** What a task key acts on: the open task, a row that must be opened first, or nothing. */
@@ -117,11 +106,13 @@ function taskCommand(state: State, command: TaskCommand, task: Task, origin: Ori
       return [{ ...state, mode: newComment() }, []]
     case "description":
       return [state, [{ kind: "edit-description", task }]]
+    case "subtask":
+    case "delete":
+    case "file":
+    case "unfile":
+    case "cancel":
+      return workCommand(state, command, task)
   }
-}
-
-function save(state: State, taskId: TaskId, patch: TaskPatch, done: string): Update {
-  return [{ ...state, flash: info("Saving...") }, [{ kind: "update-task", taskId, patch, done }]]
 }
 
 export function closeEditor(state: State, origin: Origin, field: PickerField | TextField): State {

@@ -132,6 +132,10 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       const folders = result.ok && effect.patch.field === "parents" ? await client.folders(result.value.parentIds).catch(() => undefined) : undefined
       return dispatch({ type: "task-saved", done: effect.done, result, ...(folders ? { folders } : {}) })
     }
+    case "create-task":
+      return dispatch({ type: "task-created", key: effect.key, result: await attempt(() => client.createTask(effect.task)) })
+    case "delete-task":
+      return dispatch({ type: "task-deleted", id: effect.id, title: effect.title, result: await attempt(() => client.deleteTask(effect.id)) })
     case "save-comment": {
       const { taskId, editing, body } = effect
       const result = await attempt(() => (editing ? client.updateComment(editing, body) : client.addComment(taskId, body)))
