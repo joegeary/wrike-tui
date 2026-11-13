@@ -135,7 +135,7 @@ export function saveDefaults(state: State): Update {
   const { scope } = state
   const lists = scope.kind === "inbox" ? state.settings.lists : { ...state.settings.lists, [taskScopeKind(scope)]: currentView(state).spec }
   const settings = { ...state.settings, lists }
-  const what = scope.kind === "inbox" ? "the theme" : "the theme and this list's shaping"
+  const what = scope.kind === "inbox" ? "the theme and field history" : "the theme, field history and this list's shaping"
   return [{ ...state, settings, flash: info(`Saved ${what} as the default`) }, [{ kind: "save-config", settings }]]
 }
 

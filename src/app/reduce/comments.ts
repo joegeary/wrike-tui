@@ -5,6 +5,7 @@ import { describeError } from "../../wrike/errors"
 import { contactName, detailsItems, mentionName, mentionSuggestions, openTask, sameItem, selectedComment } from "../selectors"
 import type { Action, Compose, State, Update } from "../state"
 import { clamp, failure, info } from "./core"
+import { loadHistory, needsHistory } from "./load"
 
 const EMPTY = "Write the comment first, or press Esc to discard"
 
@@ -16,6 +17,21 @@ export function selectItem(state: State, by: 1 | -1): Update {
   const at = items.findIndex((item) => sameItem(item, state.selected))
   const next = at < 0 ? (by === 1 ? 0 : items.length - 1) : clamp(at + by, items.length)
   return [{ ...state, selected: items[next]! }, []]
+}
+
+/** `H`: field history among the comments, or not. Turning it on fetches the open task's history if it was never fetched. */
+export function toggleHistory(state: State): Update {
+  const history = !state.settings.history
+  const next: State = { ...state, settings: { ...state.settings, history }, flash: info(history ? "Field history shown among the comments" : "Field history hidden") }
+  const task = openTask(next)
+  return history && task && needsHistory(next.histories.get(task.id)) ? loadHistory(next, task, "first") : [next, []]
+}
+
+/** Asks for the page of history older than what is shown. */
+export function olderHistory(state: State): Update {
+  const task = openTask(state)
+  if (!task || !state.histories.get(task.id)?.next) return [{ ...state, flash: info("All of the history is shown") }, []]
+  return loadHistory({ ...state, flash: info("Loading older changes...") }, task, "more")
 }
 
 export const newComment = (): Compose => composeOn("", null, [])

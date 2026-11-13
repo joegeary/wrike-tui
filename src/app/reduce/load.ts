@@ -1,11 +1,12 @@
-import type { SpaceId } from "../../domain/ids"
-import type { Task, Workflow } from "../../domain/model"
+import type { HistoryEntry } from "../../domain/history"
+import { legacyItemId, type SpaceId } from "../../domain/ids"
+import { permalinkId, type Task, type Workflow } from "../../domain/model"
 import { scopeKey, type Scope, type ScopeKey, type TaskScope } from "../../domain/scope"
 import { classifyQuery } from "../../domain/search"
 import { favoriteKey, type SpaceTree } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { pathSpace, spacePath } from "../nav"
-import { currentKey, freshView } from "../selectors"
+import { currentKey, freshView, openTask } from "../selectors"
 import {
   LIST_LIMIT,
   shown,
@@ -129,6 +130,31 @@ export function open(state: State, target: OpenTarget, after: TaskCommand | null
   ]
 }
 
+/** Whether opening the task should fetch its history: never fetched, or the last try failed with nothing to show. */
+export const needsHistory = (held: Paged<HistoryEntry> | undefined) => held === undefined || (held.loading === null && held.error !== null && held.items.length === 0)
+
+/** Fetches the newest page of a task's history again, or the page older than what is held. What is held stays drawn meanwhile. */
+export function loadHistory(state: State, task: Task, page: "first" | "more"): Update {
+  const item = legacyItemId(permalinkId(task.permalink) ?? "")
+  const held = state.histories.get(task.id)
+  if (!item || (page === "more" && (!held || held.next === null || held.loading !== null))) return [state, []]
+  const [next, number] = request(state, `history:${task.id}`)
+  const pending: Paged<HistoryEntry> = { items: held?.items ?? [], next: held?.next ?? null, loading: page, error: null }
+  return [
+    { ...next, histories: new Map(next.histories).set(task.id, pending) },
+    [{ kind: "load-history", request: number, taskId: task.id, item, pageToken: page === "more" ? held!.next : null }],
+  ]
+}
+
+export function historyLoaded(state: State, action: Action & { type: "history-loaded" }): Update {
+  const held = state.histories.get(action.taskId)
+  if (!held || !isCurrent(state, `history:${action.taskId}`, action.request)) return [state, []]
+  const page: Paged<HistoryEntry> = action.result.ok
+    ? { items: action.more ? [...held.items, ...action.result.value.entries] : action.result.value.entries, next: action.result.value.next, loading: null, error: null }
+    : { ...held, loading: null, error: action.result.error }
+  return [{ ...state, histories: new Map(state.histories).set(action.taskId, page) }, []]
+}
+
 /** Shows a scope in the list pane. A list seen before is drawn at once and fetched again behind it. */
 export function showScope(state: State, scope: Scope, focus: Pane): Update {
   const key = scopeKey(scope)
@@ -149,10 +175,12 @@ export function refresh(state: State): Update {
   update = then(update, (next) => (scope.kind === "inbox" ? loadInbox(next) : loadTasks(next, scope, "first")))
   if (!state.openTaskId) return update
   const id = state.openTaskId
-  return then(update, (next) => {
+  update = then(update, (next) => {
     const [opened, effects] = open(next, { kind: "task", id }, null)
     return [{ ...opened, focus: state.focus }, effects]
   })
+  const task = openTask(state)
+  return state.settings.history && task ? then(update, (next) => loadHistory(next, task, "first")) : update
 }
 
 export function tasksLoaded(state: State, action: Action & { type: "tasks-loaded" }): Update {

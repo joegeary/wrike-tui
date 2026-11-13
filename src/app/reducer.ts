@@ -5,6 +5,7 @@ import { paletteCommands } from "./palette"
 import { clamp, TODO } from "./reduce/core"
 import { changeSpec, collapseAll, expandAll, filterText, listPicker, moveCursor, openRow, saveDefaults, search, submitFilter, submitListPicker, submitSearch, toggleRead, toggleRow } from "./reduce/lists"
 import {
+  historyLoaded,
   inboxLoaded,
   referenceLoaded,
   refresh,
@@ -26,9 +27,11 @@ import {
   deleteComment,
   editComment,
   keepComment,
+  olderHistory,
   pickMention,
   selectItem,
   submitCompose,
+  toggleHistory,
 } from "./reduce/comments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
 import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
@@ -99,6 +102,9 @@ function step(state: State, action: Action): Update {
     case "details-loaded":
       return detailsLoaded(state, action)
 
+    case "history-loaded":
+      return historyLoaded(state, action)
+
     case "task-saved":
       return taskSaved(state, action)
 
@@ -161,6 +167,10 @@ function step(state: State, action: Action): Update {
       return selectItem(state, action.by)
     case "unselect":
       return [{ ...state, selected: null }, []]
+    case "toggle-history":
+      return toggleHistory(state)
+    case "older-history":
+      return olderHistory(state)
     case "edit-comment":
       return editComment(state)
     case "delete-comment":

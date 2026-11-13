@@ -28,6 +28,7 @@ export const ConfigSchema = z
     theme: z.enum(THEME_NAMES).default(DEFAULT_SETTINGS.theme),
     navWidth: z.number().int().min(NAV_WIDTH.min).max(NAV_WIDTH.max).default(DEFAULT_SETTINGS.navWidth),
     completed: z.boolean().default(DEFAULT_SETTINGS.completed),
+    history: z.boolean().default(DEFAULT_SETTINGS.history),
     lists: z.partialRecord(z.enum(TASK_SCOPE_KINDS), ListSpecSchema.partial()).default({}),
   })
   .transform((file): Settings => file as Settings)

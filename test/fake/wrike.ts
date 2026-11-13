@@ -11,6 +11,8 @@ export type FakeWrike = {
   writes: RecordedWrite[]
   /** Every request line, in order. */
   requests: string[]
+  /** Every MCP tool call, in order, with its arguments. */
+  toolCalls: { name: string; arguments: Record<string, unknown> }[]
   handle(request: Request): Promise<Response>
   fetch: Fetch
   /** Makes the next `times` requests whose path starts with `path` fail with `status`. A 429 can carry a `Retry-After` header. */
@@ -46,6 +48,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
   const data = seed(options.today, options.now)
   const writes: RecordedWrite[] = []
   const requests: string[] = []
+  const toolCalls: FakeWrike["toolCalls"] = []
   const failures: Failure[] = []
   const toolFailures: ToolFailure[] = []
   let sequence = 0
@@ -297,6 +300,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
           ],
         })
       case "tools/call": {
+        toolCalls.push({ name: String(message.params?.name), arguments: message.params?.arguments ?? {} })
         const failure = toolFailures.find((candidate) => candidate.tool === message.params?.name)
         if (failure) {
           failure.times -= 1
@@ -341,6 +345,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     data,
     writes,
     requests,
+    toolCalls,
     handle,
     fetch: (input, init) => handle(new Request(input, init)),
     fail: (failure) => void failures.push({ times: 1, ...failure }),

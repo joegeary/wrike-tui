@@ -510,7 +510,7 @@ describe("Files on disk", () => {
     home = await mkdtemp(join(tmpdir(), "wrike-tui-config-"))
     await inPlatform({ home })
     await palette("theme: high", "group by due", "save as default")
-    await app.see("Saved the theme and this list's shaping as the default")
+    await app.see("Saved the theme, field history and this list's shaping as the default")
     const written = (await Bun.file(app.paths.config).json()) as { theme: string; lists: { folder: { group: string } } }
     expect(written.theme).toBe("high-contrast")
     expect(written.lists.folder.group).toBe("due")

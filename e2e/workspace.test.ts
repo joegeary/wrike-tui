@@ -220,7 +220,7 @@ describe("a wide terminal", () => {
     await palette(tmux, "theme: dark")
     await palette(tmux, "group by importance")
     await palette(tmux, "save as default")
-    await tmux.see("save-default", "Saved the theme and this list's shaping as the default")
+    await tmux.see("save-default", "Saved the theme, field history and this list's shaping as the default")
     const config = (await Bun.file(join(e2e.env.XDG_CONFIG_HOME!, "wrike-tui", "config.json")).json()) as { theme: string; lists: { folder: { group: string } } }
     expect(config.theme).toBe("dark")
     expect(config.lists.folder.group).toBe("importance")

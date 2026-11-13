@@ -1,4 +1,5 @@
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
+import type { HistoryEntry } from "../domain/history"
 import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
 import { findStatus, IMPORTANCES, statusChoices, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
@@ -111,6 +112,28 @@ export function selectedEntry(state: State): InboxEntry | null {
 
 export function openTask(state: State): Task | null {
   return state.details.state === "ready" ? state.details.value.task : null
+}
+
+/** The open task's history while history is shown: what is loaded, whether more is older, and how its last load went. */
+export function openHistory(state: State): Paged<HistoryEntry> | null {
+  const task = openTask(state)
+  return task && state.settings.history ? (state.histories.get(task.id) ?? null) : null
+}
+
+export type StreamItem = { kind: "comment"; comment: Comment } | { kind: "change"; entry: HistoryEntry }
+
+/** Comments and history by time, oldest first. Comments keep their order, and a change from the same second as a comment comes after it. */
+export function commentStream(comments: Comment[], newestFirst: HistoryEntry[]): StreamItem[] {
+  const changes = newestFirst.toReversed()
+  const stream: StreamItem[] = []
+  let at = 0
+  for (const comment of comments) {
+    const time = Date.parse(comment.createdDate)
+    while (at < changes.length && Date.parse(changes[at]!.at) < time) stream.push({ kind: "change", entry: changes[at++]! })
+    stream.push({ kind: "comment", comment })
+  }
+  for (; at < changes.length; at++) stream.push({ kind: "change", entry: changes[at]! })
+  return stream
 }
 
 /** What `]` and `[` step through, in the order the details pane draws it. */

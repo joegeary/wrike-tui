@@ -1,5 +1,6 @@
 import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
+import type { HistoryEntry, HistoryPage } from "../domain/history"
 import type { CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
@@ -92,7 +93,7 @@ export type DetailsItem = { kind: "comment"; id: CommentId }
 export type Clock = { now: string; today: string }
 export type Flash = { tone: "info" | "error"; text: string }
 
-/** What a response is checked against: `inbox`, `details`, `spaces`, `tree:<spaceId>` or `list:<scopeKey>`. */
+/** What a response is checked against: `inbox`, `details`, `spaces`, `tree:<spaceId>`, `list:<scopeKey>` or `history:<taskId>`. */
 export type RequestKey = string
 
 export type State = {
@@ -122,6 +123,8 @@ export type State = {
   details: Loadable<Details>
   /** The details item `]` and `[` selected. It is cleared when another task opens. */
   selected: DetailsItem | null
+  /** Field history by task, kept for the session. Pages arrive newest first, so `next` asks for older changes. */
+  histories: ReadonlyMap<TaskId, Paged<HistoryEntry>>
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
   /** Space workflows load once, the first time a task's status is not in the account workflows. */
@@ -137,6 +140,8 @@ export type State = {
 export const LIST_LIMIT = 8
 /** The next page loads when the cursor comes this close to the end of what is loaded. */
 export const LOAD_AHEAD = 20
+/** Changes per history page. A page is one MCP call, newest first, and older pages load only when asked for. */
+export const HISTORY_PAGE = 50
 
 export type OpenTarget = { kind: "task"; id: TaskId } | { kind: "legacy"; id: LegacyItemId }
 
@@ -153,6 +158,7 @@ export type Effect =
   | { kind: "load-spaces"; request: number; cached: boolean }
   | { kind: "load-tree"; request: number; space: SpaceId; cached: boolean }
   | { kind: "load-details"; request: number; target: OpenTarget }
+  | { kind: "load-history"; request: number; taskId: TaskId; item: LegacyItemId; pageToken: string | null }
   | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
@@ -203,6 +209,8 @@ export type Intent =
   | { type: "scroll"; pane: "details" | "help"; to: ScrollTo }
   | { type: "select"; by: 1 | -1 }
   | { type: "unselect" }
+  | { type: "toggle-history" }
+  | { type: "older-history" }
   | { type: "edit-comment" }
   | { type: "delete-comment" }
   | { type: "mention-pick" }
@@ -236,6 +244,7 @@ export type Action =
   | { type: "spaces-loaded"; request: number; from: "cache" | "wrike"; result: Result<Space[]> }
   | { type: "tree-loaded"; space: SpaceId; request: number; from: "cache" | "wrike"; result: Result<SpaceTree> }
   | { type: "details-loaded"; request: number; result: Result<Details> }
+  | { type: "history-loaded"; taskId: TaskId; request: number; more: boolean; result: Result<HistoryPage> }
   | { type: "task-saved"; done: string; result: Result<Task> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
@@ -291,6 +300,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     openTaskId: null,
     details: { state: "idle" },
     selected: null,
+    histories: new Map(),
     contacts: new Map(),
     workflows: [],
     spaceWorkflows: "unloaded",

@@ -365,7 +365,7 @@ describe("shaping", () => {
     const shaped = press(inFolder(), "group by assignee")
     const saved = play(shaped, ":", ..."save as default", "enter")
     expect(saved.effects).toEqual([{ kind: "save-config", settings: { ...shaped.settings, lists: { folder: { ...DEFAULT_SPECS.folder, group: "assignee" } } } }])
-    expect(saved.state.flash?.text).toBe("Saved the theme and this list's shaping as the default")
+    expect(saved.state.flash?.text).toBe("Saved the theme, field history and this list's shaping as the default")
     const folder = showing(play(saved.state, "1").state, ["j", "j", "enter"], "folder:C", [later])
     expect(currentView(folder).spec.group).toBe("assignee")
     const project = showing(play(saved.state, "1").state, ["j", "enter"], "folder:B", [later])
@@ -374,7 +374,7 @@ describe("shaping", () => {
   })
 
   test("a new scope starts from the config defaults", () => {
-    const settings = { theme: "dark", navWidth: 30, completed: true, lists: { folder: { group: "none" } } } as const
+    const settings = { theme: "dark", navWidth: 30, completed: true, history: true, lists: { folder: { group: "none" } } } as const
     const scoped = play(withTree(loaded({ settings })), "j", "enter")
     expect(scoped.effects[0]).toMatchObject({ completed: true })
     expect(currentView(scoped.state).spec).toEqual({ ...DEFAULT_SPECS.folder, group: "none", completed: true })
@@ -813,7 +813,7 @@ describe("workflows", () => {
 
   test("a status outside the account workflows loads the space workflows once", () => {
     const first = play(inTodo(), "enter", { type: "details-loaded", request: 1, result: { ok: true, value: detailsOf(foreign) } })
-    expect(first.effects.map((effect) => effect.kind)).toEqual(["load-details", "load-space-workflows"])
+    expect(first.effects.map((effect) => effect.kind)).toEqual(["load-details", "load-history", "load-space-workflows"])
     const second = play(first.state, "r", { type: "details-loaded", request: 2, result: { ok: true, value: detailsOf(foreign) } })
     expect(second.effects.map((effect) => effect.kind)).not.toContain("load-space-workflows")
   })

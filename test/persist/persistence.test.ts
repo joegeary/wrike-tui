@@ -61,7 +61,7 @@ describe("config", () => {
   test("a hand-written file may set any part and leaves the rest default", async () => {
     await put(paths.config, { theme: "light", lists: { folder: { group: "assignee", columns: ["title", "due"] } } })
     const { value } = await persistence.loadConfig()
-    expect(value).toEqual({ theme: "light", navWidth: 30, completed: false, lists: { folder: { group: "assignee", columns: ["title", "due"] } } })
+    expect(value).toEqual({ theme: "light", navWidth: 30, completed: false, history: true, lists: { folder: { group: "assignee", columns: ["title", "due"] } } })
     expect(defaultSpec(value, "folder")).toEqual({ ...DEFAULT_SPECS.folder, group: "assignee", columns: ["title", "due"] })
     expect(defaultSpec(value, "space")).toEqual(DEFAULT_SPECS.space)
   })
@@ -88,7 +88,7 @@ describe("config", () => {
   })
 
   test("a saved config reads back the same", async () => {
-    const settings = { theme: "high-contrast", navWidth: 40, completed: true, lists: { project: DEFAULT_SPECS.project } } as const
+    const settings = { theme: "high-contrast", navWidth: 40, completed: true, history: false, lists: { project: DEFAULT_SPECS.project } } as const
     await persistence.saveConfig(settings)
     expect((await persistence.loadConfig()).value).toEqual(settings)
   })

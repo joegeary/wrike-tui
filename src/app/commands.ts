@@ -1,6 +1,6 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, mentionSuggestions, MULTI_PICKERS, navCursorRow, selectedComment } from "./selectors"
+import { currentView, mentionSuggestions, MULTI_PICKERS, navCursorRow, openHistory, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
 export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
@@ -36,6 +36,10 @@ const onFavorite = (state: State) => navCursorRow(state)?.kind === "favorite"
 const selecting = (state: State) => selectedComment(state) !== null
 const suggesting = (state: State) => mentionSuggestions(state) !== null
 const editingComment = (state: State) => state.mode.kind === "compose" && state.mode.editing !== null
+const olderHistory = (state: State) => {
+  const history = openHistory(state)
+  return history !== null && history.next !== null && history.loading === null
+}
 const multi = (state: State) => state.mode.kind === "picker" && MULTI_PICKERS.has(state.mode.field)
 
 const command = (id: string, title: string, group: CommandGroup, contexts: Context[], run: Command["run"], extra: Partial<Command> = {}): Command => ({
@@ -124,6 +128,8 @@ export const COMMANDS: Command[] = [
   command("favorite.up", "Move the favorite up", "Favorites", ["nav"], () => ({ type: "favorite-move", by: -1 }), { when: onFavorite }),
 
   command("view.zoom", "Zoom the details pane", "View", ["global"], () => ({ type: "zoom" })),
+  command("view.history", "Field history on or off", "View", ["global"], () => ({ type: "toggle-history" }), { keywords: ["changes", "activity", "comments"] }),
+  command("history.older", "Load older changes", "View", ["details"], () => ({ type: "older-history" }), { when: olderHistory, keywords: ["history", "more", "activity"] }),
   ...THEME_NAMES.map((name) =>
     command(`theme.${name}`, `Theme: ${THEME_LABELS[name]}`, "Theme", ["global"], () => ({ type: "theme", name }), { keywords: ["colors"] }),
   ),

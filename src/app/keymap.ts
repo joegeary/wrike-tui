@@ -21,6 +21,7 @@ export const KEYMAP: KeyBinding[] = [
   ...bind("global", "app.palette", ":"),
   ...bind("global", "app.refresh", "r"),
   ...bind("global", "view.zoom", "v"),
+  ...bind("global", "view.history", "H"),
   ...bind("global", "app.help", "?"),
   ...bind("global", "app.quit", "q"),
 

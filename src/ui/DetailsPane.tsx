@@ -1,13 +1,13 @@
 import { parseColor, SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
-import { contactName, statusOf } from "../app/selectors"
+import { contactName, openHistory, statusOf } from "../app/selectors"
 import { EDIT_FIELDS, type Details, type EditField, type State } from "../app/state"
 import { displayMarkdown } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
-import { Comments, ComposeBox, itemAnchor } from "./Comments"
+import { Comments, ComposeBox, itemAnchor, streamTitle } from "./Comments"
 import { shortDay } from "./format"
 import { Pane } from "./Pane"
 import { scrollBox } from "./scroll"
@@ -148,8 +148,8 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
       <Section title="Description" />
       {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
 
-      <Section title={`Comments (${comments.length})`} />
-      <Comments state={state} comments={comments} style={style} />
+      <Section title={streamTitle(comments.length, openHistory(state))} />
+      <Comments state={state} comments={comments} history={openHistory(state)} style={style} />
     </>
   )
 }

@@ -8,7 +8,7 @@ import { openTask, pickerOptions, selectedEntry, selectedTask } from "../selecto
 import { EDIT_FIELDS, type Action, type Mode, type OpenTarget, type Origin, type PickerField, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
 import { newComment } from "./comments"
 import { failure, info, markMissing, retitle, TODO, then } from "./core"
-import { isCurrent, open } from "./load"
+import { isCurrent, loadHistory, needsHistory, open } from "./load"
 
 export function detailsLoaded(state: State, action: Action & { type: "details-loaded" }): Update {
   if (!isCurrent(state, "details", action.request)) return [state, []]
@@ -19,7 +19,9 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
   const details = action.result.value
   const pending = state.afterOpen
   const next: State = { ...state, afterOpen: null, openTaskId: details.task.id, details: { state: "ready", value: details } }
-  const retitled = retitle(next, new Map([[favoriteKey({ kind: "task", id: details.task.id }), details.task.title]]), [])
+  let retitled = retitle(next, new Map([[favoriteKey({ kind: "task", id: details.task.id }), details.task.title]]), [])
+  // History is the one MCP call an open costs, and only the first time, or after a try that failed.
+  if (next.settings.history && needsHistory(next.histories.get(details.task.id))) retitled = then(retitled, (after) => loadHistory(after, details.task, "first"))
   return pending ? then(retitled, (after) => taskCommand(after, pending, details.task, "browse")) : retitled
 }
 

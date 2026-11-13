@@ -1,0 +1,127 @@
+import { afterEach, describe, expect, test } from "bun:test"
+import { readFile } from "node:fs/promises"
+import { TASK } from "../fake/data"
+import { openApp } from "./harness"
+
+let app: Awaited<ReturnType<typeof openApp>>
+afterEach(() => app.close())
+
+const WIDE = { width: 200, height: 60 }
+const LOGIN_ITEM = "w:itm:4598459107"
+
+const historyCalls = () => app.fake.toolCalls.filter((call) => call.name === "get_item_history")
+
+/** The Inbox's third notification is a comment on "Fix login redirect loop", which has a field history of every kind. */
+async function openLogin(): Promise<string> {
+  await app.see("Fix login redirect loop")
+  await app.press("j", "j", "enter")
+  return app.see("The session cookie is dropped", "Repro steps attached")
+}
+
+describe("Field history", () => {
+  test("folds into the comments by time, one dim line per change, each kind drawn and an unknown one named", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    const frame = await app.see("Comments (1) · 11 changes", "Work Type: DB")
+    const lines = frame.split("\n").map((line) => line.split("│").at(-2)?.trim() ?? "")
+    const stream = lines.slice(lines.findIndex((line) => line.startsWith("Comments (1)")) + 1).filter((line) => line !== "")
+    const change = (author: string, what: string) => new RegExp(`^${author} {2}\\w{3} \\d+ \\d\\d:\\d\\d {2}${what}$`)
+    expect(stream).toHaveLength(13)
+    expect(stream[0]).toMatch(change("Pat Example", "title Fix login loop → Fix login redirect loop"))
+    expect(stream[1]).toMatch(change("Riley Demo", "effort changed"))
+    expect(stream[2]).toMatch(change("Sam Sample", "duration 2d"))
+    expect(stream[3]).toMatch(change("Sam Sample", "start 2026-11-13"))
+    expect(stream[4]).toMatch(change("Sam Sample", "moved out of Q4 Launch"))
+    expect(stream[5]).toMatch(change("Sam Sample", "moved into Platform"))
+    expect(stream[6]).toMatch(change("Jordan Placeholder", "unassigned Riley Demo"))
+    expect(stream[7]).toMatch(change("Pat Example", "assigned Pat Example"))
+    // The comment from three hours ago sits between the changes from four hours and two hours ago.
+    expect(stream[8]).toMatch(/^Pat Example {2}\w{3} \d+ \d\d:\d\d$/)
+    expect(stream[9]).toBe("Repro steps attached, it loops after the callback.")
+    expect(stream[10]).toMatch(change("Pat Example", "status New → In Progress"))
+    expect(stream[11]).toMatch(change("Riley Demo", "due 2026-11-14"))
+    expect(stream[12]).toMatch(change("Pat Example", "Work Type: DB"))
+
+    const dim = (await app.spans()).find((span) => span.text.includes("status New → In Progress"))!
+    const body = (await app.spans()).find((span) => span.text.includes("Repro steps attached"))!
+    expect(dim.fg).not.toEqual(body.fg)
+
+    expect(historyCalls()).toEqual([
+      {
+        name: "get_item_history",
+        arguments: {
+          scope: { type: "ITEMS", itemIds: [LOGIN_ITEM] },
+          requestedChanges: ["TITLE", "ASSIGNEES", "PARENTS", "STATUS", "START_DATE", "DUE_DATE", "DURATION", "ATTACHMENTS", "CUSTOM_FIELDS"],
+          pageSize: 50,
+        },
+      },
+    ])
+  })
+
+  test("H hides and shows it, reopening a task costs no MCP call, and Save as default keeps it off", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    await app.see("Work Type: DB")
+    await app.press("H")
+    const hidden = await app.see("Field history hidden", "Comments (1)")
+    expect(hidden).not.toContain("Work Type: DB")
+    expect(hidden).not.toContain("changes")
+    await app.press("H")
+    await app.see("Field history shown among the comments", "Comments (1) · 11 changes", "Work Type: DB")
+    await app.press("2", "k", "k", "enter")
+    await app.see("Comments (3)")
+    await app.press("2", "j", "j", "enter")
+    await app.see("Comments (1) · 11 changes")
+    expect(historyCalls().map((call) => (call.arguments.scope as { itemIds: string[] }).itemIds[0])).toEqual([LOGIN_ITEM, "w:itm:4598459101"])
+
+    await app.press("H", ":")
+    await app.type("save as default")
+    await app.press("enter")
+    await app.see("Saved the theme and field history as the default")
+    expect(JSON.parse(await readFile(app.paths.config, "utf8"))).toMatchObject({ history: false })
+  })
+
+  test("with history off, opening a task makes no MCP call, and turning it on fetches it then", async () => {
+    app = await openApp(WIDE)
+    await app.see("Fix login redirect loop")
+    await app.press("H")
+    await app.see("Field history hidden")
+    await openLogin()
+    expect(historyCalls()).toEqual([])
+    await app.press("H")
+    await app.see("Comments (1) · 11 changes")
+    expect(historyCalls()).toHaveLength(1)
+  })
+
+  test("a rate-limited load leaves the comments with a short notice, and r tries again", async () => {
+    app = await openApp(WIDE)
+    app.fake.failTool({ tool: "get_item_history", text: "Rate limit exceeded. Try again later." })
+    await openLogin()
+    const limited = await app.see("Wrike is rate limiting history. Press r to retry.")
+    expect(limited).toContain("Repro steps attached, it loops after the callback.")
+    expect(limited).toMatch(/Comments \(1\)\s/)
+    expect(limited).not.toContain("Work Type")
+    await app.press("r")
+    await app.see("Comments (1) · 11 changes", "Work Type: DB")
+    expect(historyCalls()).toHaveLength(2)
+  })
+
+  test("older changes load only when asked for, a page at a time", async () => {
+    app = await openApp(WIDE)
+    const login = app.fake.data.history[TASK.login]!
+    const oldest = login.at(-1)!
+    for (let n = 1; n <= 45; n++) {
+      const timestamp = new Date(Date.parse(oldest.timestamp) - n * 3_600_000).toISOString().replace(/\.\d+Z$/, "Z")
+      login.push({ ...oldest, timestamp, payload: { oldValue: `Draft ${n + 1}`, newValue: `Draft ${n}` } })
+    }
+    await openLogin()
+    await app.see("Comments (1) · 50+ changes", "Older changes are not loaded. Press : and run Load older changes.")
+    expect(historyCalls()).toHaveLength(1)
+    await app.press(":")
+    await app.type("older")
+    await app.press("enter")
+    const all = await app.see("Comments (1) · 56 changes", /Pat Example {2}\w{3} \d+ \d\d:\d\d {2}title Draft 46 → Draft 45/)
+    expect(all).not.toContain("Older changes are not loaded")
+    expect(historyCalls().map((call) => call.arguments.nextPageToken !== undefined)).toEqual([false, true])
+  })
+})

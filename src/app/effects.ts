@@ -2,7 +2,7 @@ import { descriptionFromEdit, editableDescription } from "../domain/description"
 import type { Persistence } from "../persist/persistence"
 import type { TaskPage, WrikeClient } from "../wrike/client"
 import { toWrikeError, WrikeFailure } from "../wrike/errors"
-import type { Action, Clock, Details, Effect, OpenTarget, Result, ScrollTo, TaskSource } from "./state"
+import { HISTORY_PAGE, type Action, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
 
 export type EffectDeps = {
   client: WrikeClient
@@ -114,6 +114,11 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
     }
     case "load-details":
       return dispatch({ type: "details-loaded", request: effect.request, result: await attempt(() => loadDetails(client, effect.target)) })
+    case "load-history": {
+      const page = { pageSize: HISTORY_PAGE, ...(effect.pageToken ? { pageToken: effect.pageToken } : {}) }
+      const result = await attempt(() => client.history(effect.item, page))
+      return dispatch({ type: "history-loaded", taskId: effect.taskId, request: effect.request, more: effect.pageToken !== null, result })
+    }
     case "update-task":
       return dispatch({ type: "task-saved", done: effect.done, result: await attempt(() => client.updateTask(effect.taskId, effect.patch)) })
     case "save-comment": {

@@ -12,10 +12,12 @@ export type Settings = {
   navWidth: number
   /** Whether a list starts with completed, cancelled and deferred tasks in. A list's own default wins. */
   completed: boolean
+  /** Whether field history is drawn among the comments. */
+  history: boolean
   lists: Partial<Record<TaskScopeKind, Partial<ListSpec>>>
 }
 
-export const DEFAULT_SETTINGS: Settings = { theme: "terminal", navWidth: NAV_WIDTH.default, completed: false, lists: {} }
+export const DEFAULT_SETTINGS: Settings = { theme: "terminal", navWidth: NAV_WIDTH.default, completed: false, history: true, lists: {} }
 
 /** The shaping a scope of this kind starts with. Search keeps finding closed tasks unless its own default says otherwise. */
 export function defaultSpec(settings: Settings, kind: TaskScopeKind): ListSpec {
