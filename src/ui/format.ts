@@ -68,13 +68,19 @@ export function stamp(ts: string): string {
   return `${MONTHS[date.getMonth()]} ${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-const KINDS: Record<string, string> = { "application/pdf": "PDF", "text/plain": "text", "text/csv": "CSV", "application/zip": "ZIP archive" }
+const KINDS = new Map([
+  ["application/pdf", "PDF"],
+  ["text/plain", "text"],
+  ["text/csv", "CSV"],
+  ["application/zip", "ZIP archive"],
+])
 
 /** What a file is, for the attachments list: a linked file names its service, and an upload its type. */
 export function fileKind(file: { name: string; storage: string; contentType: string | null }): string {
   if (file.storage !== "Wrike") return file.storage
   const type = file.contentType ?? ""
-  if (KINDS[type]) return KINDS[type]
+  const known = KINDS.get(type)
+  if (known) return known
   const [family, subtype] = type.split("/")
   if (family === "image" && subtype) return `${subtype.toUpperCase()} image`
   const extension = /\.([a-z0-9]{1,8})$/i.exec(file.name)?.[1]

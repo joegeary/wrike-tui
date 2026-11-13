@@ -170,13 +170,13 @@ export function parseSpaceTree(items: unknown[], space: SpaceId): SpaceTree {
 export const FolderSchema = z.object({ id: z.string(), title: z.string() })
 export const LegacyIdSchema = z.object({ id: z.string(), apiV2Id: z.string() })
 
-const INBOX_KINDS: Record<string, InboxKind> = {
-  Mention: "Mention",
-  Assign: "Assign",
-  EntitiesAssigned: "Assign",
-  Comment: "Comment",
-  Status: "Status",
-}
+const INBOX_KINDS = new Map<string, InboxKind>([
+  ["Mention", "Mention"],
+  ["Assign", "Assign"],
+  ["EntitiesAssigned", "Assign"],
+  ["Comment", "Comment"],
+  ["Status", "Status"],
+])
 const ITEM_TYPES = ["TASK", "FOLDER", "PROJECT"] as const
 
 const InboxEntrySchema = z
@@ -201,7 +201,7 @@ const InboxEntrySchema = z
     const baseType = ITEM_TYPES.find((type) => type === wire.item?.baseType)
     return {
       id: wire.notificationId,
-      kind: INBOX_KINDS[wire.notificationType] ?? "Other",
+      kind: INBOX_KINDS.get(wire.notificationType) ?? "Other",
       label: wire.notificationType,
       unread: wire.isUnread,
       ts: wire.ts,

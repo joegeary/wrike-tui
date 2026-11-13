@@ -103,6 +103,11 @@ describe("inbox parser", () => {
     expect(entries[4]).toMatchObject({ kind: "Other", label: "ApprovalRequested", item: null })
   })
 
+  test("a type named like an Object property is Other too", () => {
+    const parsed = InboxSchema.parse({ inbox: ["constructor", "toString", "__proto__"].map((notificationType, n) => ({ notificationId: `n${n}`, notificationType, ts: "2026-11-12T00:00:00Z" })) })
+    expect(parsed.inbox.map((entry) => entry.kind)).toEqual(["Other", "Other", "Other"])
+  })
+
   test("a project notification keeps its base type", () => {
     expect(entries[5]!.item).toMatchObject({ baseType: "PROJECT", title: "Q4 Launch" })
   })
