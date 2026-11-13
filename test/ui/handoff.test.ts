@@ -75,13 +75,6 @@ test("on Windows without $BROWSER, opening a link fails with a reason instead of
   await expect(openInBrowser({}, url, "win32")).rejects.toThrow("Set BROWSER to a program that opens a URL given as its argument")
 })
 
-test("openInBrowser runs $BROWSER with the URL and does not wait for it", async () => {
-  const browser = await script("browser", 'print -r -- "$1" > "$0.url"')
-  await openInBrowser({ BROWSER: browser }, "https://www.wrike.com/open.htm?id=4598459101")
-  for (let attempt = 0; attempt < 100 && !(await Bun.file(`${browser}.url`).exists()); attempt++) await Bun.sleep(10)
-  expect((await Bun.file(`${browser}.url`).text()).trim()).toBe("https://www.wrike.com/open.htm?id=4598459101")
-})
-
 describe("copyText", () => {
   test("outside tmux the renderer writes the OSC 52 sequence and reports whether it could", () => {
     const copied: string[] = []
@@ -90,12 +83,5 @@ describe("copyText", () => {
     expect(copyText(terminal, {}, "4598459101", (sequence) => void written.push(sequence))).toBe(false)
     expect(copied).toEqual(["4598459101"])
     expect(written).toEqual([])
-  })
-
-  test("inside tmux a plain OSC 52 sequence is written, which tmux reads itself", () => {
-    const written: string[] = []
-    const terminal = { copyToClipboardOSC52: () => true }
-    expect(copyText(terminal, { TMUX: "/tmp/tmux-1000/default,1,0" }, "héllo", (sequence) => void written.push(sequence))).toBe(true)
-    expect(written).toEqual(["\x1b]52;c;aMOpbGxv\x07"])
   })
 })

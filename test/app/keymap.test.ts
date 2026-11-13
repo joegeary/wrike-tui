@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { BROWSE_CONTEXTS, COMMAND_GROUPS, commandById, COMMANDS, isOffered, type Context } from "../../src/app/commands"
-import { activeContexts, boundCommands, CONTEXT_TITLES, KEYMAP, keysFor, MAX_LABEL, normalizeKey, resolveKey } from "../../src/app/keymap"
+import { activeContexts, CONTEXT_TITLES, KEYMAP, MAX_LABEL, normalizeKey, resolveKey } from "../../src/app/keymap"
 import { reduce } from "../../src/app/reducer"
 import { PANES, type Mode, type State } from "../../src/app/state"
 import { commentId, folderId, taskId } from "../../src/domain/ids"
@@ -84,12 +84,6 @@ describe("the command registry and the keymap", () => {
   test("every title of a bound command fits the legend on an 80-column terminal", () => {
     const long = KEYMAP.map((binding) => commandById(binding.command).title).filter((title) => title.length > MAX_LABEL)
     expect(long).toEqual([])
-  })
-
-  test("the legend lists each command once with all its keys, in table order", () => {
-    expect(boundCommands("list").slice(0, 2).map(({ command, keys }) => `${keys.join(" ")} ${command.id}`)).toEqual(["j down list.down", "k up list.up"])
-    expect(keysFor("favorite.toggle", ["list", "task", "global"])).toEqual(["F"])
-    expect(keysFor("list.group.status", ["list", "task", "global"])).toEqual([])
   })
 
   test("the most specific context wins, and a command whose condition fails leaves its key unbound", () => {

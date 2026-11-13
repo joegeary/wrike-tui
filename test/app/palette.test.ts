@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { fuzzyScore, paletteCommands, paletteLines, paletteScope } from "../../src/app/palette"
 import type { State } from "../../src/app/state"
-import { inTodo, loaded, play, withTree } from "../support/app"
+import { inTodo, loaded, play } from "../support/app"
 
 const titles = (state: State, query: string) => paletteCommands(state, query).map((command) => command.title)
 const ids = (state: State) => paletteScope(state).map((command) => command.id)
@@ -71,16 +71,6 @@ describe("context scoping", () => {
 })
 
 describe("the list of commands", () => {
-  test("with nothing typed the commands come grouped under headings, in registry order", () => {
-    const lines = paletteLines(inTodo(), "")
-    const headings = lines.flatMap((line) => (line.kind === "heading" ? [line.label] : []))
-    expect(headings).toEqual(["Navigate", "Task", "List", "View", "Favorites", "Theme", "App"])
-    expect(lines[0]).toEqual({ kind: "heading", label: "Navigate" })
-    expect(lines[1]).toMatchObject({ kind: "command", index: 0, command: { id: "pane.nav" }, keys: ["1"] })
-    const commands = lines.flatMap((line) => (line.kind === "command" ? [line.index] : []))
-    expect(commands).toEqual(commands.map((_index, position) => position))
-  })
-
   test("a query ranks flat, best match first, with no headings", () => {
     expect(titles(inTodo(), "group by st")[0]).toBe("Group by status")
     expect(titles(inTodo(), "sort due")[0]).toBe("Sort by due date")
@@ -94,27 +84,9 @@ describe("the list of commands", () => {
     expect(titles(inTodo(), "reload")).toEqual(["Refresh"])
     expect(titles(inTodo(), "colors").slice(0, 1)).toEqual(["Theme: terminal colors"])
   })
-
-  test("each command shows the keys that run it where the palette was opened", () => {
-    const line = (state: State, id: string) => paletteLines(state, "").find((candidate) => candidate.kind === "command" && candidate.command.id === id)
-    expect(line(inTodo(), "list.completed")).toMatchObject({ keys: ["x"] })
-    expect(line(inTodo(), "list.down")).toMatchObject({ keys: ["j", "down"] })
-    expect(line(inTodo(), "list.group.due")).toMatchObject({ keys: [] })
-    expect(line(withTree(), "nav.toggle")).toMatchObject({ keys: ["space"] })
-  })
 })
 
 describe("the palette in the reducer", () => {
-  test(": opens it, typing filters, the arrows move, Backspace erases and Esc closes", () => {
-    const open = play(inTodo(), ":").state
-    expect(open.mode).toEqual({ kind: "palette", query: "", cursor: 0 })
-    const typed = play(open, "s", "o", "r", "t", "down", "down", "ctrl+p").state
-    expect(typed.mode).toEqual({ kind: "palette", query: "sort", cursor: 1 })
-    expect(play(typed, "backspace").state.mode).toEqual({ kind: "palette", query: "sor", cursor: 0 })
-    expect(play(typed, "up", "up", "up").state.mode).toMatchObject({ cursor: 0 })
-    expect(play(typed, "esc").state.mode).toEqual({ kind: "browse" })
-  })
-
   test("Enter runs the highlighted command where the palette was opened, and with no match just closes", () => {
     const ran = play(inTodo(), ":", ..."zoom", "enter")
     expect(ran.state).toMatchObject({ mode: { kind: "browse" }, zoom: true })

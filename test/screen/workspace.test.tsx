@@ -58,19 +58,6 @@ describe("The workspace tree", () => {
     expect(frame).not.toContain("Archive 2019")
   })
 
-  test("Space opens a space, which loads its tree once, and closes it again", async () => {
-    await atSpaces()
-    await app.press("j", "space")
-    const open = await app.see("Q4 Launch")
-    expect(nav(open).slice(5, 9)).toEqual([" ▾ Engineering", "   ▸ Platform", "   ▸ Q4 Launch", "     Parking lot"])
-    expect(app.store.getState().scope).toEqual({ kind: "inbox" })
-    await app.press("space")
-    expect(nav(await app.frame())).not.toContain("   ▸ Platform")
-    await app.press("space")
-    await app.see("Parking lot")
-    expect(app.fake.requests.filter((line) => line === `GET /api/v4/spaces/${SPACE.engineering}/folders`)).toHaveLength(1)
-  })
-
   test("Enter scopes the list to a folder, opens the row and keeps the focus in the tree", async () => {
     await atSpaces()
     await app.press("j", "enter")

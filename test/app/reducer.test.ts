@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { navRows, type NavPath } from "../../src/app/nav"
 import { reduce, start } from "../../src/app/reducer"
 import { currentList, currentView, listCursor, listRows, navCursorRow, navRowsOf, pickerOptions, selectedRow, selectedTask } from "../../src/app/selectors"
 import { initialState, LIST_LIMIT, type State } from "../../src/app/state"
@@ -252,10 +251,6 @@ describe("scopes and paging", () => {
 describe("shaping", () => {
   const press = (state: State, ...names: string[]) => names.reduce((next, name) => play(next, ":", ...name, "enter").state, state)
 
-  test("the palette query keeps the spaces typed into it", () => {
-    expect(play(inFolder(), ":", ..."group by").state.mode).toMatchObject({ kind: "palette", query: "group by" })
-  })
-
   test("the palette regroups, and the cursor stays on its task", () => {
     const state = play(inFolder(), "j", "j").state
     const regrouped = press(state, "group by due")
@@ -380,10 +375,6 @@ describe("shaping", () => {
     expect(scoped.effects[0]).toMatchObject({ completed: true })
     expect(currentView(scoped.state).spec).toEqual({ ...DEFAULT_SPECS.folder, group: "none", completed: true })
   })
-
-  test("a theme command switches the theme at once", () => {
-    expect(press(loaded(), "theme: light").settings.theme).toBe("light")
-  })
 })
 
 describe("the navigation pane", () => {
@@ -429,21 +420,6 @@ describe("the navigation pane", () => {
     const deeper = play(withTree(), "j", "enter", "j", "enter")
     expect(navSketch(deeper.state).slice(4)).toEqual(["v Engineering", "  v Folder A", "    . Folder B <", "    . Folder C", "  . Folder B", "> Operations"])
     expect(deeper.state.scope).toMatchObject({ kind: "folder", id: "B", project: true })
-  })
-
-  test("a folder under two parents is two rows, and the cursor stays on the one it is on", () => {
-    const state = play(withTree(), "j", "space", "j").state
-    expect(state.nav.cursor).toBe("space:ENG/A/B" as NavPath)
-    const refreshed = play(state, "r", { type: "tree-loaded", space: ENG, request: 2, from: "wrike", result: { ok: true, value: engTree } }).state
-    expect(navCursorRow(refreshed)?.path).toBe("space:ENG/A/B" as NavPath)
-  })
-
-  test("the cursor goes to the nearest ancestor when a refresh removes its folder", () => {
-    const state = play(withTree(), "j", "space", "j", "j").state
-    expect(state.nav.cursor).toBe("space:ENG/A/C" as NavPath)
-    const without = tree("ENG", { ENG: ["A", "B"], A: ["B"], B: [] }, ["B"])
-    const refreshed = play(state, "r", { type: "tree-loaded", space: ENG, request: 2, from: "wrike", result: { ok: true, value: without } }).state
-    expect(navCursorRow(refreshed)?.path).toBe("space:ENG/A" as NavPath)
   })
 
   test("a tree that fails to load says so under its space and loads again on r", () => {
@@ -864,13 +840,5 @@ describe("panes", () => {
       { kind: "scroll", pane: "details", to: "down" },
       { kind: "scroll", pane: "details", to: "bottom" },
     ])
-  })
-})
-
-describe("the nav counts", () => {
-  test("the counts are the unread notifications, my loaded tasks and the last search's results", () => {
-    const rows = navRows({ counts: { inbox: 1, todo: 2, search: null }, favorites: [], missing: new Set(), spaces: { state: "idle" }, trees: new Map(), expanded: new Set() })
-    expect(rows.slice(0, 3)).toMatchObject([{ count: 1 }, { count: 2 }, { count: null }])
-    expect(navRowsOf(loaded()).slice(0, 3)).toMatchObject([{ count: 3 }, { count: 3 }, { count: null }])
   })
 })

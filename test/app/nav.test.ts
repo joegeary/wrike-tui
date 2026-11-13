@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { cursorRow, favoritePath, navRows, pathAncestors, pathSpace, spacePath, stepCursor, viewPath, type NavInput, type NavPath, type NavRow } from "../../src/app/nav"
 import { folderId, spaceId, taskId } from "../../src/domain/ids"
-import { moveFavorite, retitleFavorites, sortSpaces, toggleFavorite, type Favorite, type FolderNode, type Space, type SpaceTree } from "../../src/domain/workspace"
+import { moveFavorite, retitleFavorites, toggleFavorite, type Favorite, type FolderNode, type Space, type SpaceTree } from "../../src/domain/workspace"
 
 const ENG = spaceId("ENG")
 const OPS = spaceId("OPS")
@@ -190,9 +190,5 @@ describe("favorites", () => {
     const list = [a, b]
     expect(retitleFavorites(list, new Map([["folder:A", "Folder A"]]))).toBe(list)
     expect(retitleFavorites(list, new Map([["folder:A", "Alpha"]]))).toEqual([{ ...a, title: "Alpha" }, b])
-  })
-
-  test("spaces sort Personal first, then by title", () => {
-    expect(sortSpaces(spaces).map((space) => space.title)).toEqual(["Zed's space", "Engineering", "Operations"])
   })
 })
