@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { resolveKey } from "../../src/app/keymap"
-import { listCursor, listRows, mentionSuggestions } from "../../src/app/selectors"
+import { countingDown, listCursor, listRows, mentionSuggestions } from "../../src/app/selectors"
 import type { State } from "../../src/app/state"
 import { commentId, userId } from "../../src/domain/ids"
 import type { Comment, Task } from "../../src/domain/model"
@@ -100,6 +100,13 @@ describe("editing my comment", () => {
     const unchanged = play(editing, "enter")
     expect(unchanged.effects).toEqual([])
     expect(unchanged.state.flash?.text).toBe("Comment unchanged")
+  })
+
+  test("the clock keeps counting the edited comment's window down when the selection moves off it", () => {
+    const editing = play(onMine(), "enter").state
+    expect(countingDown({ ...editing, selected: null })).toBe(true)
+    expect(countingDown({ ...editing, selected: { kind: "comment", id: older.id } })).toBe(true)
+    expect(countingDown({ ...editing, mode: { kind: "browse" }, selected: null })).toBe(false)
   })
 
   test("a window that closes while typing keeps the draft and says so", () => {
