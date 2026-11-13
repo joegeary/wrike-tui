@@ -1,14 +1,16 @@
 import { withDay } from "../../domain/dates"
+import { kept } from "../../domain/fields"
 import { customStatusId, userId, type TaskId } from "../../domain/ids"
 import { dueDay, IMPORTANCES, permalinkId, startDay, type FolderRef, type Importance, type Task } from "../../domain/model"
 import { assigneePatch, type TaskPatch } from "../../domain/patch"
 import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
-import { openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
-import { EDIT_FIELDS, type Action, type Mode, type OpenTarget, type Origin, type PickerField, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
+import { editRows, isMultiPicker, openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
+import { type Action, type EditTextMode, type Flash, type Mode, type OpenTarget, type Origin, type PickerMode, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
+import { closeEditor, openFieldEditor, submitFieldPicker, submitFieldText, submitSetField } from "./fields"
 import { withPreview } from "./attachments"
 import { newComment } from "./comments"
-import { failure, info, markMissing, putTask, retitle, save, then } from "./core"
+import { clamp, failure, info, markMissing, putTask, retitle, save, then } from "./core"
 import { historyStale, isCurrent, loadHistory, needsHistory, open } from "./load"
 import { workCommand } from "./work"
 
@@ -29,11 +31,20 @@ export function detailsLoaded(state: State, action: Action & { type: "details-lo
   return pending ? then(retitled, (after) => taskCommand(after, pending, details.task, "browse")) : retitled
 }
 
+/** Wrike answers 200 to a field write it did not store, so the answer is read for the value. The task is drawn as Wrike answered. */
+function savedFlash(task: Task, action: Action & { type: "task-saved" }): Flash {
+  const { check } = action
+  if (!check || kept(check.value, task.fields.find((value) => value.id === check.id)?.value)) return info(action.done)
+  return check.value === null
+    ? failure(`Wrike did not clear ${check.title} on this task.`)
+    : failure(`Wrike did not keep ${check.title} on this task. It may not apply here.`)
+}
+
 export function taskSaved(state: State, action: Action & { type: "task-saved" }): Update {
   if (!action.result.ok) return [{ ...state, flash: failure(describeError(action.result.error)) }, []]
   const task = action.result.value
   const put = withFolders(putTask(state, task), task, action.folders)
-  const saved = retitle({ ...put, flash: info(action.done) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
+  const saved = retitle({ ...put, flash: savedFlash(task, action) }, new Map([[favoriteKey({ kind: "task", id: task.id }), task.title]]), [])
   return then(saved, (next) => historyStale(next, task))
 }
 
@@ -73,7 +84,7 @@ export function onTask(state: State, command: TaskCommand): Update {
 }
 
 function taskPicker(state: State, task: Task, field: TaskPicker, origin: Origin): Mode {
-  const mode: Mode & { kind: "picker" } = {
+  const mode: PickerMode = {
     kind: "picker",
     field,
     query: "",
@@ -106,6 +117,8 @@ function taskCommand(state: State, command: TaskCommand, task: Task, origin: Ori
       return [{ ...state, mode: newComment() }, []]
     case "description":
       return [state, [{ kind: "edit-description", task }]]
+    case "set-field":
+      return [{ ...state, mode: { kind: "picker", field: "set-field", taskIds: [task.id], query: "", cursor: 0, chosen: [], origin } }, []]
     case "subtask":
     case "delete":
     case "file":
@@ -113,11 +126,6 @@ function taskCommand(state: State, command: TaskCommand, task: Task, origin: Ori
     case "cancel":
       return workCommand(state, command, task)
   }
-}
-
-export function closeEditor(state: State, origin: Origin, field: PickerField | TextField): State {
-  const edited = EDIT_FIELDS.findIndex((candidate) => candidate === field)
-  return { ...state, mode: origin === "edit" && edited >= 0 ? { kind: "edit", field: edited } : { kind: "browse" } }
 }
 
 export function onLink(state: State, act: "browser" | "copy-url" | "copy-id"): Update {
@@ -132,7 +140,10 @@ export function onLink(state: State, act: "browser" | "copy-url" | "copy-id"): U
 export function openField(state: State): Update {
   const task = openTask(state)
   if (state.mode.kind !== "edit" || !task) return [state, []]
-  const field = EDIT_FIELDS[state.mode.field]!
+  const rows = editRows(state)
+  const row = rows[clamp(state.mode.field, rows.length)]!
+  if (row.kind === "custom") return openFieldEditor(state, { id: row.id, taskIds: [task.id] }, "edit")
+  const field = row.field
   switch (field) {
     case "title":
     case "start":
@@ -148,17 +159,18 @@ export function openField(state: State): Update {
 
 export function choiceToggle(state: State): Update {
   const mode = state.mode
-  if (mode.kind !== "picker") return [state, []]
+  if (mode.kind !== "picker" || !isMultiPicker(state, mode)) return [state, []]
   const option = pickerOptions(state, mode)[mode.cursor]
   if (!option) return [state, []]
   const chosen = mode.chosen.includes(option.id) ? mode.chosen.filter((id) => id !== option.id) : [...mode.chosen, option.id]
   return [{ ...state, mode: { ...mode, chosen } }, []]
 }
 
-export function submitEditText(state: State, mode: Mode & { kind: "edit-text" }): Update {
+export function submitEditText(state: State, mode: EditTextMode): Update {
+  if (mode.field === "custom") return submitFieldText(state, mode)
   const task = openTask(state)
   if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
-  const closed = closeEditor(state, mode.origin, mode.field)
+  const closed = closeEditor(state, mode)
   if (mode.field === "title") {
     const title = mode.draft.trim()
     if (title === "") return [{ ...state, mode: { ...mode, error: "A title cannot be empty" } }, []]
@@ -172,10 +184,12 @@ export function submitEditText(state: State, mode: Mode & { kind: "edit-text" })
   return before === after ? [closed, []] : save(closed, task.id, { field: "dates", dates: result.dates }, done)
 }
 
-export function submitTaskPicker(state: State, mode: Mode & { kind: "picker" }, field: TaskPicker): Update {
+export function submitTaskPicker(state: State, mode: PickerMode, field: TaskPicker | "set-field" | "custom"): Update {
+  if (mode.field === "custom") return submitFieldPicker(state, mode)
+  if (mode.field === "set-field") return submitSetField(state, mode)
   const task = openTask(state)
   if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
-  const closed = closeEditor(state, mode.origin, field)
+  const closed = closeEditor(state, mode)
   if (field === "assignees") {
     const patch = assigneePatch(task.assigneeIds, mode.chosen.map(userId))
     return patch.add.length + patch.remove.length === 0 ? [closed, []] : save(closed, task.id, patch, "Assignees updated")

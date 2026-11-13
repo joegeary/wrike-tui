@@ -101,6 +101,7 @@ more:
 | `me()` | `GET /contacts?me=true` |
 | `contacts()` | `GET /contacts?types=["Person"]`. Deactivated people stay, marked inactive, so old tasks show their names; pickers offer active people and anyone already chosen |
 | `workflows()` | `GET /workflows` |
+| `customFields()` | `GET /customfields`, every definition; one in a shape this version cannot read is left out |
 | `spaceWorkflows()` | `GET /spaces`, then `GET /spaces/{id}/workflows` for each space |
 | `spaces()` | `GET /spaces`, then the spaces that are not archived |
 | `spaceTree(id)` | `GET /spaces/{id}/folders`, as a map of folder nodes |
@@ -131,7 +132,7 @@ more:
 | `folder` | `GET /folders/{id}/tasks?descendants=true&subTasks=true` |
 
 A first page adds `status=Active` unless completed tasks are wanted, and
-`fields=["responsibleIds","parentIds","description","subTaskIds","superTaskIds"]`,
+`fields=["responsibleIds","parentIds","description","subTaskIds","superTaskIds","customFields"]`,
 because Wrike leaves those out of a list and the app's `Task` always carries
 them. A follow-up page sends only `nextPageToken` and the same `fields`.
 
@@ -188,6 +189,28 @@ production account.
   on deleted Folder/Task".
 - Cancelling is a status change to a status in the Cancelled group of the
   task's workflow.
+
+These facts about custom fields come from probes against a production account.
+
+- `GET /customfields` returned 107 definitions shaped
+  `{id, title, type, settings, archived, sharedIds, sharing, description}`.
+  Types were DropDown, Text, Checkbox, Numeric, Multiple, Percentage, Date,
+  Currency, Duration and CalculatedNumeric. Choices are in `settings.values`
+  and `settings.options[{value, color?}]`, beside `allowOtherValues` and
+  `readOnly`. Numeric, Currency and Percentage carry `decimalPlaces`, Currency
+  a `currency` code, Date `allowTime`.
+- A task carries `customFields: [{id, value}]`, and every value is a string:
+  Numeric `"7"`, Percentage `"40"`, Date `"2026-11-20"`. A Multiple written as
+  a list reads back as plain text for one choice and as a JSON-array string
+  for several.
+- `PUT /tasks/{id}` with `customFields=[{"id":..,"value":..}]` writes a field.
+  `value: null` clears it. An empty string leaves it as it was.
+- Wrike stores any string in any field, `"abc"` in a Numeric and
+  `"next week"` in a Date, so the client checks what it sends.
+- Checkbox, Currency and Duration writes on a task the field did not apply to
+  answered 200 and were not stored. A write to a read-only field answers 200.
+  No call says which fields apply to a task: a folder's `customColumnIds` are
+  its table columns.
 
 `spaceWorkflows()` runs at most once per session. The reducer asks for it the
 first time a task in a list or in the details has a status that the account
@@ -252,6 +275,7 @@ type Task = {
   superTaskIds: TaskId[]
   permalink: string
   descriptionHtml: string
+  fields: FieldValue[]   // the custom fields set on the task
   createdDate: string
   updatedDate: string
 }
@@ -312,6 +336,35 @@ people by their MCP ID (`w:usr:N`), which the REST contacts do not carry.
 timestamp is not a time is drawn without one, after its neighbour on Wrike's
 page.
 
+**Custom fields.** `src/domain/fields.ts` holds the definitions and the rules
+for their values.
+
+```ts
+type CustomFieldId = Brand<string, "CustomFieldId">
+type FieldKind =
+  | { type: "Text" } | { type: "Checkbox" } | { type: "Duration" }   // a duration is minutes
+  | { type: "DropDown" | "Multiple"; options: string[]; allowOther: boolean }
+  | { type: "Numeric" | "Percentage" | "CalculatedNumeric"; decimals: number | null }
+  | { type: "Currency"; decimals: number | null; currency: string }
+  | { type: "Date"; allowTime: boolean }
+  | { type: "Unknown"; wireType: string }   // a type this version does not know
+type CustomField = { id: CustomFieldId; title: string; kind: FieldKind; readOnly: boolean; archived: boolean }
+type FieldValue = { id: CustomFieldId; value: string }   // as Wrike stores it
+type FieldWrite = string | string[] | null               // null clears
+```
+
+The wire keeps the values as Wrike's strings and drops an empty one, which
+shows nothing. `fieldText` draws a value by its type: choices as text, several
+as a comma list, numbers with the field's decimal places, a currency with its
+code, a percent sign, a checkbox as yes or no, a duration as `2h 30m`. A value
+that does not fit its type, and an unknown type, show as stored. `parseInput`
+checks typed text before it is sent: a number against the decimal places, a
+date as `YYYY-MM-DD`, a duration in hours and minutes, sent as minutes because
+Wrike counts every duration in minutes and hours need no guess at the length
+of a working day. Empty text is a clear. `fieldEditor` names the editor a
+field takes, or why it has none: read-only, calculated, or unknown. `kept`
+tells whether Wrike's answer holds a write.
+
 **Edits** are one union, and one function, `patchParams`, turns a patch into
 `PUT` params:
 
@@ -324,6 +377,7 @@ type TaskPatch =
   | { field: "dates"; dates: TaskDates }
   | { field: "description"; html: string }
   | { field: "parents"; add: FolderId[]; remove: FolderId[] }   // addParents, removeParents
+  | { field: "custom"; id: CustomFieldId; value: FieldWrite }   // customFields=[{id, value}]
 ```
 
 A new task is its own shape, because Wrike creates it with another call:
@@ -623,14 +677,22 @@ type Mode =
   | { kind: "browse" }
   | { kind: "search-input"; draft: string }
   | { kind: "filter-input"; draft: string }
-  | { kind: "edit"; field: number }
-  | { kind: "edit-text"; field: "title" | "start" | "due"; draft: string; error?: string; origin: Origin }
-  | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
+  | { kind: "edit"; field: number }   // an index into editRows
+  | EditTextMode
+  | PickerMode
   | Compose
   | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
   | { kind: "confirm-delete"; target: DeleteTarget }   // only `y` deletes
   | { kind: "palette"; query: string; cursor: number }
   | { kind: "help" }
+
+type EditTextMode = { kind: "edit-text"; draft: string; error?: string; origin: Origin } &
+  ({ field: "title" | "start" | "due" } | { field: "custom"; edit: FieldEdit })
+type PickerMode = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin } &
+  ({ field: TaskPicker | ListPicker } | { field: "set-field"; taskIds: TaskId[] } | { field: "custom"; edit: FieldEdit })
+
+// A custom field being changed and the tasks the value goes to.
+type FieldEdit = { id: CustomFieldId; taskIds: TaskId[] }
 
 type Compose = {
   kind: "compose"
@@ -673,6 +735,7 @@ type State = {
   previews: Map<AttachmentId, Loadable<Uint8Array>>   // up to 20 thumbnails, in memory only
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
+  customFields: Loadable<CustomField[]>      // painted from the cache, fetched with the contacts
   spaceWorkflows: "unloaded" | "loading" | "loaded"
   mode: Mode
   flash: { tone: "info" | "error"; text: string } | null
@@ -692,7 +755,7 @@ Four fields carry what the reducer needs to stay pure and correct.
   The clock only ever lags the real time, so a countdown that looks open
   starts the ticker and the first tick corrects it.
 - `requests` holds the latest request number per target: `inbox`, `details`,
-  `spaces`, `tree:<spaceId>`, `list:<scopeKey>` and `history:<taskId>`. A response that carries an
+  `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>` and `history:<taskId>`. A response that carries an
   older number is dropped, so a slow answer never overwrites a newer one, and
   a page that answers after a reload is not appended.
 - `afterOpen` holds a task key pressed on a list row whose task is not open
@@ -740,8 +803,39 @@ their last result, keyed on the state parts they read. A cursor move changes
 none of those parts, so it does not shape the list again.
 
 `r` reloads the list and the open task, and also the contacts, the workflows,
+the custom field definitions,
 the spaces list, the trees of the spaces that are open, and the open task's
 history while history is shown.
+
+**Custom fields** load at launch and on `r` beside the contacts and
+workflows. The launch paints them from `fields.json` in the cache, and a fetch
+that matches writes nothing.
+
+The edit walk steps through `editRows`: the fields every task has, then the
+open task's custom fields as the pane draws them, by title. The details pane
+scrolls the row the walk is on into view. `Enter` on a custom field opens its
+editor. A drop-down is a picker over its choices, with "Other value..." only
+when the field allows one; it takes what was typed into the filter. A
+multi-select is a picker that toggles with `Space`. A checkbox flips at once.
+Text, numbers, dates and durations are typed in place and checked by
+`parseInput`, and a refusal stays in the field with the reason in the status
+bar. Every editor can clear: "Clear the field", nothing chosen, an empty
+input, a checkbox flipped off. A read-only, calculated or unknown field says
+why it cannot be edited.
+
+The editors take a `FieldEdit` and never read the task list, so one value
+chosen once is written to each task in `taskIds`, one update each. The
+details pane passes the open task. Each update carries a `FieldCheck`, what it
+sent, and `taskSaved` looks for it in Wrike's answer: a value Wrike did not
+keep flashes "Wrike did not keep <field> on this task. It may not apply here."
+The task is drawn as Wrike answered, so the field is not shown as set.
+
+"Set a field" in the palette opens the `set-field` picker over the fields that
+can be written: not archived, not read-only, not calculated, not unknown. The
+fields set on the current list's tasks come first, the most used first, then
+the rest by title. Each line shows the task's value or the kind of value the
+field takes. A field the task does not have is typed in place in the Fields
+section, in its title order, with a placeholder that says what it takes.
 
 **History** is fetched after the details arrive, because the MCP call needs
 the number in the task's permalink. Opening a task makes that one MCP call,
@@ -865,7 +959,7 @@ the palette. A filter command opens the picker for its values.
 | The navigation pane | `j` `k` move, `Enter` show the row in the list, `Space` open or close the row, `F` favorite, `J` `K` move a favorite |
 | A list | `j` `k` move, `g` `G` top and bottom, `Enter` open, `Space` open or close subtasks or a group, `x` completed on or off, `f` filter by title, `a` read notifications on or off (Inbox) |
 | The details pane | `j` `k` scroll, `g` `G` top and bottom, `]` `[` select an attachment or a comment, `Enter` open the selected file or edit the selected comment, `d` delete the selected comment, `Esc` clear |
-| A task (list or details) | `e` edit fields, `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite, `n` new task, `N` new subtask, `D` delete, `L` file in another folder |
+| A task (list or details) | `e` edit fields (the walk goes on into the custom fields), `s` status, `p` importance, `A` assignees, `m` assign to me, `c` comment, `E` description in the editor, `o` open in browser, `y` copy the URL, `Y` copy the ID, `F` favorite, `n` new task, `N` new subtask, `D` delete, `L` file in another folder |
 | Edit mode | `j` `k` walk fields, `Enter` open the field, `Esc` leave |
 | Picker | arrows or `Ctrl+N` `Ctrl+P` move, typing filters, `Backspace` erases, `Space` toggles (assignees, filters, columns), `Enter` applies, `Esc` cancels |
 | Palette | typing filters, arrows or `Ctrl+N` `Ctrl+P` move, `Backspace` erases, `Enter` runs, `Esc` closes |
@@ -932,6 +1026,7 @@ through a temp file and a rename.
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/session.json` | the scope, the nav cursor and expanded paths, the focus, the zoom, the open task, the read toggle, and the `ListSpec`, cursor, closed groups and open subtasks of up to 50 scopes | at quit, and every 30 seconds when it changed |
 | `$XDG_STATE_HOME/wrike-tui/<accountId>/favorites.json` | the favorites, in order | after each change |
 | `$XDG_CACHE_HOME/wrike-tui/<accountId>/spaces.json` and `tree-<spaceId>.json` | the spaces list and each opened space's tree, with the time fetched | after a fetch that differs from what was held |
+| `$XDG_CACHE_HOME/wrike-tui/<accountId>/fields.json` | the custom field definitions, with the time fetched | after a fetch that differs from what was held |
 
 Every part of the config is optional. `completed` sets whether a list starts
 with closed tasks in, for every kind but search, and a kind's own `completed`
@@ -939,9 +1034,9 @@ wins. Every field of the session but the scope has a default, which is how a
 session written before a field existed keeps loading. A file with another
 `version` is moved aside.
 
-A launch reads the config, the favorites, the session, the cached spaces and
-the cached trees of the spaces the session has open, all before the first
-frame, so the first frame already shows the workspace. The fetches that follow
+A launch reads the config, the favorites, the session, the cached custom
+fields, the cached spaces and the cached trees of the spaces the session has
+open, all before the first frame, so the first frame already shows the workspace. The fetches that follow
 replace what the cache painted only when they differ. The lists themselves are
 not cached. They are fetched again, and the saved cursor finds its row when
 the list arrives.
@@ -975,7 +1070,9 @@ Three panes, left to right. Each title carries its number.
    assignees, status. The title names the scope, how much is loaded and what
    is applied, and a long scope name gives way to the rest.
 3. **Details**, the other half. Title, a field block (status, importance,
-   assignees, start, due, folders, permalink), the description as markdown,
+   assignees, start, due, folders, permalink), the task's custom fields under
+   `Fields` by title with their values drawn by type (left out when the task
+   has none), the description as markdown,
    the attachments, then comments and field history oldest first, in one
    scrollbox. `Attachments (n)` lists each file on one line, cut to the
    pane's width: name, kind, size, author and the day it was added. The
@@ -1040,11 +1137,16 @@ not include the terminal's own drawing.
   and the link route with a signed URL. It edits and
   deletes comments with Wrike's answers, a 404 included, and stores mention
   HTML as sent. A test can set the clock that stamps new comments. It creates
-tasks and subtasks in a folder or space, files and unfiles them with the
-account root after the last folder, and deletes them to the Recycle Bin with
-Wrike's 400 on a second delete. A deleted task leaves every list, and a
-subtask filed nowhere of its own stays in its deleted parent's folders. Its
-support workflow has two Cancelled statuses. Its
+  tasks and subtasks in a folder or space, files and unfiles them with the
+  account root after the last folder, and deletes them to the Recycle Bin with
+  Wrike's 400 on a second delete. A deleted task leaves every list, and a
+  subtask filed nowhere of its own stays in its deleted parent's folders. Its
+  support workflow has two Cancelled statuses. It serves
+  custom field definitions of every measured type plus an archived, a
+  read-only and an unknown one, stores a field write the way Wrike does (any
+  string, a list as JSON text, null clears, empty keeps), answers 200 to a
+  read-only write without storing it, and drops a Checkbox, Currency or
+  Duration write on a task its data marks the field as not applying to. Its
   workspace has the shape measured on a real account: a space of 3,548
   folders, six levels deep, 18 of them under two parents, and a folder of
   1,040 active tasks that pages the way Wrike does, down to a follow-up page

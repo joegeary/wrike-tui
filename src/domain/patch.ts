@@ -1,4 +1,5 @@
-import type { CustomStatusId, FolderId, UserId } from "./ids"
+import type { FieldWrite } from "./fields"
+import type { CustomFieldId, CustomStatusId, FolderId, UserId } from "./ids"
 import type { Importance, TaskDates } from "./model"
 
 export type TaskPatch =
@@ -10,9 +11,10 @@ export type TaskPatch =
   | { field: "description"; html: string }
   /** Files the task into folders and takes it out of others. Wrike moves a task left in none to the account root, so a caller never removes the last one. */
   | { field: "parents"; add: FolderId[]; remove: FolderId[] }
+  | { field: "custom"; id: CustomFieldId; value: FieldWrite }
 
 /** A request parameter before encoding. Arrays and objects travel as JSON strings. */
-export type ParamValue = string | number | boolean | readonly string[] | { readonly [key: string]: unknown }
+export type ParamValue = string | number | boolean | readonly unknown[] | { readonly [key: string]: unknown }
 export type Params = Record<string, ParamValue>
 
 export function patchParams(patch: TaskPatch): Params {
@@ -37,6 +39,9 @@ export function patchParams(patch: TaskPatch): Params {
         ...(patch.add.length > 0 ? { addParents: patch.add } : {}),
         ...(patch.remove.length > 0 ? { removeParents: patch.remove } : {}),
       }
+    case "custom":
+      // null clears the field. An empty string would leave it as it was.
+      return { customFields: [{ id: patch.id, value: patch.value }] }
   }
 }
 

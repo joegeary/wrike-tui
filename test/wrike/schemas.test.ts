@@ -25,6 +25,7 @@ describe("task parser", () => {
       superTaskIds: [],
       permalink: "https://www.wrike.com/open.htm?id=4598459101",
       descriptionHtml: expect.stringContaining("<h2>Goal</h2>"),
+      fields: [],
       createdDate: "2026-10-13T12:00:00Z",
       updatedDate: "2026-11-11T12:00:00Z",
     })

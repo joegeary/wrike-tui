@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { attachmentId, commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
+import { attachmentId, commentId, customFieldId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
 import {
   IMPORTANCES,
   STATUS_GROUPS,
@@ -12,6 +12,7 @@ import {
   type TaskDates,
   type Workflow,
 } from "../domain/model"
+import type { CustomField, FieldKind, FieldValue } from "../domain/fields"
 import type { HistoryChange, HistoryEntry } from "../domain/history"
 import { SPACE_ACCESS, type FolderNode, type Space, type SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
@@ -25,6 +26,18 @@ const Dates = z
     z.object({ type: z.literal("Planned"), start: day, due: day, duration: z.number().optional() }),
   ])
   .transform((dates): TaskDates => dates)
+
+/**
+ * A task's field values. Wrike sends strings. An entry in another shape is
+ * left out rather than failing the task, and so is an empty string, which
+ * shows nothing.
+ */
+const FieldValues = z
+  .array(z.unknown())
+  .default([])
+  .transform((entries): FieldValue[] =>
+    parseEach(z.object({ id: z.string(), value: z.string() }), entries).flatMap((entry) => (entry.value === "" ? [] : [{ id: customFieldId(entry.id), value: entry.value }])),
+  )
 
 export const TaskSchema = z
   .object({
@@ -40,6 +53,7 @@ export const TaskSchema = z
     superTaskIds: z.array(z.string()).default([]),
     permalink: z.string(),
     description: z.string().default(""),
+    customFields: FieldValues,
     createdDate: z.string(),
     updatedDate: z.string(),
   })
@@ -57,6 +71,7 @@ export const TaskSchema = z
       superTaskIds: wire.superTaskIds.map(taskId),
       permalink: wire.permalink,
       descriptionHtml: wire.description,
+      fields: wire.customFields,
       createdDate: wire.createdDate,
       updatedDate: wire.updatedDate,
     }),
@@ -129,6 +144,60 @@ export const WorkflowSchema = z
       id: wire.id,
       name: wire.name,
       statuses: wire.customStatuses.map((status) => ({ ...status, id: customStatusId(status.id) })),
+    }),
+  )
+
+const decimals = z.number().int().min(0).nullish().transform((value) => value ?? null)
+
+const FieldSettings = z.object({
+  values: z.array(z.string()).nullish(),
+  options: z.array(z.object({ value: z.string() })).nullish(),
+  allowOtherValues: z.boolean().default(false),
+  readOnly: z.boolean().default(false),
+  decimalPlaces: decimals,
+  currency: z.string().nullish(),
+  allowTime: z.boolean().default(false),
+})
+
+/** The kind of a field from its wire type and settings. A type this version does not know keeps its name and is shown as stored. */
+function fieldKind(type: string, settings: z.infer<typeof FieldSettings>): FieldKind {
+  const options = settings.options?.map((option) => option.value) ?? settings.values ?? []
+  switch (type) {
+    case "Text":
+    case "Checkbox":
+    case "Duration":
+      return { type }
+    case "DropDown":
+    case "Multiple":
+      return { type, options, allowOther: settings.allowOtherValues }
+    case "Numeric":
+    case "Percentage":
+    case "CalculatedNumeric":
+      return { type, decimals: settings.decimalPlaces }
+    case "Currency":
+      return { type, decimals: settings.decimalPlaces, currency: settings.currency ?? "" }
+    case "Date":
+      return { type, allowTime: settings.allowTime }
+    default:
+      return { type: "Unknown", wireType: type }
+  }
+}
+
+export const CustomFieldSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    type: z.string(),
+    archived: z.boolean().default(false),
+    settings: FieldSettings.nullish().transform((settings) => settings ?? FieldSettings.parse({})),
+  })
+  .transform(
+    (wire): CustomField => ({
+      id: customFieldId(wire.id),
+      title: wire.title,
+      kind: fieldKind(wire.type, wire.settings),
+      readOnly: wire.settings.readOnly,
+      archived: wire.archived,
     }),
   )
 

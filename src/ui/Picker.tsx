@@ -1,10 +1,10 @@
-import { MULTI_PICKERS, pickerOptions } from "../app/selectors"
-import type { Mode, PickerField, State } from "../app/state"
+import { fieldDefs, isMultiPicker, pickerOptions } from "../app/selectors"
+import type { ListPicker, PickerMode, State, TaskPicker, WorkPicker } from "../app/state"
 import { fit } from "./format"
 import { Overlay } from "./Overlay"
 import { statusColor, useTheme } from "./theme"
 
-const TITLES: Record<PickerField, string> = {
+const TITLES: Record<TaskPicker | ListPicker | WorkPicker, string> = {
   status: "Status",
   importance: "Importance",
   assignees: "Assignees",
@@ -22,8 +22,15 @@ const TITLES: Record<PickerField, string> = {
 const MAX_ROWS = 12
 const WIDTH = 56
 
-function emptyText(state: State, mode: Mode & { kind: "picker" }): string {
+function title(state: State, mode: PickerMode): string {
+  if (mode.field === "set-field") return "Set a field"
+  return mode.field === "custom" ? (fieldDefs(state.customFields).get(mode.edit.id)?.title ?? "Field") : TITLES[mode.field]
+}
+
+function emptyText(state: State, mode: PickerMode): string {
   if (mode.query !== "") return "Nothing matches the filter."
+  if (mode.field === "custom") return "This field has no choices."
+  if (mode.field === "set-field") return state.customFields.state === "loading" ? "Loading the custom fields..." : "No custom field can be set here."
   if (mode.field === "status") {
     return state.spaceWorkflows === "loading" ? "Loading this task's workflow..." : "This task's workflow is not available."
   }
@@ -32,16 +39,16 @@ function emptyText(state: State, mode: Mode & { kind: "picker" }): string {
   return mode.field === "assignees" || mode.field === "filter-assignee" ? "No people loaded." : "Nothing to pick."
 }
 
-export function Picker({ state, mode, screen }: { state: State; mode: Mode & { kind: "picker" }; screen: { width: number; height: number } }) {
+export function Picker({ state, mode, screen }: { state: State; mode: PickerMode; screen: { width: number; height: number } }) {
   const theme = useTheme()
   const options = pickerOptions(state, mode)
   const rows = Math.max(1, Math.min(MAX_ROWS, options.length, screen.height - 6))
   const first = Math.max(0, Math.min(mode.cursor - Math.floor(rows / 2), options.length - rows))
   const inner = Math.min(WIDTH, screen.width) - 2
-  const multi = MULTI_PICKERS.has(mode.field)
+  const multi = isMultiPicker(state, mode)
   const dotted = mode.field === "status" || mode.field === "filter-status" || mode.field === "cancel"
   return (
-    <Overlay title={TITLES[mode.field]} width={WIDTH} height={rows + 4} screen={screen}>
+    <Overlay title={title(state, mode)} width={WIDTH} height={rows + 4} screen={screen}>
       <text wrapMode="none">
         <span fg={theme.dim}> Filter: </span>
         <span fg={theme.text}>{mode.query}</span>

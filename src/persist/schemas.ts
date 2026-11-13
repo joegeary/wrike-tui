@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { customStatusId, folderId, spaceId, taskId, userId } from "../domain/ids"
+import type { CustomField, FieldKind } from "../domain/fields"
+import { customFieldId, customStatusId, folderId, spaceId, taskId, userId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, GROUP_KEYS, SORT_KEYS, type Filter, type ListSpec } from "../domain/list"
 import { IMPORTANCES } from "../domain/model"
 import { TASK_SCOPE_KINDS, type Scope } from "../domain/scope"
@@ -83,3 +84,29 @@ const NodeSchema = z.object({
 }) satisfies z.ZodType<FolderNode>
 
 export const TreeCacheSchema = z.object({ version: z.literal(1), fetchedAt: z.string(), nodes: z.array(NodeSchema) })
+
+const decimals = z.number().int().min(0).nullable()
+
+const FieldKindSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("Text") }),
+  z.object({ type: z.literal("DropDown"), options: z.array(z.string()), allowOther: z.boolean() }),
+  z.object({ type: z.literal("Multiple"), options: z.array(z.string()), allowOther: z.boolean() }),
+  z.object({ type: z.literal("Numeric"), decimals }),
+  z.object({ type: z.literal("Percentage"), decimals }),
+  z.object({ type: z.literal("Currency"), decimals, currency: z.string() }),
+  z.object({ type: z.literal("Date"), allowTime: z.boolean() }),
+  z.object({ type: z.literal("Checkbox") }),
+  z.object({ type: z.literal("Duration") }),
+  z.object({ type: z.literal("CalculatedNumeric"), decimals }),
+  z.object({ type: z.literal("Unknown"), wireType: z.string() }),
+]) satisfies z.ZodType<FieldKind>
+
+const CustomFieldSchema = z.object({
+  id: z.string().transform(customFieldId),
+  title: z.string(),
+  kind: FieldKindSchema,
+  readOnly: z.boolean(),
+  archived: z.boolean(),
+}) satisfies z.ZodType<CustomField>
+
+export const FieldsCacheSchema = z.object({ version: z.literal(1), fetchedAt: z.string(), fields: z.array(CustomFieldSchema) })

@@ -26,7 +26,23 @@ export type FakeTask = {
   subTaskIds: string[]
   dependencyIds: string[]
   metadata: unknown[]
-  customFields: unknown[]
+  customFields: FakeFieldValue[]
+}
+
+export type FakeFieldValue = { id: string; value: string }
+
+/** A definition in `GET /customfields`'s shape. */
+export type FakeCustomField = {
+  id: string
+  accountId: string
+  title: string
+  type: string
+  spaceId?: string
+  sharedIds: string[]
+  sharing: { readerIds: string[]; writerIds: string[] }
+  settings: Record<string, unknown>
+  description?: string
+  archived?: boolean
 }
 
 export type FakeAttachment = {
@@ -87,6 +103,25 @@ export const TASK = {
   reproduce: "IEAAAAAAKQAAAA10",
   patch: "IEAAAAAAKQAAAA11",
   macros: "IEAAAAAAKQAAAA12",
+} as const
+
+/** The custom fields, one or more of every type the account measured, plus an archived, a read-only and an unknown one. */
+export const FIELD = {
+  ticketType: "IEAAAAAAJUAAAA01",
+  skillLane: "IEAAAAAAJUAAAA02",
+  size: "IEAAAAAAJUAAAA03",
+  labels: "IEAAAAAAJUAAAA04",
+  notes: "IEAAAAAAJUAAAA05",
+  storyPoints: "IEAAAAAAJUAAAA06",
+  confidence: "IEAAAAAAJUAAAA07",
+  budget: "IEAAAAAAJUAAAA08",
+  reviewDate: "IEAAAAAAJUAAAA09",
+  customerFacing: "IEAAAAAAJUAAAA10",
+  timeSpent: "IEAAAAAAJUAAAA11",
+  score: "IEAAAAAAJUAAAA12",
+  legacyCode: "IEAAAAAAJUAAAA13",
+  region: "IEAAAAAAJUAAAA14",
+  owner: "IEAAAAAAJUAAAA15",
 } as const
 
 export const bulkTaskId = (n: number) => `IEAAAAAAKQAB${String(n).padStart(4, "0")}`
@@ -327,6 +362,61 @@ export function seed(today: string, now: string) {
     }),
   ]
 
+  const definition = (id: string, title: string, type: string, settings: Record<string, unknown>, extra: Partial<FakeCustomField> = {}): FakeCustomField => ({
+    id,
+    accountId: ACCOUNT,
+    title,
+    type,
+    sharedIds: [],
+    sharing: { readerIds: [], writerIds: [] },
+    settings: { inheritanceType: "All", applicableEntityTypes: ["WorkItem"], ...settings },
+    description: "",
+    archived: false,
+    ...extra,
+  })
+  const choices = (...values: string[]) => ({ values, options: values.map((value) => ({ value, color: "Blue" })) })
+  const customFields: FakeCustomField[] = [
+    definition(FIELD.ticketType, "Ticket Type", "DropDown", { ...choices("Bug", "Feature", "Chore"), allowOtherValues: false, readOnly: false }),
+    definition(FIELD.skillLane, "Skill Lane", "DropDown", { ...choices("Backend", "Frontend", "Data"), allowOtherValues: true, readOnly: false }),
+    definition(FIELD.size, "Size", "DropDown", { ...choices("S", "M", "L", "XL"), allowOtherValues: false, readOnly: false }),
+    definition(FIELD.labels, "Labels", "Multiple", { ...choices("auth", "sso", "billing", "infra"), allowOtherValues: false, readOnly: false }),
+    definition(FIELD.notes, "Notes", "Text", {}),
+    definition(FIELD.storyPoints, "Story Points", "Numeric", { decimalPlaces: 0, useThousandsSeparator: false, aggregation: "Sum" }),
+    definition(FIELD.confidence, "Confidence", "Percentage", { decimalPlaces: 0 }),
+    definition(FIELD.budget, "Budget", "Currency", { decimalPlaces: 2, currency: "USD" }),
+    definition(FIELD.reviewDate, "Review Date", "Date", { allowTime: false }),
+    definition(FIELD.customerFacing, "Customer Facing", "Checkbox", {}),
+    definition(FIELD.timeSpent, "Time Spent", "Duration", {}),
+    definition(FIELD.score, "Score", "CalculatedNumeric", { decimalPlaces: 1, formula: "[Story Points] * 1.5" }),
+    definition(FIELD.legacyCode, "Legacy Code", "Text", {}, { archived: true }),
+    definition(FIELD.region, "Region", "DropDown", { ...choices("East", "West"), allowOtherValues: false, readOnly: true }),
+    definition(FIELD.owner, "Owner", "Contacts", { allowMultipleValues: false }),
+  ]
+  const fieldValues = (values: Partial<Record<keyof typeof FIELD, string>>): FakeFieldValue[] =>
+    Object.entries(values).map(([key, value]) => ({ id: FIELD[key as keyof typeof FIELD], value: value! }))
+  const byTask = new Map(tasks.map((candidate) => [candidate.id, candidate]))
+  // Every type on one task, in Wrike's string forms: a JSON-array string for several choices, minutes for a duration.
+  byTask.get(TASK.flags)!.customFields = fieldValues({
+    ticketType: "Chore",
+    skillLane: "Backend",
+    labels: '["auth","infra"]',
+    notes: "Flags older than 90 days",
+    storyPoints: "5",
+    confidence: "40",
+    budget: "1250",
+    reviewDate: addDays(today, 8),
+    customerFacing: "true",
+    timeSpent: "150",
+    score: "7.5",
+    region: "East",
+    owner: PAT,
+  })
+  byTask.get(TASK.keys)!.customFields = fieldValues({ ticketType: "Chore", size: "S" })
+  byTask.get(TASK.dashboards)!.customFields = fieldValues({ ticketType: "Feature", size: "M" })
+  byTask.get(TASK.login)!.customFields = fieldValues({ ticketType: "Bug" })
+  /** Fields Wrike accepts a write of on these tasks and then does not store, the way it answered for a field that does not apply there. */
+  const notApplying: Record<string, string[]> = { [TASK.keys]: [FIELD.budget, FIELD.customerFacing, FIELD.timeSpent] }
+
   const people = [PAT, RILEY, JORDAN]
   for (const bulk of bulkTasks(today)) {
     tasks.push({
@@ -456,7 +546,7 @@ export function seed(today: string, now: string) {
     { id: "IEAAAAAAIYAAAA01", authorId: PAT, name: "callback-loop.png", createdDate: minutesAgo(60 * 3 + 2), version: 1, type: "Wrike", contentType: "image/png", size: 182_734, taskId: TASK.login, width: 1440, height: 960 },
   ]
 
-  return { contacts, workflows, spaces, spaceWorkflows, folders, tasks, comments, inbox, history, attachments }
+  return { contacts, workflows, spaces, spaceWorkflows, folders, tasks, comments, inbox, history, attachments, customFields, notApplying }
 }
 
 export type FakeData = ReturnType<typeof seed>

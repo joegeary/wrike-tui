@@ -5,6 +5,7 @@ import { paletteCommands } from "./palette"
 import { clamp, TODO } from "./reduce/core"
 import { changeSpec, collapseAll, expandAll, filterText, listPicker, moveCursor, openRow, saveDefaults, search, submitFilter, submitListPicker, submitSearch, toggleRead, toggleRow } from "./reduce/lists"
 import {
+  fieldsLoaded,
   historyLoaded,
   inboxLoaded,
   referenceLoaded,
@@ -34,11 +35,12 @@ import {
 } from "./reduce/comments"
 import { openAttachment, previewLoaded } from "./reduce/attachments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
-import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
+import { closeEditor } from "./reduce/fields"
+import { choiceToggle, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
 import { confirmDeleteTask, newTask, submitNewTask, submitWorkPicker, taskCreated, taskDeleted } from "./reduce/work"
-import { currentList, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
+import { currentList, editRows, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
 import { info } from "./reduce/core"
-import { EDIT_FIELDS, PANES, WORK_PICKERS, type Action, type State, type Update, type WorkPicker } from "./state"
+import { PANES, WORK_PICKERS, type Action, type State, type Update, type WorkPicker } from "./state"
 
 export { start }
 
@@ -88,6 +90,9 @@ function step(state: State, action: Action): Update {
 
     case "space-workflows-loaded":
       return spaceWorkflowsLoaded(state, action)
+
+    case "fields-loaded":
+      return fieldsLoaded(state, action)
 
     case "inbox-loaded":
       return inboxLoaded(state, action)
@@ -202,7 +207,7 @@ function step(state: State, action: Action): Update {
       return onLink(state, action.act)
 
     case "field-move":
-      return state.mode.kind === "edit" ? [{ ...state, mode: { kind: "edit", field: clamp(state.mode.field + action.by, EDIT_FIELDS.length) } }, []] : [state, []]
+      return state.mode.kind === "edit" ? [{ ...state, mode: { kind: "edit", field: clamp(state.mode.field + action.by, editRows(state).length) } }, []] : [state, []]
     case "field-open":
       return openField(state)
     case "choice-move":
@@ -276,7 +281,7 @@ function submit(state: State): Update {
     case "picker": {
       const { field } = mode
       if (isWorkPicker(field)) return submitWorkPicker(state, mode, field)
-      if (field !== "status" && field !== "importance" && field !== "assignees") return submitListPicker(state, mode, field)
+      if (field !== "status" && field !== "importance" && field !== "assignees" && field !== "set-field" && field !== "custom") return submitListPicker(state, mode, field)
       return submitTaskPicker(state, mode, field)
     }
     case "browse":
@@ -289,7 +294,7 @@ function submit(state: State): Update {
 
 function cancel(state: State): Update {
   const mode = state.mode
-  if (mode.kind === "edit-text" || mode.kind === "picker") return [closeEditor(state, mode.origin, mode.field), []]
+  if (mode.kind === "edit-text" || mode.kind === "picker") return [closeEditor(state, mode), []]
   if (mode.kind === "confirm-delete") return keep(state)
   return [{ ...state, mode: { kind: "browse" } }, []]
 }

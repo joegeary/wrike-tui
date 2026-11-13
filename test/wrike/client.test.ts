@@ -67,7 +67,7 @@ describe("reads", () => {
       subTasks: "true",
       sortField: "DueDate",
       pageSize: "200",
-      fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds"]',
+      fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds","customFields"]',
     })
   })
 
@@ -137,7 +137,7 @@ describe("reads", () => {
     let pages = 0
     for (let token: string | undefined, done = false; !done; pages++) {
       const page = await client.tasks(query, { completed: false, ...(token ? { pageToken: token } : {}) })
-      if (pages > 0) expect(Object.fromEntries(lastQuery())).toEqual({ nextPageToken: token!, fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds"]' })
+      if (pages > 0) expect(Object.fromEntries(lastQuery())).toEqual({ nextPageToken: token!, fields: '["responsibleIds","parentIds","description","subTaskIds","superTaskIds","customFields"]' })
       for (const task of page.tasks) {
         expect(seen.has(task.id)).toBe(false)
         seen.add(task.id)

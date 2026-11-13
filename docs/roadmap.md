@@ -156,6 +156,13 @@ moves a task with no folder to the account root. Cancel from the palette,
 picking among several Cancelled statuses. Delete with `D` to the Recycle Bin,
 where Wrike's 400 for a task already there counts as deleted.
 
+Done: custom fields. The details pane lists a task's fields by type, the edit
+walk edits them with an editor per type, and "Set a field" adds one. No call
+says which fields apply to a task, and Wrike answers 200 to a write it then
+drops, so the client reads Wrike's answer and says when a value was not kept.
+
+Deferred: custom item types. No task in the measured account uses one.
+
 ## Phase 5. Wrike's own power features
 
 Time logs and a timesheet view. Approvals that wait on you. More than one

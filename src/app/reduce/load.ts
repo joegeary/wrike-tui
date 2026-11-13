@@ -103,6 +103,22 @@ export function loadTasks(state: State, scope: TaskScope, page: "first" | "more"
   ]
 }
 
+/** Fetches the custom field definitions. What the cache painted stays drawn meanwhile. */
+export function loadFields(state: State): Update {
+  const [next, number] = request(state, "fields")
+  return [{ ...next, customFields: loading(state.customFields) }, [{ kind: "load-fields", request: number }]]
+}
+
+export function fieldsLoaded(state: State, action: Action & { type: "fields-loaded" }): Update {
+  if (!isCurrent(state, "fields", action.request)) return [state, []]
+  if (!action.result.ok) return [{ ...state, customFields: settle(state.customFields, action.result), flash: failure(describeError(action.result.error)) }, []]
+  const previous = shown(state.customFields)
+  // A fetch that matches the cache keeps what is drawn and writes nothing.
+  const same = previous !== undefined && JSON.stringify(previous) === JSON.stringify(action.result.value)
+  const fields = same ? previous : action.result.value
+  return [{ ...state, customFields: { state: "ready", value: fields } }, same ? [] : [{ kind: "cache-fields", fields }]]
+}
+
 export function loadSpaces(state: State, cached: boolean): Update {
   const [next, number] = request(state, "spaces")
   return [{ ...next, spaces: loading(state.spaces) }, [{ kind: "load-spaces", request: number, cached }]]
@@ -176,6 +192,7 @@ export function showScope(state: State, scope: Scope, focus: Pane): Update {
 
 export function refresh(state: State): Update {
   let update: Update = [{ ...state, previews: retryPreviews(state.previews) }, [{ kind: "load-reference" }]]
+  update = then(update, loadFields)
   update = then(update, (next) => loadSpaces(next, false))
   for (const [space, tree] of state.trees) {
     if (state.nav.expanded.has(spacePath(space)) && tree.state !== "loading") update = then(update, (next) => loadTree(next, space))
@@ -254,6 +271,7 @@ export function treeLoaded(state: State, action: Action & { type: "tree-loaded" 
 /** The effects that fill the first screen: what the session shows, and fresh copies of everything painted from the cache. */
 export function start(state: State): Update {
   let update: Update = [state, [{ kind: "load-reference" }]]
+  update = then(update, loadFields)
   update = then(update, loadInbox)
   update = then(update, (next) => loadTasks(next, { kind: "todo" }, "first"))
   update = then(update, (next) => loadSpaces(next, shown(next.spaces) === undefined))

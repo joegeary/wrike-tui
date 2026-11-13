@@ -1,7 +1,8 @@
 import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
+import type { CustomField, FieldWrite } from "../domain/fields"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
-import type { AttachmentId, CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, CustomFieldId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
 import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
@@ -57,9 +58,27 @@ export type ListPicker = (typeof LIST_PICKERS)[number]
  */
 export const WORK_PICKERS = ["folder", "subtask-folder", "file", "unfile", "cancel"] as const
 export type WorkPicker = (typeof WORK_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker | WorkPicker
+export type PickerField = TaskPicker | ListPicker | WorkPicker | "set-field" | "custom"
 
-export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "subtask", "delete", "file", "unfile", "cancel"] as const
+/**
+ * A custom field being changed and the tasks the value goes to. The details
+ * pane passes the open task. The editor never reads the task list itself, so
+ * a caller can pass several and the one value chosen is written to each.
+ */
+export type FieldEdit = { id: CustomFieldId; taskIds: readonly TaskId[] }
+
+/** A row the edit walk steps through: a field every task has, then the task's custom fields as drawn. */
+export type EditRow = { kind: "core"; field: EditField } | { kind: "custom"; id: CustomFieldId }
+
+type Typing = { kind: "edit-text"; draft: string; error?: string; origin: Origin }
+/** A value typed in place. `custom` is a custom field, whose text is checked against its type. */
+export type EditTextMode = Typing & ({ field: TextField } | { field: "custom"; edit: FieldEdit })
+
+type Picking = { kind: "picker"; query: string; cursor: number; chosen: string[]; origin: Origin }
+/** A list of choices that filters as it is typed into. `set-field` lists the custom fields to give the tasks, and `custom` is one field's choices. */
+export type PickerMode = Picking & ({ field: TaskPicker | ListPicker | WorkPicker } | { field: "set-field"; taskIds: readonly TaskId[] } | { field: "custom"; edit: FieldEdit })
+
+export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "set-field", "subtask", "delete", "file", "unfile", "cancel"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
 export type TaskCommand = (typeof TASK_COMMANDS)[number]
 
@@ -71,8 +90,8 @@ export type Mode =
   | { kind: "search-input"; draft: string }
   | { kind: "filter-input"; draft: string }
   | { kind: "edit"; field: number }
-  | { kind: "edit-text"; field: TextField; draft: string; error?: string; origin: Origin }
-  | { kind: "picker"; field: PickerField; query: string; cursor: number; chosen: string[]; origin: Origin }
+  | EditTextMode
+  | PickerMode
   | Compose
   /** The title of a new task, typed in the list pane. The plan says where it goes. */
   | { kind: "new-task"; draft: string; plan: TaskPlan; error?: string }
@@ -109,7 +128,7 @@ export type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "co
 export type Clock = { now: string; today: string }
 export type Flash = { tone: "info" | "error"; text: string }
 
-/** What a response is checked against: `inbox`, `details`, `spaces`, `tree:<spaceId>`, `list:<scopeKey>` or `history:<taskId>`. */
+/** What a response is checked against: `inbox`, `details`, `spaces`, `fields`, `tree:<spaceId>`, `list:<scopeKey>` or `history:<taskId>`. */
 export type RequestKey = string
 
 export type State = {
@@ -145,6 +164,8 @@ export type State = {
   previews: ReadonlyMap<AttachmentId, Loadable<Uint8Array>>
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
+  /** The account's custom field definitions, painted from the disk cache at launch and fetched with the contacts and workflows. */
+  customFields: Loadable<CustomField[]>
   /** Space workflows load once, the first time a task's status is not in the account workflows. */
   spaceWorkflows: "unloaded" | "loading" | "loaded"
   mode: Mode
@@ -173,6 +194,7 @@ export type ScrollTo = "up" | "down" | "top" | "bottom"
 export type Effect =
   | { kind: "load-reference" }
   | { kind: "load-space-workflows" }
+  | { kind: "load-fields"; request: number }
   | { kind: "load-inbox"; request: number; includeRead: boolean }
   | { kind: "load-tasks"; request: number; key: ScopeKey; source: TaskSource; completed: boolean; pageToken: string | null }
   | { kind: "load-spaces"; request: number; cached: boolean }
@@ -182,7 +204,8 @@ export type Effect =
   | { kind: "load-preview"; id: AttachmentId }
   /** Asks Wrike for a signed link to the file and hands it to the browser. */
   | { kind: "open-attachment"; id: AttachmentId; name: string }
-  | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
+  /** `check` names a custom field write, whose value is looked for in Wrike's answer. */
+  | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string; check?: FieldCheck }
   /** `key` is the list the task was created from, which shows it. Null from the Inbox. */
   | { kind: "create-task"; key: ScopeKey | null; task: NewTask }
   | { kind: "delete-task"; id: TaskId; title: string }
@@ -197,6 +220,7 @@ export type Effect =
   | { kind: "save-config"; settings: Settings }
   | { kind: "cache-spaces"; spaces: Space[] }
   | { kind: "cache-tree"; space: SpaceId; tree: SpaceTree }
+  | { kind: "cache-fields"; fields: CustomField[] }
   | { kind: "quit" }
 
 export type SpecChange =
@@ -267,6 +291,7 @@ export type Action =
   | { type: "composed"; text: string | null }
   | { type: "reference-loaded"; result: Result<{ contacts: Contact[]; workflows: Workflow[] }> }
   | { type: "space-workflows-loaded"; result: Result<Workflow[]> }
+  | { type: "fields-loaded"; request: number; result: Result<CustomField[]> }
   | { type: "inbox-loaded"; request: number; clock: Clock; result: Result<InboxEntry[]> }
   | { type: "tasks-loaded"; key: ScopeKey; request: number; clock: Clock; more: boolean; jump: boolean; result: Result<TaskPage> }
   | { type: "spaces-loaded"; request: number; from: "cache" | "wrike"; result: Result<Space[]> }
@@ -274,14 +299,17 @@ export type Action =
   | { type: "details-loaded"; request: number; result: Result<Details> }
   | { type: "history-loaded"; taskId: TaskId; request: number; more: boolean; result: Result<HistoryPage> }
   | { type: "preview-loaded"; id: AttachmentId; result: Result<Uint8Array> }
-  /** `folders` comes with a save that filed the task, named again by Wrike. */
-  | { type: "task-saved"; done: string; result: Result<Task>; folders?: FolderRef[] }
+  /** `folders` comes with a save that filed the task, named again by Wrike. `check` is the custom field write the save asked for. */
+  | { type: "task-saved"; done: string; check?: FieldCheck; result: Result<Task>; folders?: FolderRef[] }
   | { type: "task-created"; key: ScopeKey | null; result: Result<Task> }
   | { type: "task-deleted"; id: TaskId; title: string; result: Result<"deleted" | "already-deleted"> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
 
 export type Update = [State, Effect[]]
+
+/** A custom field write to look for in Wrike's answer, since Wrike answers 200 and drops a field that does not apply to the task. */
+export type FieldCheck = { id: CustomFieldId; title: string; value: FieldWrite }
 
 /** The value to show: the loaded one, or the last good one while a reload runs or after it failed. */
 export function shown<T>(loadable: Loadable<T> | undefined): T | undefined {
@@ -306,6 +334,8 @@ export type Boot = {
   session: SessionFile | null
   /** The cached spaces list and the cached trees of the spaces the session has open. */
   spaces: Space[] | null
+  /** The cached custom field definitions. */
+  fields: CustomField[] | null
   trees: ReadonlyMap<SpaceId, SpaceTree>
 }
 
@@ -336,6 +366,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     previews: new Map(),
     contacts: new Map(),
     workflows: [],
+    customFields: boot.fields ? { state: "loading", previous: boot.fields } : { state: "idle" },
     spaceWorkflows: "unloaded",
     mode: { kind: "browse" },
     flash: boot.flash,

@@ -1,4 +1,5 @@
 import type { CommentBody } from "../domain/comment"
+import type { CustomField } from "../domain/fields"
 import type { HistoryPage } from "../domain/history"
 import type { AttachmentId, CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { folderId, taskId, userId } from "../domain/ids"
@@ -11,6 +12,7 @@ import {
   AttachmentUrlSchema,
   CommentSchema,
   contactFromWire,
+  CustomFieldSchema,
   ContactSchema,
   FolderSchema,
   LegacyIdSchema,
@@ -29,6 +31,8 @@ export type WrikeClient = {
   me(): Promise<Me>
   contacts(): Promise<Contact[]>
   workflows(): Promise<Workflow[]>
+  /** Every custom field definition in the account. One in a shape this version cannot read is left out. */
+  customFields(): Promise<CustomField[]>
   /** The workflows of every space, for a status the account workflows do not hold. */
   spaceWorkflows(): Promise<Workflow[]>
   /** The spaces the token can see that are not archived. */
@@ -76,7 +80,7 @@ const PREVIEW_LIMIT = 1024 * 1024
 export type McpClient = Pick<WrikeClient, "inbox" | "history"> & { close(): Promise<void> }
 
 // A task list omits these unless asked, and the app's Task always carries them.
-const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds"]
+const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds", "customFields"]
 
 function listCall(query: TaskQuery): { path: string; params: Params } {
   switch (query.kind) {
@@ -126,6 +130,10 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
 
     async workflows() {
       return parseAll(WorkflowSchema, await transport.request("GET", "/workflows"), "workflows")
+    },
+
+    async customFields() {
+      return parseEach(CustomFieldSchema, await transport.request("GET", "/customfields"))
     },
 
     async spaceWorkflows() {

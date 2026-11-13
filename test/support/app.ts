@@ -40,6 +40,7 @@ export function task(id: string, title: string, dates: TaskDates = { type: "Back
     superTaskIds: [],
     permalink: `https://www.wrike.com/open.htm?id=${id.replace(/\D/g, "") || "1"}`,
     descriptionHtml: "",
+    fields: [],
     createdDate: "2026-10-01T00:00:00Z",
     updatedDate: "2026-11-10T00:00:00Z",
     ...extra,
@@ -87,7 +88,7 @@ export function tree(space: string, shape: Record<string, string[]>, projects: s
 /** Platform (A) holds Launch (B, a project) and C. B also sits directly under the space. */
 export const engTree = tree("ENG", { ENG: ["A", "B"], A: ["B", "C"], B: [], C: [] }, ["B"])
 
-export const boot = (extra: Partial<Boot> = {}): Boot => ({ settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, flash: null, session: null, spaces: null, trees: new Map(), ...extra })
+export const boot = (extra: Partial<Boot> = {}): Boot => ({ settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, flash: null, session: null, spaces: null, fields: null, trees: new Map(), ...extra })
 
 /** Applies actions in order and collects every effect. A string is a key press. */
 export function play(state: State, ...actions: (Action | string)[]): { state: State; effects: Effect[] } {

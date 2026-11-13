@@ -75,6 +75,7 @@ describe("startup", () => {
     const [state, effects] = start(initialState(profile, clock, boot()))
     expect(effects).toEqual([
       { kind: "load-reference" },
+      { kind: "load-fields", request: 1 },
       { kind: "load-inbox", request: 1, includeRead: false },
       { kind: "load-tasks", request: 1, key: key("todo"), source: { kind: "mine", user: ME }, completed: false, pageToken: null },
       { kind: "load-spaces", request: 1, cached: true },
@@ -95,9 +96,9 @@ describe("startup", () => {
 
   test("r reloads the list, the reference data, the spaces and the open space trees", () => {
     const { effects } = play(withTree(), "r")
-    expect(effects.map((effect) => effect.kind)).toEqual(["load-reference", "load-spaces", "load-tree", "load-inbox"])
-    expect(effects[1]).toMatchObject({ cached: false })
-    expect(effects[2]).toMatchObject({ space: ENG, cached: false })
+    expect(effects.map((effect) => effect.kind)).toEqual(["load-reference", "load-fields", "load-spaces", "load-tree", "load-inbox"])
+    expect(effects[2]).toMatchObject({ cached: false })
+    expect(effects[3]).toMatchObject({ space: ENG, cached: false })
   })
 
   test("reloaded workflows replace the old ones instead of piling up", () => {
