@@ -40,7 +40,7 @@ export const DEFAULT_HIGHLIGHT = "#F8BBD0"
 
 const HEX = "#[0-9a-fA-F]{3,8}"
 
-/** Inline syntax markdown lacks, for Wrike's text color and highlight. */
+/** Inline syntax markdown lacks, for Wrike's text color, highlight and underline. */
 const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
   {
     name: "color",
@@ -64,6 +64,18 @@ const WRIKE_INLINE: TokenizerAndRendererExtension[] = [
     },
     renderer(token) {
       return `<span style="background-color: ${token.color};">${this.parser.parseInline(token.tokens!)}</span>`
+    },
+  },
+  {
+    name: "underline",
+    level: "inline",
+    start: (src) => src.indexOf("++"),
+    tokenizer(src) {
+      const match = /^\+\+(?=\S)([\s\S]*?\S)\+\+/.exec(src)
+      if (match) return { type: "underline", raw: match[0], tokens: this.lexer.inlineTokens(match[1]!) }
+    },
+    renderer(token) {
+      return tag("u", this.parser.parseInline(token.tokens!))
     },
   },
 ]

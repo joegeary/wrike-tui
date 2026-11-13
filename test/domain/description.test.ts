@@ -91,7 +91,6 @@ describe("editableDescription", () => {
     expect(descriptionFromEdit({ ...editable, text: "Line one\n\nLine **2**\n" })).toBe("Line one<br /><br />Line <b>2</b>")
   })
   test.each([
-    ["underline", "plain <u>under</u>"],
     ["a color spelled another way", 'a <span style="color:#ff0000">red</span> word'],
     ["mention anchor", '<a class="stream-user-id" rel="KUAAAA01">@Sam</a>'],
   ])("%s opens as raw HTML and saves untouched", (_name, html) => {
@@ -204,5 +203,15 @@ describe("text color and highlight", () => {
   })
   test("a bare ==highlight== takes the highlight Wrike descriptions use most", () => {
     expect(markdownToHtml("==look==")).toBe('<span style="background-color: #F8BBD0;">look</span>')
+  })
+})
+
+describe("underline", () => {
+  test.each([
+    ["underlined words", "<u>Do not</u> reuse", "++Do not++ reuse"],
+    ["pluses in text", "C++ and a++", "C\\++ and a\\++"],
+  ])("%s", (_name, html, markdown) => {
+    expect(editableDescription(html)).toMatchObject({ format: "markdown", text: markdown })
+    expect(descriptionFromEdit(editableDescription(html))).toBe(html)
   })
 })

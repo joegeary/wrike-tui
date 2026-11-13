@@ -117,6 +117,8 @@ function inline(node: Node): string {
       return codeSpan(node.textContent ?? "")
     case "A":
       return `[${inlineChildren(node)}](${destination(node.getAttribute("href") ?? "")})`
+    case "U":
+      return wrap("++", inlineChildren(node))
     case "SPAN":
       return span(node)
     case "INPUT":
@@ -163,7 +165,7 @@ const ESCAPES: [RegExp, string][] = [
   [/\\/g, "\\\\"],
   [/([*_`~[\]])/g, "\\$1"],
   [/&(?=#?\w+;)/g, "\\&"],
-  [/=(?==)/g, "\\="],
+  [/([=+])(?=\1)/g, "\\$1"],
   [/\{(?=color[:}])/g, "\\{"],
   [/^([-+>]|#{1,6} |=+)/gm, "\\$1"],
   [/^(\d+)([.)]) /gm, "$1\\$2 "],
