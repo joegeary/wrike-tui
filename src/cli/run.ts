@@ -1,10 +1,11 @@
-import pkg from "../../package.json"
 import type { Env } from "../auth/config"
 import { deleteProfile, readProfile, writeProfile } from "../auth/profile"
 import { loadSession, probe, type Session } from "../auth/session"
 import { resolveToken, type TokenStore } from "../auth/token"
+import { VERSION } from "../version"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Fetch } from "../wrike/transport"
+import { update } from "./update"
 
 export type Io = {
   env: Env
@@ -16,7 +17,7 @@ export type Io = {
   fetch?: Fetch
 }
 
-const USAGE = `wrike-tui ${pkg.version}
+const USAGE = `wrike-tui ${VERSION}
 A keyboard-first terminal client for Wrike.
 
 Usage:
@@ -24,6 +25,8 @@ Usage:
   wrike-tui auth login    Store a Wrike permanent access token in the OS keyring
   wrike-tui auth status   Show who is logged in and where the token comes from
   wrike-tui auth logout   Remove the stored token and profile
+  wrike-tui update        Replace this binary with the newest release
+                          (--check only says whether one is out)
   wrike-tui --version
 
 Environment:
@@ -39,7 +42,10 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const [command, sub, ...rest] = argv
   if (command === undefined) return open(io)
   if (command === "--help" || command === "-h" || command === "help") return io.out(USAGE), 0
-  if (command === "--version" || command === "-v") return io.out(`wrike-tui ${pkg.version}`), 0
+  if (command === "--version" || command === "-v") return io.out(`wrike-tui ${VERSION}`), 0
+  if (command === "update" && rest.length === 0 && (sub === undefined || sub === "--check")) {
+    return update(sub === "--check", io)
+  }
   if (command === "auth" && rest.length === 0) {
     if (sub === "login") return login(io)
     if (sub === "status") return status(io)
