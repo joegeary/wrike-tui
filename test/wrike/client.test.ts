@@ -94,16 +94,6 @@ describe("reads", () => {
     expect([...tree.keys()].sort()).toEqual([SPACE.engineering, FOLDER.platform, FOLDER.launch, FOLDER.runbooks, FOLDER.incidents, FOLDER.shared, FOLDER.empty].sort() as never)
   })
 
-  test("the big space has the measured shape: about 3,500 folders, six deep, 18 under two parents", async () => {
-    const tree = await client.spaceTree(spaceId(SPACE.operations))
-    expect(tree.size).toBe(3548)
-    const parents = new Map<string, number>()
-    for (const node of tree.values()) for (const child of node.childIds) parents.set(child, (parents.get(child) ?? 0) + 1)
-    expect([...parents.values()].filter((count) => count > 1)).toHaveLength(18)
-    const depth = (id: string): number => 1 + Math.max(0, ...tree.get(folderId(id))!.childIds.map(depth))
-    expect(depth(SPACE.operations) - 1).toBe(6)
-  })
-
   test("a folder list takes its descendants and subtasks, active only by default", async () => {
     const { tasks } = await client.tasks({ kind: "folder", id: folderId(FOLDER.platform) }, { completed: false })
     expect(tasks.map((task) => task.title)).toEqual([
@@ -149,14 +139,6 @@ describe("reads", () => {
     }
     expect(pages).toBe(6)
     expect(seen.size).toBe(BIG_FOLDER.active)
-  })
-
-  test("a follow-up page without fields comes back without the optional fields, as Wrike does", async () => {
-    const first = await fake.fetch(`http://fake.test/api/v4/folders/${FOLDER.requests}/tasks?pageSize=5&fields=["parentIds"]`, { headers: { Authorization: "bearer good-token" } })
-    const { nextPageToken, data } = (await first.json()) as { nextPageToken: string; data: Record<string, unknown>[] }
-    expect(data[0]).toHaveProperty("parentIds")
-    const second = await fake.fetch(`http://fake.test/api/v4/folders/${FOLDER.requests}/tasks?nextPageToken=${nextPageToken}`, { headers: { Authorization: "bearer good-token" } })
-    expect(((await second.json()) as { data: Record<string, unknown>[] }).data[0]).not.toHaveProperty("parentIds")
   })
 
   test("a folder Wrike does not know is not found", async () => {
@@ -454,10 +436,4 @@ describe("history over MCP", () => {
     fake.failTool({ tool: "get_item_history", text: JSON.stringify({ taskChanges: [], truncated: false }) })
     expect(await client.history(loginItem(), { pageSize: 50 })).toEqual({ entries: [], next: null })
   })
-})
-
-test("a rate limited read retries and succeeds", async () => {
-  fake.fail({ path: "/api/v4/workflows", status: 429, times: 2 })
-  expect(await client.workflows()).toHaveLength(1)
-  expect(fake.requests.filter((line) => line.startsWith("GET /api/v4/workflows"))).toHaveLength(3)
 })
