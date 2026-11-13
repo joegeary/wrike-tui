@@ -13,7 +13,8 @@ export function truncate(text: string, width: number): string {
   return kept + ELLIPSIS
 }
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim()
+/** Whitespace runs, line breaks included, as single spaces. */
+export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim()
 
 /** Exactly `width` columns: cut with an ellipsis or padded on the right. */
 export function fit(text: string, width: number): string {

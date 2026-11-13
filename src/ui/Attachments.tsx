@@ -5,7 +5,7 @@ import { localDay } from "../domain/dates"
 import { hasPreview, type Attachment } from "../domain/model"
 import { describeError } from "../wrike/errors"
 import { itemAnchor } from "./Comments"
-import { fileKind, fileSize, shortDay, truncate } from "./format"
+import { fileKind, fileSize, oneLine, shortDay, truncate } from "./format"
 import { useTheme } from "./theme"
 
 /** A thumbnail's box. With block characters a cell is one pixel wide and two tall, so Wrike's small previews fill it. */
@@ -24,7 +24,7 @@ export function Attachments({ state, attachments, width }: { state: State; attac
         const selected = sameItem(state.selected, { kind: "attachment", id: attachment.id })
         const day = shortDay(localDay(new Date(attachment.createdDate)), state.clock.today)
         const about = [fileKind(attachment), attachment.size === null ? null : fileSize(attachment.size), contactName(state, attachment.authorId), day]
-        const name = truncate(attachment.name, width)
+        const name = truncate(oneLine(attachment.name), width)
         return (
           <box
             key={attachment.id}
