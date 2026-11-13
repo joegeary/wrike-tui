@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
-import { keyringStore } from "./auth/token"
+import { clientSecretStore, keyringStore } from "./auth/token"
 import { run } from "./cli/run"
-import { readSecret } from "./cli/secret"
+import { readLine, readSecret } from "./cli/secret"
+import { openInBrowser } from "./ui/handoff"
 import { launch } from "./ui/launch"
 
 const code = await run(process.argv.slice(2), {
@@ -11,5 +12,11 @@ const code = await run(process.argv.slice(2), {
   err: (line) => console.error(line),
   readSecret,
   launch: (session) => launch(session, process.env),
+  oauth: {
+    clientSecret: clientSecretStore(process.env),
+    readLine,
+    openUrl: (url) => openInBrowser(process.env, url),
+    interactive: process.stdin.isTTY === true,
+  },
 })
 process.exit(code)
