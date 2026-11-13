@@ -23,10 +23,9 @@ import {
   composed,
   composeDraft,
   composeEditor,
-  confirmDelete,
+  confirmDeleteComment,
   deleteComment,
   editComment,
-  keepComment,
   olderHistory,
   pickMention,
   selectItem,
@@ -36,12 +35,14 @@ import {
 import { openAttachment, previewLoaded } from "./reduce/attachments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
 import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
+import { confirmDeleteTask, newTask, submitNewTask, submitWorkPicker, taskCreated, taskDeleted } from "./reduce/work"
 import { currentList, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
-import { EDIT_FIELDS, PANES, type Action, type State, type Update } from "./state"
+import { info } from "./reduce/core"
+import { EDIT_FIELDS, PANES, WORK_PICKERS, type Action, type State, type Update, type WorkPicker } from "./state"
 
 export { start }
 
-const BRINGS_TASKS: ReadonlySet<Action["type"]> = new Set(["reference-loaded", "tasks-loaded", "details-loaded", "task-saved"])
+const BRINGS_TASKS: ReadonlySet<Action["type"]> = new Set(["reference-loaded", "tasks-loaded", "details-loaded", "task-saved", "task-created"])
 
 export function reduce(state: State, action: Action): Update {
   const [next, effects] = step(state, action)
@@ -64,7 +65,7 @@ function step(state: State, action: Action): Update {
 
     case "draft": {
       const mode = state.mode
-      if (mode.kind === "edit-text") {
+      if (mode.kind === "edit-text" || mode.kind === "new-task") {
         const { error: _cleared, ...rest } = mode
         return [{ ...state, mode: { ...rest, draft: action.text } }, []]
       }
@@ -111,6 +112,12 @@ function step(state: State, action: Action): Update {
 
     case "task-saved":
       return taskSaved(state, action)
+
+    case "task-created":
+      return taskCreated(state, action)
+
+    case "task-deleted":
+      return taskDeleted(state, action)
 
     case "comment-saved":
       return commentSaved(state, action)
@@ -186,9 +193,11 @@ function step(state: State, action: Action): Update {
     case "mention-close":
       return closeMentions(state)
     case "confirm":
-      return confirmDelete(state)
+      return confirm(state)
     case "task":
       return onTask(state, action.command)
+    case "new-task":
+      return newTask(state)
     case "link":
       return onLink(state, action.act)
 
@@ -224,7 +233,7 @@ function onKey(state: State, key: string): Update {
     const cleared = { ...state, flash: null }
     return step(cleared, command.run(cleared))
   }
-  if (state.mode.kind === "confirm-delete") return keepComment({ ...state, flash: null })
+  if (state.mode.kind === "confirm-delete") return keep({ ...state, flash: null })
   // Typing in a picker or the palette filters it. Every other text is typed into an input, which reports through "draft".
   const text = key === "space" ? " " : key
   if ((state.mode.kind === "picker" || state.mode.kind === "palette") && [...text].length === 1) {
@@ -262,8 +271,11 @@ function submit(state: State): Update {
       return submitCompose(state, mode)
     case "edit-text":
       return submitEditText(state, mode)
+    case "new-task":
+      return submitNewTask(state, mode)
     case "picker": {
       const { field } = mode
+      if (isWorkPicker(field)) return submitWorkPicker(state, mode, field)
       if (field !== "status" && field !== "importance" && field !== "assignees") return submitListPicker(state, mode, field)
       return submitTaskPicker(state, mode, field)
     }
@@ -278,6 +290,21 @@ function submit(state: State): Update {
 function cancel(state: State): Update {
   const mode = state.mode
   if (mode.kind === "edit-text" || mode.kind === "picker") return [closeEditor(state, mode.origin, mode.field), []]
-  if (mode.kind === "confirm-delete") return keepComment(state)
+  if (mode.kind === "confirm-delete") return keep(state)
   return [{ ...state, mode: { kind: "browse" } }, []]
+}
+
+const isWorkPicker = (field: string): field is WorkPicker => (WORK_PICKERS as readonly string[]).includes(field)
+
+/** `y` while a delete is asked. */
+function confirm(state: State): Update {
+  const { mode } = state
+  if (mode.kind !== "confirm-delete") return [state, []]
+  return mode.target.kind === "comment" ? confirmDeleteComment(state, mode.target.id) : confirmDeleteTask(state, mode.target)
+}
+
+/** Any other key while a delete is asked keeps what was asked about. */
+function keep(state: State): Update {
+  if (state.mode.kind !== "confirm-delete") return [state, []]
+  return [{ ...state, mode: { kind: "browse" }, flash: info(state.mode.target.kind === "comment" ? "Kept the comment" : "Kept the task") }, []]
 }

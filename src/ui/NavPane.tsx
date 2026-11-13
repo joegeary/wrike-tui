@@ -3,7 +3,7 @@ import { isSelectable, nodeScope, type NavRow, type NavView } from "../app/nav"
 import { navCursorRow, navRowsOf } from "../app/selectors"
 import type { State } from "../app/state"
 import { scopeKey } from "../domain/scope"
-import { fit, fitAfter } from "./format"
+import { fit, fitAfter, truncate } from "./format"
 import { windowCount, windowStart } from "./layout"
 import { Pane } from "./Pane"
 import { useTheme, type Theme } from "./theme"
@@ -40,13 +40,17 @@ function Row({ row, state, width, selected, theme }: { row: NavRow; state: State
         </text>
       )
     }
-    case "favorite":
+    case "favorite": {
+      // A long title gives way, so the mark of a missing favorite always shows.
+      const mark = row.missing ? " (not found)" : ""
+      const title = truncate(row.favorite.title, Math.max(0, width - 3 - mark.length))
       return (
         <text wrapMode="none" bg={bg}>
           <span fg={row.missing ? dim : theme.heading}>{" ★ "}</span>
-          <span fg={row.missing ? dim : current ? theme.accent : theme.text}>{fit(`${row.favorite.title}${row.missing ? " (not found)" : ""}`, width - 3)}</span>
+          <span fg={row.missing ? dim : current ? theme.accent : theme.text}>{fit(`${title}${mark}`, width - 3)}</span>
         </text>
       )
+    }
     case "node": {
       const marker = row.loading ? "◌" : row.expanded ? "▾" : row.expandable ? "▸" : " "
       const lead = `${" ".repeat(row.depth * INDENT + 1)}${marker} `

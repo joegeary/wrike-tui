@@ -1,8 +1,8 @@
 import type { CommentBody } from "../domain/comment"
 import type { HistoryPage } from "../domain/history"
 import type { AttachmentId, CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
-import { taskId, userId } from "../domain/ids"
-import type { Attachment, Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
+import { folderId, taskId, userId } from "../domain/ids"
+import type { Attachment, Comment, Contact, FolderRef, InboxEntry, NewTask, Task, Workflow } from "../domain/model"
 import { patchParams, type Params, type TaskPatch } from "../domain/patch"
 import type { Space, SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
@@ -40,11 +40,15 @@ export type WrikeClient = {
   taskIdFromLegacy(id: LegacyItemId): Promise<TaskId | null>
   task(id: TaskId): Promise<Task>
   updateTask(id: TaskId, patch: TaskPatch): Promise<Task>
+  createTask(task: NewTask): Promise<Task>
+  /** Moves the task to the Recycle Bin. A task already there is "already-deleted", which is not an error. */
+  deleteTask(id: TaskId): Promise<"deleted" | "already-deleted">
   comments(id: TaskId): Promise<Comment[]>
   addComment(id: TaskId, body: CommentBody): Promise<Comment>
   updateComment(id: CommentId, body: CommentBody): Promise<Comment>
   deleteComment(id: CommentId): Promise<void>
-  folders(ids: string[]): Promise<string[]>
+  /** The folders a task is filed in, in the order of `ids`. Ones the token cannot see are left out. */
+  folders(ids: string[]): Promise<FolderRef[]>
   /** A task's files, oldest first. */
   attachments(id: TaskId): Promise<Attachment[]>
   /** Wrike's small PNG of an image attachment, refused when it is over 1 MB. */
@@ -87,6 +91,9 @@ function listCall(query: TaskQuery): { path: string; params: Params } {
       return { path: `/folders/${query.id}/tasks`, params: { descendants: true, subTasks: true } }
   }
 }
+
+/** What Wrike says when asked to change a task that is already in the Recycle Bin. */
+const DELETED_TASK = "Operation is not allowed on deleted Folder/Task"
 
 const commentParams = (body: CommentBody): Params => (body.plainText ? { text: body.text, plainText: true } : { text: body.text })
 
@@ -170,6 +177,26 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
       return one(parseAll(TaskSchema, await transport.request("PUT", `/tasks/${id}`, patchParams(patch)), "task"))
     },
 
+    async createTask(task) {
+      const params: Params = {
+        title: task.title,
+        ...(task.assignees.length > 0 ? { responsibles: task.assignees } : {}),
+        ...(task.parent ? { superTasks: [task.parent] } : {}),
+      }
+      // A subtask is created in a folder too, with superTasks naming its parent: `POST /tasks/{id}/tasks` does not exist.
+      return one(parseAll(TaskSchema, await transport.request("POST", `/folders/${task.folder}/tasks`, params), "task"))
+    },
+
+    async deleteTask(id) {
+      try {
+        await transport.request("DELETE", `/tasks/${id}`)
+        return "deleted"
+      } catch (thrown) {
+        if (thrown instanceof WrikeFailure && thrown.error.kind === "invalid" && thrown.error.message === DELETED_TASK) return "already-deleted"
+        throw thrown
+      }
+    },
+
     async comments(id) {
       const comments = parseAll(CommentSchema, await transport.request("GET", `/tasks/${id}/comments`), "comments")
       // Wrike lists newest first with one-second stamps. Reversing before the stable sort keeps two comments from the same second in order.
@@ -191,7 +218,11 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
     async folders(ids) {
       if (ids.length === 0) return []
       const folders = parseAll(FolderSchema, await transport.request("GET", `/folders/${ids.join(",")}`), "folders")
-      return folders.map((folder) => folder.title)
+      const byId = new Map(folders.map((folder) => [folder.id, folder.title]))
+      return ids.flatMap((id) => {
+        const title = byId.get(id)
+        return title === undefined ? [] : [{ id: folderId(id), title }]
+      })
     },
 
     async attachments(id) {

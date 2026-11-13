@@ -79,17 +79,15 @@ export function deleteComment(state: State): Update {
   const comment = selectedComment(state)
   if (!comment) return [state, []]
   if (comment.authorId !== state.profile.userId) return [{ ...state, flash: info(notMine(state, comment)) }, []]
-  return [{ ...state, mode: { kind: "confirm-delete", id: comment.id } }, []]
+  return [{ ...state, mode: { kind: "confirm-delete", target: { kind: "comment", id: comment.id } } }, []]
 }
 
-/** `y` while asked: the comment is deleted. */
-export function confirmDelete(state: State): Update {
+/** `y` while asked about a comment: the comment is deleted. */
+export function confirmDeleteComment(state: State, id: CommentId): Update {
   const task = openTask(state)
-  if (state.mode.kind !== "confirm-delete" || !task) return [state, []]
-  return [{ ...state, mode: { kind: "browse" }, flash: info("Deleting the comment...") }, [{ kind: "delete-comment", taskId: task.id, id: state.mode.id }]]
+  if (!task) return [{ ...state, mode: { kind: "browse" } }, []]
+  return [{ ...state, mode: { kind: "browse" }, flash: info("Deleting the comment...") }, [{ kind: "delete-comment", taskId: task.id, id }]]
 }
-
-export const keepComment = (state: State): Update => [{ ...state, mode: { kind: "browse" }, flash: info("Kept the comment") }, []]
 
 export function commentDeleted(state: State, action: Action & { type: "comment-deleted" }): Update {
   const { taskId, id, result } = action

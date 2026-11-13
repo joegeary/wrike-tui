@@ -207,7 +207,7 @@ describe("deleting my comment", () => {
 
   test("d asks first, and y deletes", () => {
     const asked = play(onStale(), "d")
-    expect(asked.state.mode).toEqual({ kind: "confirm-delete", id: stale.id })
+    expect(asked.state.mode).toEqual({ kind: "confirm-delete", target: { kind: "comment", id: stale.id } })
     expect(asked.effects).toEqual([])
     const { state, effects } = play(asked.state, "y")
     expect(effects).toEqual([{ kind: "delete-comment", taskId: overdue.id, id: stale.id }])

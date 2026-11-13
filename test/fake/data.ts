@@ -70,6 +70,8 @@ export const STATUS = {
   triage: "IEAAAAAAJMAAAB01",
   waiting: "IEAAAAAAJMAAAB02",
   resolved: "IEAAAAAAJMAAAB03",
+  duplicate: "IEAAAAAAJMAAAB04",
+  wontFix: "IEAAAAAAJMAAAB05",
 } as const
 
 export const TASK = {
@@ -156,6 +158,9 @@ export function seed(today: string, now: string) {
           status(STATUS.triage, "Triage", "Active", "Orange"),
           status(STATUS.waiting, "Waiting on customer", "Deferred", "Purple"),
           status(STATUS.resolved, "Resolved", "Completed", "Green"),
+          // Two Cancelled statuses, so cancelling a support task asks which.
+          status(STATUS.duplicate, "Duplicate", "Cancelled", "Gray"),
+          status(STATUS.wontFix, "Won't fix", "Cancelled", "Red"),
         ],
       },
     ],

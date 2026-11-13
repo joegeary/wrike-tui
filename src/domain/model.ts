@@ -1,4 +1,4 @@
-import type { AttachmentId, CommentId, CustomStatusId, LegacyItemId, TaskId, UserId } from "./ids"
+import type { AttachmentId, CommentId, CustomStatusId, FolderId, LegacyItemId, TaskId, UserId } from "./ids"
 
 export const STATUS_GROUPS = ["Active", "Completed", "Deferred", "Cancelled"] as const
 export type StatusGroup = (typeof STATUS_GROUPS)[number]
@@ -37,6 +37,16 @@ export type Task = {
   createdDate: string
   updatedDate: string
 }
+
+/** A folder, project or space as a task names it: the ID and the title to show. */
+export type FolderRef = { id: FolderId; title: string }
+
+/**
+ * A task to create. It lands in `folder`, which may be a space. A subtask
+ * names its parent too, and still lands in `folder`: Wrike has no call that
+ * creates under a task.
+ */
+export type NewTask = { title: string; folder: FolderId; parent: TaskId | null; assignees: UserId[] }
 
 export type Comment = { id: CommentId; authorId: UserId; text: string; createdDate: string }
 
@@ -95,6 +105,11 @@ export function findStatus(workflows: Workflow[], id: CustomStatusId): CustomSta
 export function statusChoices(workflows: Workflow[], current: CustomStatusId): CustomStatus[] {
   const workflow = workflows.find((w) => w.statuses.some((s) => s.id === current))
   return workflow ? workflow.statuses.filter((s) => !s.hidden || s.id === current) : []
+}
+
+/** The visible statuses of the task's workflow in the Cancelled group, which is what cancelling it can move it to. */
+export function cancelStatuses(workflows: Workflow[], current: CustomStatusId): CustomStatus[] {
+  return statusChoices(workflows, current).filter((status) => status.group === "Cancelled" && !status.hidden)
 }
 
 /** The number in `https://www.wrike.com/open.htm?id=4598459124`, which is what Wrike shows people as the task ID. */

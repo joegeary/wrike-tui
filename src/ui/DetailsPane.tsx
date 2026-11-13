@@ -143,7 +143,7 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
         </Field>
       ) : null}
       <Field label="Folders" active={editing ? false : undefined}>
-        {folders.length === 0 ? <Value fg={theme.dim}>none</Value> : <Value>{folders.join(", ")}</Value>}
+        {folders.length === 0 ? <Value fg={theme.dim}>none</Value> : <Value>{folders.map((folder) => folder.title).join(", ")}</Value>}
       </Field>
       <Field label="Permalink" active={editing ? false : undefined}>
         <text fg={theme.link} wrapMode="char" flexShrink={1}>{task.permalink}</text>

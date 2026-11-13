@@ -1,4 +1,7 @@
-import { scopeKey } from "../../domain/scope"
+import type { TaskId } from "../../domain/ids"
+import type { Task } from "../../domain/model"
+import type { TaskPatch } from "../../domain/patch"
+import { scopeKey, type ScopeKey } from "../../domain/scope"
 import type { RowCursor } from "../../domain/shape"
 import { favoriteKey, retitleFavorites } from "../../domain/workspace"
 import { currentKey, currentView, listRows } from "../selectors"
@@ -38,4 +41,31 @@ export function withView(state: State, change: (view: ListView) => ListView): St
 export const cursorAt = (state: State, index: number): RowCursor | null => {
   const row = listRows(state)[index]
   return row ? { id: row.id, index } : null
+}
+
+export function save(state: State, taskId: TaskId, patch: TaskPatch, done: string): Update {
+  return [{ ...state, flash: info("Saving...") }, [{ kind: "update-task", taskId, patch, done }]]
+}
+
+/**
+ * Puts a task everywhere it is listed. A list of active tasks loses one that
+ * is closed, and My to-do gains one that became mine. A new task also joins
+ * the held lists named in `joins` that it belongs in.
+ */
+export function putTask(state: State, task: Task, joins: readonly ScopeKey[] = []): State {
+  const mine = task.assigneeIds.includes(state.profile.userId)
+  const lists = new Map(state.lists)
+  for (const [key, list] of lists) {
+    const completed = state.views.get(key)?.spec.completed ?? false
+    const belongs = (completed || task.statusGroup === "Active") && (key !== TODO || mine)
+    const held = list.items.some((candidate) => candidate.id === task.id)
+    if (!held && !(belongs && (key === TODO || joins.includes(key)))) continue
+    const swapped = held ? list.items.map((candidate) => (candidate.id === task.id ? task : candidate)) : [...list.items, task]
+    lists.set(key, { ...list, items: belongs ? swapped : swapped.filter((candidate) => candidate.id !== task.id) })
+  }
+  const details =
+    state.details.state === "ready" && state.details.value.task.id === task.id
+      ? ({ state: "ready", value: { ...state.details.value, task } } as const)
+      : state.details
+  return { ...state, details, lists }
 }

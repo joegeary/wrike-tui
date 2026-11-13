@@ -13,6 +13,11 @@ const TITLES: Record<PickerField, string> = {
   "filter-importance": "Filter by importance",
   "filter-due": "Filter by due date",
   columns: "Columns",
+  folder: "New task in",
+  "subtask-folder": "New subtask in",
+  file: "File in another folder",
+  unfile: "Take out of a folder",
+  cancel: "Cancel the task",
 }
 const MAX_ROWS = 12
 const WIDTH = 56
@@ -23,6 +28,7 @@ function emptyText(state: State, mode: Mode & { kind: "picker" }): string {
     return state.spaceWorkflows === "loading" ? "Loading this task's workflow..." : "This task's workflow is not available."
   }
   if (mode.field === "filter-status") return "No task is loaded, so there is no status to pick."
+  if (mode.field === "folder" || mode.field === "subtask-folder" || mode.field === "file") return "Open a space in the navigation pane first."
   return mode.field === "assignees" || mode.field === "filter-assignee" ? "No people loaded." : "Nothing to pick."
 }
 
@@ -33,7 +39,7 @@ export function Picker({ state, mode, screen }: { state: State; mode: Mode & { k
   const first = Math.max(0, Math.min(mode.cursor - Math.floor(rows / 2), options.length - rows))
   const inner = Math.min(WIDTH, screen.width) - 2
   const multi = MULTI_PICKERS.has(mode.field)
-  const dotted = mode.field === "status" || mode.field === "filter-status"
+  const dotted = mode.field === "status" || mode.field === "filter-status" || mode.field === "cancel"
   return (
     <Overlay title={TITLES[mode.field]} width={WIDTH} height={rows + 4} screen={screen}>
       <text wrapMode="none">

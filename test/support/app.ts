@@ -135,7 +135,7 @@ export function showing(state: State, keys: string[], scope: string, tasks: Task
 /** My to-do, shown and answered again. */
 export const inTodo = (state: State = loaded()) => showing(state, ["t"], "todo", todo)
 
-export const detailsOf = (opened: Task): Details => ({ task: opened, attachments: [], comments: [], folders: ["Platform"] })
+export const detailsOf = (opened: Task): Details => ({ task: opened, attachments: [], comments: [], folders: [{ id: folderId("A"), title: "Platform" }] })
 
 /** The Engineering space opened in the nav pane with its tree loaded, the focus in the nav pane. */
 export function withTree(state: State = loaded()): State {
