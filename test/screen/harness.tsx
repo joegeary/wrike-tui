@@ -118,6 +118,12 @@ export async function openApp(size: { width: number; height: number } = { width:
     }
   }
 
+  /** The styled runs of the current frame, for checks on how text is drawn. */
+  async function spans() {
+    await frame()
+    return screen.captureSpans().lines.flatMap((line) => line.spans)
+  }
+
   async function type(text: string): Promise<void> {
     await screen.mockInput.typeText(text)
     await frame()
@@ -131,6 +137,7 @@ export async function openApp(size: { width: number; height: number } = { width:
     outside,
     frame,
     see,
+    spans,
     press,
     type,
     resize: (width: number, height: number) => screen.resize(width, height),

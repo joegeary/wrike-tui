@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { commentBody, editableComment, editWindowLeft, followEdit, MENTION_LIMIT, mentionMatches, refindMentions, typedMention, type Mention } from "../../src/domain/comment"
+import { commentBody, editableComment, showMentions, editWindowLeft, followEdit, MENTION_LIMIT, mentionMatches, refindMentions, typedMention, type Mention } from "../../src/domain/comment"
 import { userId } from "../../src/domain/ids"
 
 const JOE = userId("KUAB6OAK")
@@ -121,5 +121,12 @@ describe("mentionMatches", () => {
   test("offers a short list", () => {
     const many = Array.from({ length: 9 }, (_, n) => person(String(n), `Alex ${n}`))
     expect(mentionMatches(many, "al")).toHaveLength(MENTION_LIMIT)
+  })
+})
+
+describe("showMentions", () => {
+  test("a mention reads as a bold @Full Name, with the person's name now", () => {
+    const html = `${anchor("KUAAAA02", "Pat Old-Name")} and ${anchor("KUNKNOWN", "Gone &amp; Person")} see <a href="https://example.test">this</a>`
+    expect(showMentions(html, nameOf)).toBe('<strong>@Pat Example</strong> and <strong>@Gone &amp; Person</strong> see <a href="https://example.test">this</a>')
   })
 })

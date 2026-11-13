@@ -54,6 +54,23 @@ function decodeEntities(text: string): string {
 
 const attribute = (attributes: string, name: string) => new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, "i").exec(attributes)?.[1] ?? null
 
+/** The person a mention anchor names, from its attributes, or null for any other link. */
+function mentioned(attributes: string): UserId | null {
+  const rel = attribute(attributes, "rel")
+  return rel && attribute(attributes, "class")?.split(/\s+/).includes("stream-user-id") ? userId(rel) : null
+}
+
+/** A mention's name: the person's name now, or the one stored in the anchor for someone the client does not know. */
+const mentionedName = (id: UserId, inner: string, nameOf: (id: UserId) => string | undefined) => nameOf(id) ?? decodeEntities(inner).replace(/^@/, "")
+
+/** The comment's HTML with each mention as a bold `@Full Name`, so it reads as a name and not as a link with no target. */
+export function showMentions(html: string, nameOf: (id: UserId) => string | undefined): string {
+  return html.replace(/<a\b([^>]*)>([^<]*)<\/a>/gi, (whole, attributes: string, inner: string) => {
+    const id = mentioned(attributes)
+    return id ? `<strong>@${escapeHtml(mentionedName(id, inner, nameOf))}</strong>` : whole
+  })
+}
+
 /**
  * A comment as text to edit, with its mentions as `@Full Name`. Null when the
  * HTML holds anything but text, line breaks and mentions, because saving it
@@ -64,10 +81,9 @@ export function editableComment(html: string, nameOf: (id: UserId) => string | u
   const mentions: Mention[] = []
   for (const [token, attributes, inner] of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>|<[^>]*>|[^<]+/gi)) {
     if (attributes !== undefined) {
-      const rel = attribute(attributes, "rel")
-      if (!attribute(attributes, "class")?.split(/\s+/).includes("stream-user-id") || !rel || inner!.includes("<")) return null
-      const id = userId(rel)
-      const name = nameOf(id) ?? decodeEntities(inner!).replace(/^@/, "")
+      const id = mentioned(attributes)
+      if (!id || inner!.includes("<")) return null
+      const name = mentionedName(id, inner!, nameOf)
       mentions.push({ at: text.length, id, name })
       text += `@${name}`
     } else if (/^<br\s*\/?>$/i.test(token)) {

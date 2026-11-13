@@ -1,3 +1,4 @@
+import { TextAttributes } from "@opentui/core"
 import { afterEach, describe, expect, test } from "bun:test"
 import { ME, PAT, STATUS, TASK } from "../fake/data"
 import { openApp } from "./harness"
@@ -433,6 +434,16 @@ describe("Deleting my comment", () => {
 })
 
 describe("Mentions", () => {
+  test("a mention in a comment reads as a bold name", async () => {
+    app = await openApp(WIDE)
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("Comments (3)", /│ +@Sam Sample can we run trainings in the sandbox\? +│/)
+    const mention = (await app.spans()).filter((span) => span.text === "@Sam Sample")
+    expect(mention).toHaveLength(1)
+    expect(mention[0]!.attributes & TextAttributes.BOLD).toBe(TextAttributes.BOLD)
+  })
+
   test("@ and letters offer people, Tab picks one, and the comment posts Wrike's mention anchor", async () => {
     app = await openApp(WIDE)
     await app.see("Enable SSO on sandbox")
