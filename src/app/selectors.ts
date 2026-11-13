@@ -2,7 +2,7 @@ import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
 import type { HistoryEntry } from "../domain/history"
 import type { CustomStatusId, TaskId, UserId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, NOBODY, type ColumnKey, type DueRange, type ListSpec } from "../domain/list"
-import { findStatus, IMPORTANCES, statusChoices, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
+import { findStatus, IMPORTANCES, statusChoices, type Attachment, type Comment, type Contact, type CustomStatus, type InboxEntry, type Task, type Workflow } from "../domain/model"
 import { scopeKey, taskScopeKind, type Scope, type ScopeKey } from "../domain/scope"
 import { defaultSpec } from "../domain/settings"
 import { cursorIndex, shapeList, type ListRow, type RowId, type ShapeContext } from "../domain/shape"
@@ -136,18 +136,31 @@ export function commentStream(comments: Comment[], newestFirst: HistoryEntry[]):
   return stream
 }
 
-/** What `]` and `[` step through, in the order the details pane draws it. */
+/**
+ * What `]` and `[` step through, in the order the details pane draws it: the
+ * attachments, which sit above the comments, then the comments oldest first.
+ */
 export function detailsItems(details: Details): DetailsItem[] {
-  return details.comments.map((comment) => ({ kind: "comment", id: comment.id }))
+  return [
+    ...details.attachments.map((attachment): DetailsItem => ({ kind: "attachment", id: attachment.id })),
+    ...details.comments.map((comment): DetailsItem => ({ kind: "comment", id: comment.id })),
+  ]
 }
 
 export const sameItem = (a: DetailsItem | null, b: DetailsItem | null) => a !== null && b !== null && a.kind === b.kind && a.id === b.id
 
-/** The selected comment of the open task, or null when nothing is selected or the selection is gone. */
+/** The selected comment of the open task, or null when nothing is selected, something else is, or the selection is gone. */
 export function selectedComment(state: State): Comment | null {
   const { selected } = state
   if (selected?.kind !== "comment" || state.details.state !== "ready") return null
   return state.details.value.comments.find((comment) => comment.id === selected.id) ?? null
+}
+
+/** The selected attachment of the open task, or null. */
+export function selectedAttachment(state: State): Attachment | null {
+  const { selected } = state
+  if (selected?.kind !== "attachment" || state.details.state !== "ready") return null
+  return state.details.value.attachments.find((attachment) => attachment.id === selected.id) ?? null
 }
 
 /** Milliseconds left to edit the selected comment when it is mine, zero or less once its window has closed. Null otherwise. */

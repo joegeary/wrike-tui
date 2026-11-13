@@ -12,6 +12,8 @@ export type Transport = {
   request(method: Method, path: string, params?: Params): Promise<unknown[]>
   /** One page of a list, with the token that asks for the page after it. */
   requestPage(method: Method, path: string, params?: Params): Promise<Page>
+  /** The body of a GET that answers with a file instead of JSON, held in memory and never written anywhere. */
+  bytes(path: string): Promise<Uint8Array>
 }
 
 export type TransportOptions = {
@@ -61,7 +63,8 @@ export function createTransport(options: TransportOptions): Transport {
     }
   }
 
-  async function requestPage(method: Method, path: string, params: Params = {}): Promise<Page> {
+  /** A successful response, after waiting out up to three 429s. */
+  async function respond(method: Method, path: string, params: Params): Promise<Response> {
     if (options.readOnly && method !== "GET") throw new WrikeFailure({ kind: "read_only" })
     for (let attempt = 0; ; attempt++) {
       const response = await send(method, path, params)
@@ -70,17 +73,22 @@ export function createTransport(options: TransportOptions): Transport {
         continue
       }
       if (!response.ok) throw new WrikeFailure(await errorFrom(response))
-      const envelope = Envelope.safeParse(await response.json().catch(() => null))
-      if (!envelope.success) {
-        throw new WrikeFailure({ kind: "invalid", message: `Unexpected response from ${method} ${path}` })
-      }
-      return { data: envelope.data.data, next: envelope.data.nextPageToken ?? null }
+      return response
     }
+  }
+
+  async function requestPage(method: Method, path: string, params: Params = {}): Promise<Page> {
+    const envelope = Envelope.safeParse(await (await respond(method, path, params)).json().catch(() => null))
+    if (!envelope.success) {
+      throw new WrikeFailure({ kind: "invalid", message: `Unexpected response from ${method} ${path}` })
+    }
+    return { data: envelope.data.data, next: envelope.data.nextPageToken ?? null }
   }
 
   return {
     requestPage,
     request: async (method, path, params) => (await requestPage(method, path, params)).data,
+    bytes: async (path) => new Uint8Array(await (await respond("GET", path, {})).arrayBuffer()),
   }
 }
 

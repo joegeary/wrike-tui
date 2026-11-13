@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { resolveKey } from "../../src/app/keymap"
 import { listCursor, listRows, mentionSuggestions } from "../../src/app/selectors"
 import type { State } from "../../src/app/state"
-import { commentId, userId } from "../../src/domain/ids"
-import type { Comment, Task } from "../../src/domain/model"
+import { attachmentId, commentId, userId } from "../../src/domain/ids"
+import type { Attachment, Comment, Task } from "../../src/domain/model"
 import { inTodo, later, ME, overdue, PAT, play, requestOf } from "../support/app"
 
 const comment = (id: string, authorId: Comment["authorId"], text: string, createdDate: string): Comment => ({ id: commentId(id), authorId, text, createdDate })
@@ -13,13 +13,54 @@ const mine = comment("C2", ME, "On it.", "2026-11-12T15:58:00Z")
 const newest = comment("C3", PAT, "Thanks!", "2026-11-12T15:59:00Z")
 
 /** My to-do with `opened` open in the details pane and the focus there. */
-function openWith(comments: Comment[], opened: Task = overdue): State {
+function openWith(comments: Comment[], opened: Task = overdue, attachments: Attachment[] = []): State {
   const base = inTodo()
   const index = listRows(base).findIndex((row) => row.kind === "task" && row.task.id === opened.id)
   const keys = Array.from({ length: index - listCursor(base) }, () => (index > listCursor(base) ? "j" : "k"))
   const { state, effects } = play(base, ...keys, "enter")
-  return play(state, { type: "details-loaded", request: requestOf(effects, "load-details"), result: { ok: true, value: { task: opened, comments, folders: [] } } }).state
+  return play(state, { type: "details-loaded", request: requestOf(effects, "load-details"), result: { ok: true, value: { task: opened, attachments, comments, folders: [] } } }).state
 }
+
+const file = (id: string, name: string, contentType: string): Attachment => ({
+  id: attachmentId(id),
+  name,
+  storage: "Wrike",
+  contentType,
+  size: 1200,
+  authorId: PAT,
+  createdDate: "2026-11-11T09:00:00Z",
+})
+const shot = file("A1", "shot.png", "image/png")
+const log = file("A2", "server.log", "text/plain")
+
+describe("selecting attachments", () => {
+  test("] walks the attachments first, then the comments, the order the pane draws them", () => {
+    const state = openWith([older], overdue, [shot, log])
+    expect(play(state, "]").state.selected).toEqual({ kind: "attachment", id: shot.id })
+    expect(play(state, "]", "]").state.selected).toEqual({ kind: "attachment", id: log.id })
+    expect(play(state, "]", "]", "]").state.selected).toEqual({ kind: "comment", id: older.id })
+    expect(play(state, "[").state.selected).toEqual({ kind: "comment", id: older.id })
+  })
+
+  test("an image's thumbnail is fetched the first time it is selected, and again only after a failure", () => {
+    const state = openWith([], overdue, [shot, log])
+    const first = play(state, "]")
+    expect(first.effects).toEqual([{ kind: "load-preview", id: shot.id }])
+    expect(play(first.state, "]", "[").effects).toEqual([])
+    const failed = play(first.state, { type: "preview-loaded", id: shot.id, result: { ok: false, error: { kind: "rate_limited" } } }, "]", "[")
+    expect(failed.effects).toEqual([{ kind: "load-preview", id: shot.id }])
+    expect(play(state, "]", "]").effects).toEqual([{ kind: "load-preview", id: shot.id }])
+  })
+
+  test("Enter opens the selected file through a signed link, and d leaves it alone", () => {
+    const state = openWith([older], overdue, [shot, log])
+    const opened = play(state, "]", "]", "enter")
+    expect(opened.effects.at(-1)).toEqual({ kind: "open-attachment", id: log.id, name: "server.log" })
+    expect(opened.state.flash?.text).toBe("Opening server.log in the browser")
+    expect(resolveKey(play(state, "]", "]").state, "d")).toBeNull()
+    expect(play(state, "]", "]", "]", "enter").state.flash?.text).toBe("This is Pat Example's comment, not yours")
+  })
+})
 
 describe("selecting comments", () => {
   test("] starts at the oldest comment and walks forward, stopping at the newest", () => {
@@ -47,10 +88,10 @@ describe("selecting comments", () => {
     expect(effects).toEqual([{ kind: "scroll", pane: "details", to: "down" }])
   })
 
-  test("a task without comments says so", () => {
+  test("a task without attachments or comments says so", () => {
     const { state } = play(openWith([]), "]")
     expect(state.selected).toBeNull()
-    expect(state.flash?.text).toBe("This task has no comments yet")
+    expect(state.flash?.text).toBe("This task has no attachments or comments yet")
   })
 
   test("opening another task clears the selection, and reloading the same one keeps it", () => {

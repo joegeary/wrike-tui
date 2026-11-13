@@ -1,7 +1,7 @@
 import { descriptionFromEdit, editableDescription } from "../domain/description"
 import type { Persistence } from "../persist/persistence"
 import type { TaskPage, WrikeClient } from "../wrike/client"
-import { toWrikeError, WrikeFailure } from "../wrike/errors"
+import { describeError, toWrikeError, WrikeFailure } from "../wrike/errors"
 import { HISTORY_PAGE, type Action, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
 
 export type EffectDeps = {
@@ -28,10 +28,10 @@ async function attempt<T>(work: () => Promise<T>): Promise<Result<T>> {
 async function loadDetails(client: WrikeClient, target: OpenTarget): Promise<Details> {
   const id = target.kind === "task" ? target.id : await client.taskIdFromLegacy(target.id)
   if (!id) throw new WrikeFailure({ kind: "not_found" })
-  const [task, comments] = await Promise.all([client.task(id), client.comments(id)])
+  const [task, attachments, comments] = await Promise.all([client.task(id), client.attachments(id), client.comments(id)])
   // Folder titles are decoration, and a parent the token cannot read must not hide the task.
   const folders = await client.folders(task.parentIds).catch(() => [])
-  return { task, comments, folders }
+  return { task, attachments, comments, folders }
 }
 
 /** One page of a paged list, or the single task a permalink or an ID names. */
@@ -118,6 +118,13 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       const page = { pageSize: HISTORY_PAGE, ...(effect.pageToken ? { pageToken: effect.pageToken } : {}) }
       const result = await attempt(() => client.history(effect.item, page))
       return dispatch({ type: "history-loaded", taskId: effect.taskId, request: effect.request, more: effect.pageToken !== null, result })
+    }
+    case "load-preview":
+      return dispatch({ type: "preview-loaded", id: effect.id, result: await attempt(() => client.attachmentPreview(effect.id)) })
+    case "open-attachment": {
+      const link = await attempt(() => client.attachmentUrl(effect.id))
+      if (!link.ok) return dispatch({ type: "flash", flash: { tone: "error", text: `Could not open ${effect.name}: ${describeError(link.error)}` } })
+      return runEffect({ kind: "open-url", url: link.value }, deps, dispatch)
     }
     case "update-task":
       return dispatch({ type: "task-saved", done: effect.done, result: await attempt(() => client.updateTask(effect.taskId, effect.patch)) })

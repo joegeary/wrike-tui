@@ -1,12 +1,14 @@
 import type { CommentBody } from "../domain/comment"
 import type { HistoryPage } from "../domain/history"
-import type { CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, FolderId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import { taskId, userId } from "../domain/ids"
-import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
+import type { Attachment, Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
 import { patchParams, type Params, type TaskPatch } from "../domain/patch"
 import type { Space, SpaceTree } from "../domain/workspace"
 import { WrikeFailure } from "./errors"
 import {
+  AttachmentSchema,
+  AttachmentUrlSchema,
   CommentSchema,
   contactFromWire,
   ContactSchema,
@@ -42,6 +44,12 @@ export type WrikeClient = {
   updateComment(id: CommentId, body: CommentBody): Promise<Comment>
   deleteComment(id: CommentId): Promise<void>
   folders(ids: string[]): Promise<string[]>
+  /** A task's files, oldest first. */
+  attachments(id: TaskId): Promise<Attachment[]>
+  /** Wrike's small PNG of an image attachment. */
+  attachmentPreview(id: AttachmentId): Promise<Uint8Array>
+  /** A temporary signed link to the file, which opens without the token. */
+  attachmentUrl(id: AttachmentId): Promise<string>
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
   /** One page of an item's field history, newest first. */
   history(item: LegacyItemId, page: { pageSize: number; pageToken?: string }): Promise<HistoryPage>
@@ -181,6 +189,17 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
       if (ids.length === 0) return []
       const folders = parseAll(FolderSchema, await transport.request("GET", `/folders/${ids.join(",")}`), "folders")
       return folders.map((folder) => folder.title)
+    },
+
+    async attachments(id) {
+      const attachments = parseAll(AttachmentSchema, await transport.request("GET", `/tasks/${id}/attachments`), "attachments")
+      return attachments.sort((a, b) => a.createdDate.localeCompare(b.createdDate))
+    },
+
+    attachmentPreview: (id) => transport.bytes(`/attachments/${id}/preview`),
+
+    async attachmentUrl(id) {
+      return one(parseAll(AttachmentUrlSchema, await transport.request("GET", `/attachments/${id}/url`), "attachment link")).url
     },
 
     inbox: (options) => mcp.inbox(options),

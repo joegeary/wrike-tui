@@ -7,6 +7,7 @@ import { displayMarkdown } from "../domain/description"
 import { dueDay, startDay } from "../domain/model"
 import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
+import { Attachments } from "./Attachments"
 import { Comments, ComposeBox, itemAnchor, streamTitle } from "./Comments"
 import { shortDay } from "./format"
 import { Pane } from "./Pane"
@@ -78,7 +79,7 @@ function Section({ title }: { title: string }) {
 function Body({ state, details, onDraft }: { state: State; details: Details; onDraft: (text: string) => void }) {
   const theme = useTheme()
   const style = useMarkdownStyle(theme)
-  const { task, comments, folders } = details
+  const { task, attachments, comments, folders } = details
   const { mode } = state
   // The cursor column shows only inside an edit session, so a picker opened from browse does not shift the fields.
   const editing = mode.kind === "edit" || ((mode.kind === "edit-text" || mode.kind === "picker") && mode.origin === "edit")
@@ -147,6 +148,13 @@ function Body({ state, details, onDraft }: { state: State; details: Details; onD
 
       <Section title="Description" />
       {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
+
+      {attachments.length > 0 ? (
+        <>
+          <Section title={`Attachments (${attachments.length})`} />
+          <Attachments state={state} attachments={attachments} />
+        </>
+      ) : null}
 
       <Section title={streamTitle(comments.length, openHistory(state))} />
       <Comments state={state} comments={comments} history={openHistory(state)} style={style} />

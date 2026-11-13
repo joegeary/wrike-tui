@@ -29,6 +29,26 @@ export type FakeTask = {
   customFields: unknown[]
 }
 
+export type FakeAttachment = {
+  id: string
+  authorId: string
+  name: string
+  createdDate: string
+  version: number
+  type: string
+  contentType?: string
+  size?: number
+  taskId: string
+  width?: number
+  height?: number
+}
+
+/** A real 24 by 16 PNG, the size of thumbnail Wrike's preview route answers with. */
+export const PREVIEW_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAACu0lEQVR4nAXBoRJFQBiA0b9Lim6ztsED2KwJulHF/eZ2MxtVowuazAMImry6Iul7zxFBIiRBUiRDcqRASqRGGqRDfkiPDMiEzMiK7MiBXMiNPMiHBESEOCJOiFPijDgnLohL4pq4Ie6If8Q98UA8Ec/EK/FOfBBfxDfxQ/wRB2IRVIRKUCkqQ+WoAlWialSD6lA/VI8aUBNqRq2oHXWgLtSNelAfKqBE0BE6QafoDJ2jC3SJrtENukP/0D16QE/oGb2id/SBvtA3+kF/6IAWwUSYBJNiMkyOKTAlpsY0mA7zw/SYATNhZsyK2TEH5sLcmAfzYQJGhCqiSqhSqowqpyqoSqqaqqHqqH5UPdVANVHNVCvVTnVQXVQ31UP1UQUqEdqINqFNaTPanLagLWlr2oa2o/3R9rQD7UQ70660O+1Be9HetA/tRxtoRbARNsGm2AybYwtsia2xDbbD/rA9dsBO2Bm7Ynfsgb2wN/bBftiAFcFFuASX4jJcjitwJa7GNbgO98P1uAE34WbcittxB+7C3bgH9+ECToQxYkwYU8aMMWcsGEvGmrFh7Bh/jD3jwDgxzowr4854MF6MN+PD+DEGRhGWiCVhSVkylpylYClZapaGpWP5sfQsA8vEMrOsLDvLwXKx3CwPy8cSWETYIraELWXL2HK2gq1kq9kato7tx9azDWwT28y2su1sB9vFdrM9bB9bYBPhjDgTzpQz48w5C86Ss+ZsODvOH2fPOXBOnDPnyrlzHpwX5835cH6cgVMEH+ETfIrP8Dm+wJf4Gt/gO/wP3+MH/ISf8St+xx/4C3/jH/yHD3gR3og34U15M96ct+AteWvehrfj/fH2vAPvxDvzrrw778F78d68D+/HG3hFCBEhIaSEjJATCkJJqAkNoSP8CD1hIEyEmbASdsJBuAg34SF8hED4A50hMp/gkjpnAAAAAElFTkSuQmCC",
+  "base64",
+)
+
 export type FakeComment = { id: string; authorId: string; text: string; createdDate: string; updatedDate: string; taskId: string }
 
 export const ACCOUNT = "IEAAAAAA"
@@ -318,6 +338,7 @@ export function seed(today: string, now: string) {
     })
   }
   const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]))
+  byId.get(TASK.login)!.hasAttachments = true
   for (const child of tasks) for (const parent of child.superTaskIds) byId.get(parent)?.subTaskIds.push(child.id)
 
   const minutesAgo = (minutes: number) => new Date(new Date(now).getTime() - minutes * 60_000).toISOString().replace(/\.\d+Z$/, "Z")
@@ -412,7 +433,15 @@ export function seed(today: string, now: string) {
     ],
   }
 
-  return { contacts, workflows, spaces, spaceWorkflows, folders, tasks, comments, inbox, history }
+  // The response shape of GET /tasks/{id}/attachments, newest first. A linked file has no size.
+  const attachments: FakeAttachment[] = [
+    { id: "IEAAAAAAIYAAAA04", authorId: RILEY, name: "Login flow notes", createdDate: minutesAgo(60), version: 1, type: "Google", contentType: "application/vnd.google-apps.document", taskId: TASK.login },
+    { id: "IEAAAAAAIYAAAA03", authorId: PAT, name: "whiteboard.jpg", createdDate: minutesAgo(60 * 2), version: 1, type: "Wrike", contentType: "image/jpeg", size: 2_310_442, taskId: TASK.login, width: 4032, height: 3024 },
+    { id: "IEAAAAAAIYAAAA02", authorId: PAT, name: "har-capture.txt", createdDate: minutesAgo(60 * 3 + 1), version: 2, type: "Wrike", contentType: "text/plain", size: 48_213, taskId: TASK.login },
+    { id: "IEAAAAAAIYAAAA01", authorId: PAT, name: "callback-loop.png", createdDate: minutesAgo(60 * 3 + 2), version: 1, type: "Wrike", contentType: "image/png", size: 182_734, taskId: TASK.login, width: 1440, height: 960 },
+  ]
+
+  return { contacts, workflows, spaces, spaceWorkflows, folders, tasks, comments, inbox, history, attachments }
 }
 
 export type FakeData = ReturnType<typeof seed>

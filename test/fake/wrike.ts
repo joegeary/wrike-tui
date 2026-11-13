@@ -1,5 +1,5 @@
 import type { Fetch } from "../../src/wrike/transport"
-import { ME, seed, type FakeData, type FakeTask } from "./data"
+import { ME, PREVIEW_PNG, seed, type FakeData, type FakeTask } from "./data"
 
 export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
 type Failure = { method?: string; path: string; status: number; times: number; retryAfter?: string }
@@ -218,11 +218,13 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       return json({ kind: "folders", data: data.folders.filter((folder) => ids.includes(folder.id)) })
     }
 
-    const taskPath = /^\/tasks\/([^/]+)(\/comments)?$/.exec(path)
+    const taskPath = /^\/tasks\/([^/]+)(\/comments|\/attachments)?$/.exec(path)
     if (taskPath) {
       const task = data.tasks.find((candidate) => candidate.id === taskPath[1])
       if (!task) return wrikeError(404, "resource_not_found", "Task not found")
-      if (!taskPath[2]) {
+      if (taskPath[2] === "/attachments") {
+        if (method === "GET") return json({ kind: "attachments", data: data.attachments.filter((attachment) => attachment.taskId === task.id) })
+      } else if (!taskPath[2]) {
         if (method === "GET") return json({ kind: "tasks", data: [task] })
         if (method === "PUT") return updateTask(task, form)
       } else {
@@ -243,6 +245,19 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
           return json({ kind: "comments", data: [comment] })
         }
       }
+    }
+    const attachmentPath = /^\/attachments\/([^/]+)\/(preview|url)$/.exec(path)
+    if (attachmentPath && method === "GET") {
+      const attachment = data.attachments.find((candidate) => candidate.id === attachmentPath[1])
+      if (!attachment) return wrikeError(404, "resource_not_found", "Attachment not found")
+      if (attachmentPath[2] === "url") {
+        const url = `https://storage.example.test/attachments/${attachment.id}/${encodeURIComponent(attachment.name)}?signature=fake-${attachment.version}`
+        return json({ kind: "url", data: [{ url }] })
+      }
+      if (!attachment.contentType?.startsWith("image/")) return wrikeError(404, "resource_not_found", "Preview not available")
+      // The JPEG stands for an image the terminal cannot decode: its preview bytes are not a PNG.
+      const body = attachment.contentType === "image/png" ? PREVIEW_PNG : Buffer.from("not an image")
+      return new Response(body, { headers: { "Content-Type": "image/png" } })
     }
     const commentPath = /^\/comments\/([^/]+)$/.exec(path)
     if (commentPath && method === "PUT") {

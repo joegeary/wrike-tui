@@ -1,8 +1,9 @@
 import { z } from "zod"
-import { commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
+import { attachmentId, commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId, type FolderId, type SpaceId } from "../domain/ids"
 import {
   IMPORTANCES,
   STATUS_GROUPS,
+  type Attachment,
   type Comment,
   type Contact,
   type InboxEntry,
@@ -64,6 +65,30 @@ export const TaskSchema = z
 export const CommentSchema = z
   .object({ id: z.string(), authorId: z.string(), text: z.string(), createdDate: z.string() })
   .transform((wire): Comment => ({ ...wire, id: commentId(wire.id), authorId: userId(wire.authorId) }))
+
+export const AttachmentSchema = z
+  .object({
+    id: z.string(),
+    authorId: z.string(),
+    name: z.string(),
+    createdDate: z.string(),
+    type: z.string().default("Wrike"),
+    contentType: z.string().nullish(),
+    size: z.number().nullish(),
+  })
+  .transform(
+    (wire): Attachment => ({
+      id: attachmentId(wire.id),
+      name: wire.name,
+      storage: wire.type,
+      contentType: wire.contentType ?? null,
+      size: wire.size ?? null,
+      authorId: userId(wire.authorId),
+      createdDate: wire.createdDate,
+    }),
+  )
+
+export const AttachmentUrlSchema = z.object({ url: z.string() })
 
 export const ContactSchema = z.object({
   id: z.string(),

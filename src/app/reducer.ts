@@ -33,6 +33,7 @@ import {
   submitCompose,
   toggleHistory,
 } from "./reduce/comments"
+import { openAttachment, previewLoaded } from "./reduce/attachments"
 import { favorite, favoriteMove, navOpen, navToggle } from "./reduce/nav"
 import { choiceToggle, closeEditor, detailsLoaded, onLink, onTask, openField, submitEditText, submitTaskPicker, taskSaved } from "./reduce/task"
 import { currentList, mentionSuggestions, navRowsOf, openTask, pickerOptions } from "./selectors"
@@ -105,6 +106,9 @@ function step(state: State, action: Action): Update {
     case "history-loaded":
       return historyLoaded(state, action)
 
+    case "preview-loaded":
+      return previewLoaded(state, action)
+
     case "task-saved":
       return taskSaved(state, action)
 
@@ -173,6 +177,8 @@ function step(state: State, action: Action): Update {
       return olderHistory(state)
     case "edit-comment":
       return editComment(state)
+    case "open-attachment":
+      return openAttachment(state)
     case "delete-comment":
       return deleteComment(state)
     case "mention-pick":

@@ -68,6 +68,26 @@ export function stamp(ts: string): string {
   return `${MONTHS[date.getMonth()]} ${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+const KINDS: Record<string, string> = { "application/pdf": "PDF", "text/plain": "text", "text/csv": "CSV", "application/zip": "ZIP archive" }
+
+/** What a file is, for the attachments list: a linked file names its service, and an upload its type. */
+export function fileKind(file: { name: string; storage: string; contentType: string | null }): string {
+  if (file.storage !== "Wrike") return file.storage
+  const type = file.contentType ?? ""
+  if (KINDS[type]) return KINDS[type]
+  const [family, subtype] = type.split("/")
+  if (family === "image" && subtype) return `${subtype.toUpperCase()} image`
+  const extension = /\.([a-z0-9]{1,8})$/i.exec(file.name)?.[1]
+  return extension ? `${extension.toUpperCase()} file` : "file"
+}
+
+/** Bytes as `840 B`, `48 KB` or `2.3 MB`. */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 /** Time left as `m:ss`, rounded up so it reads `0:01` until the very end. */
 export function countdown(ms: number): string {
   const seconds = Math.max(0, Math.ceil(ms / 1000))

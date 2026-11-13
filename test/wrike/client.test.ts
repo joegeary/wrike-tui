@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId } from "../../src/domain/ids"
+import { attachmentId, commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId } from "../../src/domain/ids"
 import { describeChange } from "../../src/domain/history"
 import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
@@ -294,6 +294,27 @@ describe("inbox over MCP", () => {
     await expect(client.inbox({ includeRead: false })).rejects.toMatchObject({ error: { kind: "invalid", message: "The Inbox tool failed: Item not accessible" } })
     fake.data.inbox[0]!.commentText = "We hit the rate limit again"
     expect((await client.inbox({ includeRead: false }))[0]!.commentText).toBe("We hit the rate limit again")
+  })
+})
+
+describe("attachments", () => {
+  test("a task's files come oldest first, a linked one without a size", async () => {
+    const files = await client.attachments(taskId(TASK.login))
+    expect(files.map((file) => [file.name, file.storage, file.contentType, file.size])).toEqual([
+      ["callback-loop.png", "Wrike", "image/png", 182_734],
+      ["har-capture.txt", "Wrike", "text/plain", 48_213],
+      ["whiteboard.jpg", "Wrike", "image/jpeg", 2_310_442],
+      ["Login flow notes", "Google", "application/vnd.google-apps.document", null],
+    ])
+    expect(files[0]).toMatchObject({ id: "IEAAAAAAIYAAAA01", authorId: PAT })
+    expect(await client.attachments(taskId(TASK.sso))).toEqual([])
+  })
+
+  test("a preview is the PNG's bytes, and a link is Wrike's signed URL", async () => {
+    const png = await client.attachmentPreview(attachmentId("IEAAAAAAIYAAAA01"))
+    expect([...png.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+    expect(await client.attachmentUrl(attachmentId("IEAAAAAAIYAAAA02"))).toBe("https://storage.example.test/attachments/IEAAAAAAIYAAAA02/har-capture.txt?signature=fake-2")
+    await expect(client.attachmentPreview(attachmentId("IEAAAAAAIYNOPE01"))).rejects.toMatchObject({ error: { kind: "not_found" } })
   })
 })
 

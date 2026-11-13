@@ -2,8 +2,9 @@ import { commentBody, editableComment, editWindowLeft, followEdit, refindMention
 import type { CommentId, TaskId } from "../../domain/ids"
 import type { Comment } from "../../domain/model"
 import { describeError } from "../../wrike/errors"
-import { contactName, detailsItems, mentionName, mentionSuggestions, openTask, sameItem, selectedComment } from "../selectors"
+import { contactName, detailsItems, mentionName, mentionSuggestions, openTask, sameItem, selectedAttachment, selectedComment } from "../selectors"
 import type { Action, Compose, State, Update } from "../state"
+import { withPreview } from "./attachments"
 import { clamp, failure, info } from "./core"
 import { loadHistory, needsHistory } from "./load"
 
@@ -13,10 +14,11 @@ const EMPTY = "Write the comment first, or press Esc to discard"
 export function selectItem(state: State, by: 1 | -1): Update {
   if (state.details.state !== "ready") return [state, []]
   const items = detailsItems(state.details.value)
-  if (items.length === 0) return [{ ...state, flash: info("This task has no comments yet") }, []]
+  if (items.length === 0) return [{ ...state, flash: info("This task has no attachments or comments yet") }, []]
   const at = items.findIndex((item) => sameItem(item, state.selected))
   const next = at < 0 ? (by === 1 ? 0 : items.length - 1) : clamp(at + by, items.length)
-  return [{ ...state, selected: items[next]! }, []]
+  const selected: State = { ...state, selected: items[next]! }
+  return withPreview(selected, selectedAttachment(selected))
 }
 
 /** `H`: field history among the comments, or not. Turning it on fetches the open task's history if it was never fetched. */

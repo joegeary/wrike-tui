@@ -8,6 +8,7 @@ export type CustomStatusId = Brand<string, "CustomStatusId">
 export type SpaceId = Brand<string, "SpaceId">
 export type FolderId = Brand<string, "FolderId">
 export type CommentId = Brand<string, "CommentId">
+export type AttachmentId = Brand<string, "AttachmentId">
 
 export const taskId = (raw: string) => raw as TaskId
 export const userId = (raw: string) => raw as UserId
@@ -15,6 +16,7 @@ export const customStatusId = (raw: string) => raw as CustomStatusId
 export const spaceId = (raw: string) => raw as SpaceId
 export const folderId = (raw: string) => raw as FolderId
 export const commentId = (raw: string) => raw as CommentId
+export const attachmentId = (raw: string) => raw as AttachmentId
 
 /** Accepts a bare number or the MCP form `w:itm:4598459124`. */
 export function legacyItemId(raw: string): LegacyItemId | null {

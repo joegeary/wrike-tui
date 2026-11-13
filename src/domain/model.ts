@@ -1,4 +1,4 @@
-import type { CommentId, CustomStatusId, LegacyItemId, TaskId, UserId } from "./ids"
+import type { AttachmentId, CommentId, CustomStatusId, LegacyItemId, TaskId, UserId } from "./ids"
 
 export const STATUS_GROUPS = ["Active", "Completed", "Deferred", "Cancelled"] as const
 export type StatusGroup = (typeof STATUS_GROUPS)[number]
@@ -39,6 +39,24 @@ export type Task = {
 }
 
 export type Comment = { id: CommentId; authorId: UserId; text: string; createdDate: string }
+
+/**
+ * A file on a task. `storage` is where it lives: "Wrike" for an upload, or a
+ * service such as "Google" or "Box" for a linked file. Size and content type
+ * are missing for some linked files.
+ */
+export type Attachment = {
+  id: AttachmentId
+  name: string
+  storage: string
+  contentType: string | null
+  size: number | null
+  authorId: UserId
+  createdDate: string
+}
+
+/** Wrike draws a thumbnail for an image it stores. */
+export const hasPreview = (attachment: Attachment) => attachment.storage === "Wrike" && (attachment.contentType?.startsWith("image/") ?? false)
 
 /** A deactivated person keeps a name, because old tasks still name them. Pickers offer active people only. */
 export type Contact = { id: UserId; name: string; email: string | null; active: boolean }

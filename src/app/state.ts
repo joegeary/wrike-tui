@@ -1,9 +1,9 @@
 import type { Profile } from "../auth/profile"
 import type { CommentBody, Mention } from "../domain/comment"
 import type { HistoryEntry, HistoryPage } from "../domain/history"
-import type { CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
+import type { AttachmentId, CommentId, LegacyItemId, SpaceId, TaskId, UserId } from "../domain/ids"
 import type { ListSpec } from "../domain/list"
-import type { Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
+import type { Attachment, Comment, Contact, InboxEntry, Task, Workflow } from "../domain/model"
 import type { TaskPatch } from "../domain/patch"
 import type { Scope, ScopeKey } from "../domain/scope"
 import type { Settings, ThemeName } from "../domain/settings"
@@ -86,10 +86,10 @@ export type Compose = {
   dismissed: number | null
 }
 
-export type Details = { task: Task; comments: Comment[]; folders: string[] }
+export type Details = { task: Task; attachments: Attachment[]; comments: Comment[]; folders: string[] }
 
-/** Something in the details pane that `]` and `[` step through, in the order the pane draws it. Attachments join this union. */
-export type DetailsItem = { kind: "comment"; id: CommentId }
+/** Something in the details pane that `]` and `[` step through, in the order the pane draws it: the attachments, then the comments. */
+export type DetailsItem = { kind: "attachment"; id: AttachmentId } | { kind: "comment"; id: CommentId }
 export type Clock = { now: string; today: string }
 export type Flash = { tone: "info" | "error"; text: string }
 
@@ -125,6 +125,8 @@ export type State = {
   selected: DetailsItem | null
   /** Field history by task, kept for the session. Pages arrive newest first, so `next` asks for older changes. */
   histories: ReadonlyMap<TaskId, Paged<HistoryEntry>>
+  /** Thumbnails of image attachments, fetched the first time one is selected and kept in memory for the session. */
+  previews: ReadonlyMap<AttachmentId, Loadable<Uint8Array>>
   contacts: Map<UserId, Contact>
   workflows: Workflow[]
   /** Space workflows load once, the first time a task's status is not in the account workflows. */
@@ -159,6 +161,9 @@ export type Effect =
   | { kind: "load-tree"; request: number; space: SpaceId; cached: boolean }
   | { kind: "load-details"; request: number; target: OpenTarget }
   | { kind: "load-history"; request: number; taskId: TaskId; item: LegacyItemId; pageToken: string | null }
+  | { kind: "load-preview"; id: AttachmentId }
+  /** Asks Wrike for a signed link to the file and hands it to the browser. */
+  | { kind: "open-attachment"; id: AttachmentId; name: string }
   | { kind: "update-task"; taskId: TaskId; patch: TaskPatch; done: string }
   | { kind: "save-comment"; taskId: TaskId; editing: CommentId | null; body: CommentBody }
   | { kind: "delete-comment"; taskId: TaskId; id: CommentId }
@@ -212,6 +217,7 @@ export type Intent =
   | { type: "toggle-history" }
   | { type: "older-history" }
   | { type: "edit-comment" }
+  | { type: "open-attachment" }
   | { type: "delete-comment" }
   | { type: "mention-pick" }
   | { type: "mention-close" }
@@ -245,6 +251,7 @@ export type Action =
   | { type: "tree-loaded"; space: SpaceId; request: number; from: "cache" | "wrike"; result: Result<SpaceTree> }
   | { type: "details-loaded"; request: number; result: Result<Details> }
   | { type: "history-loaded"; taskId: TaskId; request: number; more: boolean; result: Result<HistoryPage> }
+  | { type: "preview-loaded"; id: AttachmentId; result: Result<Uint8Array> }
   | { type: "task-saved"; done: string; result: Result<Task> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
@@ -301,6 +308,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     details: { state: "idle" },
     selected: null,
     histories: new Map(),
+    previews: new Map(),
     contacts: new Map(),
     workflows: [],
     spaceWorkflows: "unloaded",

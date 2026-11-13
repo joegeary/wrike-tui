@@ -1,6 +1,6 @@
 import { GROUP_KEYS, SORT_KEYS, type GroupKey, type SortKey } from "../domain/list"
 import { THEME_NAMES, type ThemeName } from "../domain/settings"
-import { currentView, mentionSuggestions, MULTI_PICKERS, navCursorRow, openHistory, selectedComment } from "./selectors"
+import { currentView, mentionSuggestions, MULTI_PICKERS, navCursorRow, openHistory, selectedAttachment, selectedComment } from "./selectors"
 import type { Action, State } from "./state"
 
 export type Context = "global" | "nav" | "list" | "task" | "details" | "edit" | "picker" | "text" | "mention" | "compose" | "confirm" | "palette" | "help"
@@ -33,7 +33,9 @@ const THEME_LABELS: Record<ThemeName, string> = { terminal: "terminal colors", d
 const inTasks = (state: State) => state.scope.kind !== "inbox"
 const inInbox = (state: State) => state.scope.kind === "inbox"
 const onFavorite = (state: State) => navCursorRow(state)?.kind === "favorite"
-const selecting = (state: State) => selectedComment(state) !== null
+const onComment = (state: State) => selectedComment(state) !== null
+const onAttachment = (state: State) => selectedAttachment(state) !== null
+const selecting = (state: State) => onComment(state) || onAttachment(state)
 const suggesting = (state: State) => mentionSuggestions(state) !== null
 const editingComment = (state: State) => state.mode.kind === "compose" && state.mode.editing !== null
 const olderHistory = (state: State) => {
@@ -77,11 +79,16 @@ export const COMMANDS: Command[] = [
   command("details.up", "Scroll up", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "up" })),
   command("details.top", "Scroll to the top", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "top" })),
   command("details.bottom", "Scroll to the bottom", "Navigate", ["details"], () => ({ type: "scroll", pane: "details", to: "bottom" })),
-  command("details.next", "Select the next comment", "Navigate", ["details"], () => ({ type: "select", by: 1 }), { keywords: ["comments"] }),
-  command("details.previous", "Select the previous comment", "Navigate", ["details"], () => ({ type: "select", by: -1 }), { keywords: ["comments"] }),
+  command("details.next", "Select the next item", "Navigate", ["details"], () => ({ type: "select", by: 1 }), { keywords: ["comments", "attachments", "files"] }),
+  command("details.previous", "Select the previous item", "Navigate", ["details"], () => ({ type: "select", by: -1 }), { keywords: ["comments", "attachments", "files"] }),
   command("details.unselect", "Clear the selection", "Navigate", ["details"], () => ({ type: "unselect" }), { when: selecting, hint: "unselect" }),
-  command("comment.edit", "Edit the comment", "Task", ["details"], () => ({ type: "edit-comment" }), { when: selecting, hint: "edit comment" }),
-  command("comment.delete", "Delete the comment", "Task", ["details"], () => ({ type: "delete-comment" }), { when: selecting, hint: "delete" }),
+  // Enter acts on whatever is selected, so one command holds the key for both kinds.
+  command("details.act", "Open or edit the selection", "Task", ["details"], (state) => (onAttachment(state) ? { type: "open-attachment" } : { type: "edit-comment" }), {
+    when: selecting,
+    hint: (state) => (onAttachment(state) ? "open" : "edit comment"),
+    keywords: ["attachment", "comment", "browser"],
+  }),
+  command("comment.delete", "Delete the comment", "Task", ["details"], () => ({ type: "delete-comment" }), { when: onComment, hint: "delete" }),
 
   command("inbox.read", "Toggle read notifications", "List", ["list"], () => ({ type: "toggle-read" }), { when: inInbox, hint: "read" }),
   command("list.toggle", "Open or close the row", "List", ["list"], () => ({ type: "toggle-row" }), { when: inTasks, keywords: ["subtasks", "group", "expand", "collapse"] }),

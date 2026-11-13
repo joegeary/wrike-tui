@@ -125,3 +125,51 @@ describe("Field history", () => {
     expect(historyCalls().map((call) => call.arguments.nextPageToken !== undefined)).toEqual([false, true])
   })
 })
+
+describe("Attachments", () => {
+  const SHOT_URL = "https://storage.example.test/attachments/IEAAAAAAIYAAAA01/callback-loop.png?signature=fake-1"
+
+  test("list each file with its kind, size, author and date, above the comments", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    const frame = await app.see("Attachments (4)")
+    const lines = frame.split("\n").map((line) => line.split("│").at(-2)?.trim() ?? "")
+    const at = lines.indexOf("Attachments (4)")
+    expect(lines.slice(at + 1, at + 6)).toEqual([
+      "callback-loop.png  PNG image  178 KB  Pat Example  Nov 12 12:58",
+      "har-capture.txt  text  47 KB  Pat Example  Nov 12 12:59",
+      "whiteboard.jpg  JPEG image  2.2 MB  Pat Example  Nov 12 14:00",
+      "Login flow notes  Google  Riley Demo  Nov 12 15:00",
+      "",
+    ])
+    expect(at).toBeLessThan(lines.findIndex((line) => line.startsWith("Comments (1)")))
+    expect(app.fake.requests.filter((line) => line.includes("/attachments/"))).toEqual([])
+  })
+
+  test("] selects the first file and draws its thumbnail, and Enter opens it through Wrike's signed link", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    await app.press("]")
+    const selected = await app.see(/┃callback-loop\.png/, "Enter open", /[▀▄█]/)
+    expect(selected).not.toContain("Loading the preview")
+    await app.press("enter")
+    await app.see("Opening callback-loop.png in the browser")
+    expect(app.outside.opened).toEqual([SHOT_URL])
+    expect(app.fake.requests.filter((line) => line.includes("/attachments/"))).toEqual([
+      "GET /api/v4/attachments/IEAAAAAAIYAAAA01/preview",
+      "GET /api/v4/attachments/IEAAAAAAIYAAAA01/url",
+    ])
+  })
+
+  test("a text file has no thumbnail, an image the terminal cannot draw says so, and ] goes on to the comments", async () => {
+    app = await openApp(WIDE)
+    await openLogin()
+    await app.press("]", "]")
+    await app.see(/┃har-capture\.txt/)
+    await app.press("]")
+    await app.see(/┃whiteboard\.jpg/, "This preview cannot be drawn here. Enter opens the file.")
+    await app.press("]", "]")
+    await app.see(/┃Pat Example/, "Enter edit comment")
+    expect(app.fake.requests.filter((line) => line.endsWith("/preview"))).toEqual(["GET /api/v4/attachments/IEAAAAAAIYAAAA01/preview", "GET /api/v4/attachments/IEAAAAAAIYAAAA03/preview"])
+  })
+})

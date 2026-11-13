@@ -164,3 +164,18 @@ describe("read-only mode", () => {
     expect(describeError({ kind: "read_only" })).toBe("read-only mode: not saved")
   })
 })
+
+describe("bytes", () => {
+  test("a file comes back as its bytes, with the token sent and a 429 waited out", async () => {
+    const { transport, calls, sleeps } = transportWith([failure(429), new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } })])
+    expect([...(await transport.bytes("/attachments/A1/preview"))]).toEqual([137, 80, 78, 71])
+    expect(calls.map((call) => call.url)).toEqual(["https://www.wrike.com/api/v4/attachments/A1/preview", "https://www.wrike.com/api/v4/attachments/A1/preview"])
+    expect(calls[1]!.init.headers).toMatchObject({ Authorization: "bearer secret" })
+    expect(sleeps).toHaveLength(1)
+  })
+
+  test("a failed download is the same error as any other call", async () => {
+    const { transport } = transportWith([failure(404, { error: "resource_not_found", errorDescription: "Attachment not found" })])
+    expect(await errorOf(transport.bytes("/attachments/A1/preview"))).toEqual({ kind: "not_found" })
+  })
+})
