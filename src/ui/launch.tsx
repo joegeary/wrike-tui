@@ -10,7 +10,7 @@ import { keepClock } from "../app/ticker"
 import { localDay } from "../domain/dates"
 import { createPersistence, persistencePaths } from "../persist/persistence"
 import { createWrikeClient } from "../wrike/client"
-import { createInboxSource } from "../wrike/inbox"
+import { createMcpClient } from "../wrike/mcp"
 import { createTransport } from "../wrike/transport"
 import { App } from "./App"
 import { createBridge } from "./bridge"
@@ -28,8 +28,8 @@ function systemClock(): Clock {
 export async function launch(session: Session, env: Env): Promise<void> {
   const { token } = session.token
   const readOnly = isReadOnly(env)
-  const inbox = createInboxSource({ url: session.endpoints.mcpUrl, token })
-  const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token, readOnly }), inbox)
+  const mcp = createMcpClient({ url: session.endpoints.mcpUrl, token })
+  const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token, readOnly }), mcp)
   const persistence = createPersistence(persistencePaths(env, session.profile.accountId))
   const boot = await loadBoot(persistence, { readOnly, restore: !skipsRestore(env) })
 
@@ -67,5 +67,5 @@ export async function launch(session: Session, env: Env): Promise<void> {
   stopClock()
   await saveSession().catch(() => {})
   // Ending the MCP session is a courtesy, and an unreachable server must not hold the exit.
-  await Promise.race([inbox.close(), new Promise((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS))])
+  await Promise.race([mcp.close(), new Promise((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS))])
 }

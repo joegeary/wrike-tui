@@ -3,6 +3,7 @@ import { ME, seed, type FakeData, type FakeTask } from "./data"
 
 export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
 type Failure = { method?: string; path: string; status: number; times: number; retryAfter?: string }
+type ToolFailure = { tool: string; text: string; isError: boolean; times: number }
 
 export type FakeWrike = {
   data: FakeData
@@ -14,6 +15,8 @@ export type FakeWrike = {
   fetch: Fetch
   /** Makes the next `times` requests whose path starts with `path` fail with `status`. A 429 can carry a `Retry-After` header. */
   fail(failure: { method?: string; path: string; status: number; times?: number; retryAfter?: string }): void
+  /** Makes the next `times` calls of an MCP tool answer with `text` instead of JSON, the way Wrike reports a rate limit. */
+  failTool(failure: { tool: string; text: string; isError?: boolean; times?: number }): void
   /** Drops every failure still waiting, so the fake answers normally again. */
   heal(): void
 }
@@ -44,6 +47,7 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
   const writes: RecordedWrite[] = []
   const requests: string[] = []
   const failures: Failure[] = []
+  const toolFailures: ToolFailure[] = []
   let sequence = 0
   const stamp = options.stamp ?? realTime
   const storedText = (form: URLSearchParams) => {
@@ -273,6 +277,12 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
       case "tools/list":
         return result({ tools: [{ name: "get_my_inbox", description: "Inbox notifications", inputSchema: { type: "object" } }] })
       case "tools/call": {
+        const failure = toolFailures.find((candidate) => candidate.tool === message.params?.name)
+        if (failure) {
+          failure.times -= 1
+          if (failure.times <= 0) toolFailures.splice(toolFailures.indexOf(failure), 1)
+          return result({ ...(failure.isError ? { isError: true } : {}), content: [{ type: "text", text: failure.text }] })
+        }
         if (message.params?.name !== "get_my_inbox") {
           return result({ isError: true, content: [{ type: "text", text: `Unknown tool ${message.params?.name}` }] })
         }
@@ -313,6 +323,10 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
     handle,
     fetch: (input, init) => handle(new Request(input, init)),
     fail: (failure) => void failures.push({ times: 1, ...failure }),
-    heal: () => void failures.splice(0),
+    failTool: (failure) => void toolFailures.push({ isError: false, times: 1, ...failure }),
+    heal: () => {
+      failures.splice(0)
+      toolFailures.splice(0)
+    },
   }
 }

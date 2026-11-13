@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { commentId, customStatusId, folderId, legacyItemId, spaceId, taskId, userId } from "../../src/domain/ids"
 import { createWrikeClient, type WrikeClient } from "../../src/wrike/client"
 import { WrikeFailure } from "../../src/wrike/errors"
-import { createInboxSource } from "../../src/wrike/inbox"
+import { createMcpClient } from "../../src/wrike/mcp"
 import { createTransport } from "../../src/wrike/transport"
 import { ME, PAT, RILEY, STATUS, TASK } from "../fake/data"
 import { BIG_FOLDER, FOLDER, SPACE } from "../fake/workspace"
@@ -14,7 +14,7 @@ let client: WrikeClient
 function clientFor(token: string): WrikeClient {
   return createWrikeClient(
     createTransport({ baseUrl: "http://fake.test/api/v4", token, fetch: fake.fetch, sleep: async () => {} }),
-    createInboxSource({ url: "http://fake.test/mcp", token, fetch: fake.fetch }),
+    createMcpClient({ url: "http://fake.test/mcp", token, fetch: fake.fetch }),
   )
 }
 
@@ -272,6 +272,27 @@ describe("inbox over MCP", () => {
     fake.fail({ path: "/mcp", status: 500 })
     await expect(client.inbox({ includeRead: false })).rejects.toBeInstanceOf(WrikeFailure)
     expect(await client.inbox({ includeRead: false })).toHaveLength(6)
+  })
+
+  test("a rate limit told in the tool's text is rate_limited, flagged as an error or not", async () => {
+    fake.failTool({ tool: "get_my_inbox", text: "Rate limit exceeded. Try again in 60 seconds." })
+    await expect(client.inbox({ includeRead: false })).rejects.toMatchObject({ error: { kind: "rate_limited" } })
+    fake.failTool({ tool: "get_my_inbox", text: "Rate limit exceeded", isError: true })
+    await expect(client.inbox({ includeRead: false })).rejects.toMatchObject({ error: { kind: "rate_limited" } })
+    expect(await client.inbox({ includeRead: false })).toHaveLength(6)
+  })
+
+  test("an HTTP 429 from the MCP server is rate_limited", async () => {
+    await client.inbox({ includeRead: false })
+    fake.fail({ path: "/mcp", status: 429 })
+    await expect(client.inbox({ includeRead: false })).rejects.toMatchObject({ error: { kind: "rate_limited" } })
+  })
+
+  test("any other failed tool is invalid with Wrike's words, and JSON that mentions a rate limit is still data", async () => {
+    fake.failTool({ tool: "get_my_inbox", text: "Item not accessible", isError: true })
+    await expect(client.inbox({ includeRead: false })).rejects.toMatchObject({ error: { kind: "invalid", message: "The Inbox tool failed: Item not accessible" } })
+    fake.data.inbox[0]!.commentText = "We hit the rate limit again"
+    expect((await client.inbox({ includeRead: false }))[0]!.commentText).toBe("We hit the rate limit again")
   })
 })
 

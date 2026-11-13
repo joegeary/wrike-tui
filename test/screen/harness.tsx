@@ -12,7 +12,7 @@ import { createBridge } from "../../src/ui/bridge"
 import { loadBoot, sessionSaver } from "../../src/app/session"
 import { createPersistence, persistencePaths } from "../../src/persist/persistence"
 import { createWrikeClient } from "../../src/wrike/client"
-import { createInboxSource } from "../../src/wrike/inbox"
+import { createMcpClient } from "../../src/wrike/mcp"
 import { createTransport } from "../../src/wrike/transport"
 import { ME } from "../fake/data"
 import { createFakeWrike } from "../fake/wrike"
@@ -43,10 +43,10 @@ export async function openApp(size: { width: number; height: number } = { width:
   const home = options.home ?? (await mkdtemp(join(tmpdir(), "wrike-tui-screen-")))
   const paths = persistencePaths({ XDG_CONFIG_HOME: join(home, "config"), XDG_STATE_HOME: join(home, "state"), XDG_CACHE_HOME: join(home, "cache") }, "IEAAAAAA")
   const persistence = createPersistence(paths)
-  const inbox = createInboxSource({ url: "http://fake.test/mcp", token: TOKEN, fetch: fake.fetch })
+  const mcp = createMcpClient({ url: "http://fake.test/mcp", token: TOKEN, fetch: fake.fetch })
   const client = createWrikeClient(
     createTransport({ baseUrl: "http://fake.test/api/v4", token: TOKEN, fetch: fake.fetch, sleep: async () => {}, readOnly: options.readOnly ?? false }),
-    inbox,
+    mcp,
   )
   const bridge = createBridge()
   const outside = { opened: [] as string[], copied: [] as string[], quit: false, editor: ((initial) => initial) as Editor, edited: [] as { initial: string; extension: string }[] }
@@ -151,7 +151,7 @@ export async function openApp(size: { width: number; height: number } = { width:
       await store.idle()
       await saveSession()
       await screen.dispose()
-      await inbox.close()
+      await mcp.close()
       if (!options.home) await rm(home, { recursive: true, force: true })
     },
   }

@@ -54,7 +54,8 @@ export type TaskPage = { tasks: Task[]; next: string | null }
 
 export const PAGE_SIZE = 200
 
-export type InboxSource = Pick<WrikeClient, "inbox"> & { close(): Promise<void> }
+/** The calls that go to Wrike's MCP server, and the end of its session. */
+export type McpClient = Pick<WrikeClient, "inbox"> & { close(): Promise<void> }
 
 // A task list omits these unless asked, and the app's Task always carries them.
 const LIST_FIELDS = ["responsibleIds", "parentIds", "description", "subTaskIds", "superTaskIds"]
@@ -85,7 +86,7 @@ export async function fetchMe(transport: Transport): Promise<Me> {
   }
 }
 
-export function createWrikeClient(transport: Transport, inboxSource: InboxSource): WrikeClient {
+export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeClient {
   const spaces = async () => parseAll(SpaceSchema, await transport.request("GET", "/spaces"), "spaces")
 
   const one = <T>(items: T[]): T => {
@@ -179,7 +180,7 @@ export function createWrikeClient(transport: Transport, inboxSource: InboxSource
       return folders.map((folder) => folder.title)
     },
 
-    inbox: (options) => inboxSource.inbox(options),
+    inbox: (options) => mcp.inbox(options),
   }
 }
 
