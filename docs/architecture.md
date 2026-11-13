@@ -361,8 +361,12 @@ existed. A draft with one is escaped HTML, newlines become `<br />`, and each
 mention becomes Wrike's anchor. Only a mention picked from the list is an
 anchor, so an `@name` typed by hand stays text. `followEdit` moves the
 mentions with each edit of the draft, and drops one the edit touched.
-`refindMentions` finds them again, in order, in text that comes back from
-the editor.
+`refindMentions` finds them again in text that comes back from the editor:
+each name binds its picks to its places in document order, longer names
+first, and only where the name does not run on into a longer word. When two
+people picked under one name no longer match the count of that name in the
+text, nothing says who is still meant, so neither stays a mention, the box
+stays open with the editor's text, and the status bar asks to pick again.
 
 `editableComment(html)` gives a comment back as text to edit, with mentions as
 `@Full Name`. When the HTML holds anything but text, `<br />` and mentions, it

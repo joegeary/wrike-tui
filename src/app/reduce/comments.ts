@@ -115,6 +115,9 @@ export function composeEditor(state: State): Update {
   return state.mode.kind === "compose" ? [state, [{ kind: "compose-in-editor", draft: state.mode.draft }]] : [state, []]
 }
 
+const unsureMentions = (names: string[]) =>
+  `More than one person named ${names.join(" and ")} was mentioned and the editor removed one, so it is plain text now. Type @ to pick the person again`
+
 /** The editor's text is submitted as if typed. An unchanged or emptied file is a cancel. */
 export function composed(state: State, text: string | null): Update {
   const mode = state.mode
@@ -123,7 +126,9 @@ export function composed(state: State, text: string | null): Update {
     const why = mode.editing === null ? "Comment discarded" : text === null ? "Comment unchanged" : "Edit discarded"
     return [{ ...state, mode: { kind: "browse" }, flash: info(why) }, []]
   }
-  const next: Compose = { ...mode, draft: text, mentions: refindMentions(text, mode.mentions) }
+  const found = refindMentions(text, mode.mentions)
+  const next: Compose = { ...mode, draft: text, mentions: found.mentions }
+  if (found.unsure.length > 0) return [{ ...state, mode: next, flash: info(unsureMentions(found.unsure)) }, []]
   return submitCompose({ ...state, mode: next }, next)
 }
 

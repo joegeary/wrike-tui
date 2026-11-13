@@ -132,17 +132,39 @@ export function followEdit(before: string, after: string, mentions: Mention[]): 
   })
 }
 
-/** Finds the mentions again in text that came back from the editor, in order, each after the one before it. */
-export function refindMentions(text: string, mentions: Mention[]): Mention[] {
-  let from = 0
-  return mentions
-    .toSorted((a, b) => a.at - b.at)
-    .flatMap((mention) => {
-      const at = text.indexOf(mentionText(mention), from)
-      if (at < 0) return []
-      from = at + mentionText(mention).length
-      return [{ ...mention, at }]
+/** Where `@name` stands in `text` as a whole name, one not running on into a longer word. */
+function places(text: string, name: string): number[] {
+  const escaped = `@${name}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return Array.from(text.matchAll(new RegExp(`${escaped}(?![\\p{L}\\p{N}])`, "gu")), (match) => match.index)
+}
+
+/**
+ * Finds the mentions again in text that came back from the editor. Each name
+ * binds its picks to its places in document order, longer names first so
+ * `@Pat` does not take part of `@Pat Example`. When one name stands for
+ * several people and the editor changed how often it appears, there is no
+ * telling who is still meant, so none of them is a mention and the name is
+ * returned as unsure.
+ */
+export function refindMentions(text: string, mentions: Mention[]): { mentions: Mention[]; unsure: string[] } {
+  const found: Mention[] = []
+  const unsure: string[] = []
+  const taken: [number, number][] = []
+  const names = [...new Set(mentions.map((mention) => mention.name))].sort((a, b) => b.length - a.length)
+  for (const name of names) {
+    const picks = mentions.filter((mention) => mention.name === name).toSorted((a, b) => a.at - b.at)
+    const end = (at: number) => at + name.length + 1
+    const free = places(text, name).filter((at) => !taken.some(([from, to]) => at < to && end(at) > from))
+    if (new Set(picks.map((pick) => pick.id)).size > 1 && free.length !== picks.length) {
+      unsure.push(name)
+      continue
+    }
+    free.slice(0, picks.length).forEach((at, index) => {
+      found.push({ ...picks[index]!, at })
+      taken.push([at, end(at)])
     })
+  }
+  return { mentions: found.toSorted((a, b) => a.at - b.at), unsure }
 }
 
 /** The mention being typed at the end of the draft: an `@` at the start or after a space, then at least one letter. */
