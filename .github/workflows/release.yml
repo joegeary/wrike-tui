@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LANG: C.UTF-8
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    # OpenTUI ships a native library per platform, so each binary is built on its own platform, not cross-compiled.
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: linux, arch: x64, runner: ubuntu-24.04 }
+          - { os: linux, arch: arm64, runner: ubuntu-24.04-arm }
+          - { os: darwin, arch: arm64, runner: macos-15 }
+          - { os: darwin, arch: x64, runner: macos-15-intel }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - name: Build
+        run: |
+          echo "WRIKE_TUI_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          WRIKE_TUI_VERSION="${GITHUB_REF_NAME#v}" bun run build
+      - name: Smoke run
+        run: |
+          said="$(./dist/wrike-tui --version)"
+          echo "$said"
+          test "$said" = "wrike-tui ${WRIKE_TUI_VERSION}"
+      - name: Pack
+        run: tar -czf "wrike-tui-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" -C dist wrike-tui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wrike-tui-${{ matrix.os }}-${{ matrix.arch }}
+          path: wrike-tui-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Write SHA256SUMS
+        working-directory: assets
+        run: |
+          sha256sum wrike-tui-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME" assets/*
