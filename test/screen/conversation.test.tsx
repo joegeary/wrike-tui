@@ -166,6 +166,19 @@ describe("Attachments", () => {
     expect(app.fake.requests.filter((line) => line.includes("/attachments/"))).toEqual([])
   })
 
+  test("a failed attachments call leaves the task drawn with a notice, and r lists them", async () => {
+    app = await openApp(WIDE)
+    app.fake.fail({ path: `/api/v4/tasks/${TASK.login}/attachments`, status: 500 })
+    await openLogin()
+    const failed = await app.see(/│ Attachments +│/, /│ Did not load: Wrike failed with 500: Injected failure\. Press r to retry\. +│/)
+    expect(failed).toContain("The session cookie is dropped")
+    expect(failed).toContain("Repro steps attached")
+    expect(failed).not.toContain("callback-loop.png  PNG image")
+    await app.press("r")
+    const listed = await app.see("Attachments (4)", "callback-loop.png  PNG image")
+    expect(listed).not.toContain("Did not load")
+  })
+
   test("] selects the first file and draws its thumbnail, and Enter opens it through Wrike's signed link", async () => {
     app = await openApp(WIDE)
     await openLogin()

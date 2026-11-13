@@ -310,6 +310,11 @@ describe("attachments", () => {
     expect(await client.attachments(taskId(TASK.sso))).toEqual([])
   })
 
+  test("a file Wrike describes in a shape this version cannot read is left out, and the rest are listed", async () => {
+    fake.data.attachments.push({ id: "IEAAAAAAIYAAAA09", authorId: PAT, createdDate: "2026-11-12T10:00:00Z", taskId: TASK.login } as never)
+    expect((await client.attachments(taskId(TASK.login))).map((file) => file.name)).toEqual(["callback-loop.png", "har-capture.txt", "whiteboard.jpg", "Login flow notes"])
+  })
+
   test("a preview is the PNG's bytes, and a link is Wrike's signed URL", async () => {
     const png = await client.attachmentPreview(attachmentId("IEAAAAAAIYAAAA01"))
     expect([...png.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
