@@ -1,3 +1,4 @@
+import type { AgentConfig } from "./agent"
 import { DEFAULT_SPECS, type ListSpec } from "./list"
 import type { TaskScopeKind } from "./scope"
 
@@ -19,6 +20,8 @@ export type Settings = {
   updateCheck: boolean
   /** Keys that replace the defaults, by command ID. Absent from a file that changes none. */
   keys?: KeyOverrides
+  /** How a task is handed to a coding agent, as written. Absent from a file that sets none. */
+  agent?: AgentConfig
 }
 
 /** A command ID to the key, or the list of keys, that replace its default keys. An empty list unbinds the command. */
