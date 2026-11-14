@@ -4,17 +4,14 @@ What wrike-tui does not do yet, and the release each item is expected in.
 Versions are a best guess and move as the work does. What has shipped is in
 the [README](README.md) and the [guide](docs/guide.md).
 
-## 0.3.0
-
-- Builds for Windows.
-- Install scripts: `install.sh` for macOS and Linux, `install.ps1` for
-  Windows.
-- A note in the status bar when a newer release is out.
-
 ## 0.4.0
 
 - Log in through the browser without registering your own app in Wrike's App
   Console. This is being researched.
+- Confirm that Wrike's MCP server, which serves the Inbox and field history,
+  takes an OAuth access token. It names the same login server that
+  wrike-tui's OAuth login uses, so a token is expected to work. It is not yet
+  tested against a live login.
 - Hand a task to a coding agent, with its comments and screenshots. The agent
   starts in a new Herdr tab, or takes over the terminal the way `$EDITOR`
   does.
@@ -47,5 +44,3 @@ These need something Wrike's API does not offer today.
 - Request forms against a live account. They are built and tested against the
   fake server, from Wrike's published tool schemas, because the one live call
   answered with a server error.
-- OAuth with Wrike's MCP server, which serves the Inbox and field history.
-  Whether it takes an OAuth access token is not confirmed.
