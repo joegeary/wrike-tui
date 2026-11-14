@@ -225,7 +225,13 @@ line break inside a paragraph, and one before a list or heading keeps the break
 Wrike stored there. One blank line ends a list or a heading. A space markdown
 would drop, at the end of a line or inside bold, reads `&#32;`.
 
-The editor is `$VISUAL`, then `$EDITOR`, then `vi`.
+The editor is `$VISUAL`, then `$EDITOR`, then `vi`. On Windows the last
+choice is `edit` (Microsoft Edit) when it is on `PATH`, and Notepad otherwise.
+
+wrike-tui reads the file when the editor exits. The Windows 11 Notepad can
+open the file in a tab of a Notepad that is already open and exit at once, and
+then the edit is lost. To use Notepad, close other Notepad windows first, or
+set `EDITOR` to an editor that waits, such as `edit` or `code --wait`.
 
 ## Copy
 

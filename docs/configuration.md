@@ -1,9 +1,10 @@
 # Configuration
 
-Settings live in `$XDG_CONFIG_HOME/wrike-tui/config.json`, which is
-`~/.config/wrike-tui/config.json` unless you set `XDG_CONFIG_HOME`. There is no
-need to create it. Every part is optional, and a missing part takes its
-default.
+Settings live in `config.json` in the config folder:
+`~/.config/wrike-tui/config.json` on Linux and macOS, and
+`%APPDATA%\wrike-tui\config.json` on Windows. `XDG_CONFIG_HOME` moves it on
+every platform. There is no need to create it. Every part is optional, and a
+missing part takes its default.
 
 wrike-tui writes to the file too. "Save as default" in the `:` palette writes
 the theme, the field history setting and a list's shaping, and
@@ -18,6 +19,7 @@ the file.
   "navWidth": 36,
   "completed": false,
   "history": true,
+  "updateCheck": true,
   "lists": {
     "todo": { "group": "importance" },
     "folder": { "group": "assignee", "columns": ["importance", "title", "status", "due"] }
@@ -39,6 +41,7 @@ the file.
 | `navWidth` | `30` | The width of the navigation pane, in columns, from 16 to 60. |
 | `completed` | `false` | Whether a list starts with completed, cancelled and deferred tasks in. A list's own default wins, and search shows them unless its own default says otherwise. |
 | `history` | `true` | Whether field history shows among the comments. `H` turns it on and off until you quit. |
+| `updateCheck` | `true` | Whether a release binary asks GitHub once a day for a newer release and says so in the status bar. See [install.md](install.md#update). |
 | `lists` | none | The shaping each kind of list starts with. See [Lists](#lists). |
 | `keys` | none | Keys that replace the defaults. See [keys.md](keys.md#change-the-keys). |
 | `oauth` | none | The OAuth app for `auth login --oauth`. See [OAuth](#oauth). |
@@ -86,16 +89,27 @@ default" keeps the one in use.
 
 ## Files
 
+wrike-tui keeps its files in three folders:
+
+| Folder | Linux and macOS | Windows | When the variable is set |
+| --- | --- | --- | --- |
+| Config | `~/.config/wrike-tui` | `%APPDATA%\wrike-tui` | `$XDG_CONFIG_HOME/wrike-tui` |
+| State | `~/.local/state/wrike-tui` | `%LOCALAPPDATA%\wrike-tui\state` | `$XDG_STATE_HOME/wrike-tui` |
+| Cache | `~/.cache/wrike-tui` | `%LOCALAPPDATA%\wrike-tui\cache` | `$XDG_CACHE_HOME/wrike-tui` |
+
+The XDG variables win on every platform, Windows included, when they are set
+and not empty.
+
 | File | Holds |
 | --- | --- |
-| `$XDG_CONFIG_HOME/wrike-tui/config.json` | The theme, the width of the navigation pane, whether field history is shown, the default shaping of lists, your keys, and the OAuth app's client ID |
-| `$XDG_CONFIG_HOME/wrike-tui/profile.json` | Your name and Wrike host, written by `auth login` and removed by `auth logout` |
-| `$XDG_STATE_HOME/wrike-tui/<account>/session.json` | Where you were, restored at the next start |
-| `$XDG_STATE_HOME/wrike-tui/<account>/favorites.json` | Your favorites |
-| `$XDG_CACHE_HOME/wrike-tui/<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
+| Config `config.json` | The theme, the width of the navigation pane, whether field history is shown, whether to check for a newer release, the default shaping of lists, your keys, and the OAuth app's client ID |
+| Config `profile.json` | Your name and Wrike host, written by `auth login` and removed by `auth logout` |
+| State `<account>/session.json` | Where you were, restored at the next start |
+| State `<account>/favorites.json` | Your favorites |
+| Cache `<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
+| Cache `update-check.json` | When GitHub was last asked for a newer release, and its answer |
 
-The directories default to `~/.config`, `~/.local/state` and `~/.cache`. A
-file that cannot be read is renamed to `<name>.bad` and the defaults load.
+A file that cannot be read is renamed to `<name>.bad` and the defaults load.
 
 The config is shared by every account. The session, the favorites and the
 cache are kept per account.

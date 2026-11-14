@@ -32,7 +32,8 @@ irm https://raw.githubusercontent.com/joegeary/wrike-tui/main/install.ps1 | iex
 
 Both take the binary for your machine from the newest release, check it
 against the release's `SHA256SUMS`, and refuse to install a file that does not
-match.
+match. They run the new binary once before it replaces anything, so a binary
+that cannot run on your machine is never installed.
 
 `install.sh` puts the binary in `~/.local/bin`, and `install.ps1` puts it in
 `%LOCALAPPDATA%\Programs\wrike-tui`. `INSTALL_DIR` moves either:
@@ -41,21 +42,26 @@ match.
 curl -fsSL https://raw.githubusercontent.com/joegeary/wrike-tui/main/install.sh | INSTALL_DIR="$HOME/bin" sh
 ```
 
-`VERSION` pins either installer to a release, as `VERSION=v0.2.0`. Without it
-the newest release is installed.
+`VERSION` pins either installer to a release, as `v0.2.0` or `0.2.0`. Without
+it the newest release is installed. A pre-release is never picked on its own.
+In PowerShell, set the variable first:
+
+```powershell
+$env:VERSION = 'v0.2.0'; irm https://raw.githubusercontent.com/joegeary/wrike-tui/main/install.ps1 | iex
+```
 
 ## Download by hand
 
-Each release has a binary for Linux and macOS, on x64 and arm64, and for
-Windows on x64, on the
-[Releases page](https://github.com/joegeary/wrike-tui/releases).
+Each release has a binary for Linux, macOS and Windows, on x64 and arm64, on
+the [Releases page](https://github.com/joegeary/wrike-tui/releases).
 
 1. Download `wrike-tui-<os>-<arch>.tar.gz` for your platform, where `<os>` is
    `linux` or `darwin` and `<arch>` is `x64` or `arm64`. With the GitHub CLI:
    `gh release download --repo joegeary/wrike-tui --pattern 'wrike-tui-linux-x64.tar.gz'`.
-   On Windows, download `wrike-tui-windows-x64.zip`.
-2. Unpack it: `tar -xzf wrike-tui-linux-x64.tar.gz`. This gives one file,
-   `wrike-tui` (`wrike-tui.exe` on Windows).
+   On Windows, download `wrike-tui-windows-<arch>.zip`.
+2. Unpack it: `tar -xzf wrike-tui-linux-x64.tar.gz`, or in PowerShell
+   `Expand-Archive wrike-tui-windows-x64.zip -DestinationPath .`. This gives
+   one file, `wrike-tui` (`wrike-tui.exe` on Windows).
 3. Move it to a directory on your `PATH`, for example `~/.local/bin`.
 
 ### Checksums
@@ -72,8 +78,9 @@ A download through `gh`, `curl` or `install.sh` is not quarantined.
 
 ## PATH
 
-Some shells do not carry `~/.local/bin` on `PATH`. If `wrike-tui` is not found
-after an install, add it:
+The installers do not change `PATH`. When the install folder is not on it,
+they say so and print the line that adds it. Some shells do not carry
+`~/.local/bin` on `PATH`. Add it:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -98,7 +105,8 @@ bun install
 bun run build
 ```
 
-The build writes one binary to `dist/wrike-tui`. Copy it to a directory on your
+The build writes one binary to `dist/wrike-tui` (`dist/wrike-tui.exe` on
+Windows). Copy it to a directory on your
 `PATH`. A build from source has the version `<version>-dev`, and `wrike-tui
 update` refuses to replace it. Pull and build again instead.
 
@@ -134,28 +142,38 @@ These variables are for development and tests:
 | `WRIKE_TUI_E2E_CAPTURES` | A directory that keeps the screen captures of every e2e step. |
 | `WRIKE_TUI_VERSION` | The version `bun run build` writes into the binary. |
 
-GitHub Actions runs the typecheck, `bun test ./test` and `bun run e2e` on every
-push to main and every pull request. Run it on another branch from the
-Actions tab or with `gh workflow run ci.yml --ref <branch>`. When the e2e job fails, its screen captures are attached to the run as
-the `e2e-captures` artifact.
+GitHub Actions runs the typecheck, `bun test ./test` and `bun run e2e` on Linux
+on every push to main and every pull request. It also builds the Windows x64
+and arm64 binaries and runs each with `--version`. Run it on another branch
+from the Actions tab or with `gh workflow run ci.yml --ref <branch>`. When the
+e2e job fails, its screen captures are attached to the run as the
+`e2e-captures` artifact.
 
 ### How a release is built
 
 Pushing a tag such as `v0.2.0` runs `.github/workflows/release.yml`. It builds
-the binary on Linux x64 and arm64, macOS arm64 and Intel, and Windows x64
-runners, with `WRIKE_TUI_VERSION=0.2.0` so the binary reports that version,
-runs each one with `--version`, and publishes the archives and `SHA256SUMS` as
-a GitHub release with generated notes.
+the binary on Linux x64 and arm64, macOS arm64 and Intel, and Windows x64 and
+arm64 runners, with `WRIKE_TUI_VERSION=0.2.0` so the binary reports that
+version, and runs each one with `--version`. It publishes a tarball for each
+Linux and macOS binary, a zip for each Windows one, and `SHA256SUMS` as a
+GitHub release with generated notes. A tag with a suffix, such as
+`v0.3.0-rc.1`, is published as a pre-release.
 
 ## Update
 
 `wrike-tui update` replaces a release binary with the newest release, after it
-checks the download against `SHA256SUMS`. `wrike-tui update --check` only says
-whether a newer release is out. Both ask the GitHub API without a token, which
-GitHub limits to 60 requests an hour.
+checks the download against `SHA256SUMS`. On Windows it runs `install.ps1` for
+the newest release into the folder of the running `wrike-tui.exe`, which
+renames the running file to `wrike-tui.exe.old`. The next install or update
+removes that file. `wrike-tui update --check` only says whether a newer release
+is out. Both ask the GitHub API without a token, which GitHub limits to 60
+requests an hour. Neither picks a pre-release.
 
-When a newer release is out, the status bar in the client says so and names
-`wrike-tui update`.
+When a newer release is out, the status bar in the client says so once and
+names `wrike-tui update`. The next key clears it. A release binary asks GitHub
+in the background at most once a day, and a check that fails shows nothing. A
+build from source never asks. `"updateCheck": false` in
+[config.json](configuration.md#every-key) turns the check off.
 
 Running an installer again also updates, and is the way to move the binary
 somewhere else with `INSTALL_DIR`. A build from source is updated with a pull
@@ -181,7 +199,7 @@ At a terminal, plain `auth login` asks whether you want a token or OAuth.
 | `wrike-tui auth status` | Shows who is logged in, how, and when an OAuth access token expires. |
 | `wrike-tui auth logout` | Removes the stored login, the OAuth client secret and the profile. |
 | `wrike-tui keys` | Lists every command with its keys. See [keys.md](keys.md#change-the-keys). |
-| `wrike-tui update` | Replaces a release binary with the newest release. `--check` only reports. |
+| `wrike-tui update` | Replaces a release binary with the newest release. On Windows it runs `install.ps1`. `--check` only reports. |
 | `wrike-tui --version` | Shows the version. |
 
 ### With a permanent access token
@@ -195,7 +213,9 @@ At a terminal, plain `auth login` asks whether you want a token or OAuth.
 
 `auth login` finds the Wrike data center that accepts the token and stores the
 token in the keyring of your operating system. It stores your name and host in
-`$XDG_CONFIG_HOME/wrike-tui/profile.json`.
+`profile.json` in the config folder, `~/.config/wrike-tui` on Linux and macOS
+and `%APPDATA%\wrike-tui` on Windows. See
+[configuration.md](configuration.md#files).
 
 ### With OAuth
 
@@ -219,8 +239,10 @@ paste the address the browser lands on.
 
 Two things are not confirmed yet. Wrike's docs ask for an HTTPS redirect URI,
 so it may refuse the plain `http://localhost` one. And Wrike's MCP server, which
-serves the Inbox and field history, may refuse an OAuth access token. If it
-does, those panes say so, and a permanent token is the way to have them.
+serves the Inbox and field history, is expected to take an OAuth access token,
+since it names the same login server wrike-tui signs in with. That is not yet
+tested against a live login. If it refuses one, those panes say so, and a
+permanent token is the way to have them.
 
 ## Environment variables
 
@@ -228,8 +250,8 @@ does, those panes say so, and a permanent token is the way to have them.
 | --- | --- |
 | `WRIKE_TOKEN` | Use this token instead of the keyring. Nothing is stored. |
 | `WRIKE_HOST` | Use this Wrike host, for example `app-eu.wrike.com`, instead of the stored one. |
-| `VISUAL`, `EDITOR` | The editor for descriptions and long comments. `vi` is the fallback. |
-| `BROWSER` | The command that opens a URL given as its last argument. The default is `xdg-open` on Linux and `open` on macOS. Windows has no default. |
+| `VISUAL`, `EDITOR` | The editor for descriptions and long comments. Without either, `vi` on Linux and macOS. On Windows it is `edit` (Microsoft Edit) when that is on `PATH`, and Notepad otherwise. See [guide.md](guide.md#the-description-as-markdown) for a Notepad caveat. |
+| `BROWSER` | The command that opens a URL given as its last argument. The default is `xdg-open` on Linux, `open` on macOS, and `rundll32 url.dll,FileProtocolHandler` on Windows, which opens your default browser. |
 | `WRIKE_TUI_READ_ONLY=1` | Refuse every change. A save says "read-only mode: not saved" and nothing is sent to Wrike. |
 | `WRIKE_TUI_NO_RESTORE=1` | Start on the Inbox instead of where the last session ended. |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | Where the config, the session and the cache go. See [configuration.md](configuration.md#files). |
