@@ -269,6 +269,24 @@ describe("Comments", () => {
   })
 })
 
+describe("Writing below the fold", () => {
+  test("c brings the newest comment into view above the box, and the mention list does not hide it", async () => {
+    app = await openApp({ width: 160, height: 30 })
+    const sso = app.fake.data.tasks.find((task) => task.id === TASK.sso)!
+    sso.description += Array.from({ length: 30 }, (_, i) => `<br />Step ${i + 1}`).join("")
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    const opened = await app.see("Step 1")
+    // The comment as the details stream draws it, not the Inbox row that quotes it.
+    const newest = /│ +@Sam Sample can we run trainings in the sandbox\? +[█▄▀]?│/
+    expect(opened).not.toMatch(newest)
+    await app.press("c")
+    await app.see("─ New comment ─", newest)
+    await app.type("Thanks @ri")
+    await app.see("─ Mention ─", "Riley Demo", newest)
+  })
+})
+
 describe("Selecting comments", () => {
   test("] and [ select a comment with a bar beside it, and Esc clears the selection", async () => {
     app = await openApp(WIDE)

@@ -247,6 +247,12 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
     if (walkedField) scroll.current?.scrollChildIntoView(fieldAnchor(walkedField))
   }, [walkedField])
 
+  // A new comment is written under the newest ones, so the stream stays on its last line while the box and the mention list take rows from it.
+  const composingNew = state.mode.kind === "compose" && state.mode.editing === null
+  useEffect(() => {
+    if (composingNew) scrollBox(scroll.current, "bottom")
+  }, [composingNew])
+
   const shownDetails = details.state === "ready" ? details.value : details.state === "loading" ? details.previous : undefined
   const title = details.state === "loading" && shownDetails ? "Details (refreshing)" : "Details"
 
@@ -258,7 +264,7 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
         <text fg={theme.error} wrapMode="word">{retryText(details.error, retryHint(state.keymap))}</text>
       ) : null}
       {shownDetails ? (
-        <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY>
+        <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY stickyScroll={composingNew} stickyStart="bottom">
           <Body state={state} details={shownDetails} width={props.width} onDraft={props.onDraft} />
         </scrollbox>
       ) : null}
