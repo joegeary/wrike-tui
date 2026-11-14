@@ -10,8 +10,16 @@ const withoutTrailingSpace = (text: string) => text.replace(/[ \t]+$/gm, "").rep
 
 const words = (command: string) => command.trim().split(/\s+/)
 
-export function editorCommand(env: Env): string[] {
-  return words(env.VISUAL || env.EDITOR || "vi")
+/**
+ * VISUAL, then EDITOR. Without either, vi on Linux and macOS. Windows has no
+ * vi, so it takes Microsoft Edit, a terminal editor, when it is installed, and
+ * Notepad otherwise.
+ */
+export function editorCommand(env: Env, platform: NodeJS.Platform = process.platform, onPath: (command: string) => boolean = (command) => Bun.which(command) !== null): string[] {
+  const chosen = env.VISUAL || env.EDITOR
+  if (chosen) return words(chosen)
+  if (platform !== "win32") return ["vi"]
+  return onPath("edit") ? ["edit"] : ["notepad"]
 }
 
 /**
@@ -49,14 +57,14 @@ export async function editInEditor(
 }
 
 /**
- * The command that takes a URL as its last argument. Windows has no opener
- * that takes one as a plain argument: `cmd /c start` would split a signed
- * link at its `&`, so there it must be named in BROWSER.
+ * The command that takes a URL as its last argument. On Windows it is the URL
+ * handler rundll32 runs, which takes the link as a plain argument. `cmd /c start`
+ * would split a signed link at its `&`.
  */
-function browserCommand(env: Env, platform: NodeJS.Platform): string[] {
+export function browserCommand(env: Env, platform: NodeJS.Platform = process.platform): string[] {
   if (env.BROWSER) return words(env.BROWSER)
   if (platform === "darwin") return ["open"]
-  if (platform === "win32") throw new Error("Set BROWSER to a program that opens a URL given as its argument")
+  if (platform === "win32") return ["rundll32", "url.dll,FileProtocolHandler"]
   return ["xdg-open"]
 }
 

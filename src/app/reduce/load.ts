@@ -290,5 +290,6 @@ export function start(state: State): Update {
       return [{ ...opened, focus: state.focus }, effects]
     })
   }
+  if (state.settings.updateCheck) update = then(update, (next) => [next, [{ kind: "check-update" }]])
   return update
 }

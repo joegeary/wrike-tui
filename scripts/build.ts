@@ -1,4 +1,4 @@
-// Compiles dist/wrike-tui. The release workflow sets WRIKE_TUI_VERSION to the tag's version; a local build
+// Compiles dist/wrike-tui, or dist/wrike-tui.exe on Windows. The release workflow sets WRIKE_TUI_VERSION to the tag's version; a local build
 // leaves it unset and carries "<package.json version>-dev", which `wrike-tui update` refuses to replace.
 import pkg from "../package.json"
 
@@ -20,7 +20,7 @@ const build = Bun.spawnSync(
     `WRIKE_TUI_VERSION=${JSON.stringify(version)}`,
     "src/main.tsx",
     "--outfile",
-    "dist/wrike-tui",
+    process.platform === "win32" ? "dist/wrike-tui.exe" : "dist/wrike-tui",
   ],
   { cwd: `${import.meta.dir}/..`, stdio: ["inherit", "inherit", "inherit"] },
 )

@@ -1,8 +1,8 @@
 import { mkdir, rm } from "node:fs/promises"
-import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { z } from "zod"
 import { userId, type UserId } from "../domain/ids"
+import { appDirs } from "../persist/dirs"
 import type { Env } from "./config"
 
 export type Profile = { host: string; accountId: string; userId: UserId; name: string }
@@ -15,7 +15,7 @@ const ProfileSchema = z.object({
 })
 
 export function profilePath(env: Env): string {
-  return join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "wrike-tui", "profile.json")
+  return join(appDirs(env).config, "profile.json")
 }
 
 /** A missing or unreadable profile is the same as no profile: the caller probes again. */

@@ -71,6 +71,7 @@ describe("the session", () => {
       { kind: "load-tree", request: 1, space: ENG, cached: false },
       { kind: "load-tasks", request: 1, key: key("folder:A"), source: { kind: "folder", id: folderId("A") }, completed: false, pageToken: null },
       { kind: "load-details", request: 1, target: { kind: "task", id: undated.id } },
+      { kind: "check-update" },
     ])
     expect(started).toMatchObject({ focus: "details", zoom: true })
     expect(navCursorRow(started)?.path).toBe("space:ENG/A" as NavPath)

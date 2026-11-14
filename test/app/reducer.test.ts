@@ -4,6 +4,7 @@ import { currentList, currentView, listCursor, listRows, navCursorRow, navRowsOf
 import { initialState, LIST_LIMIT, type State } from "../../src/app/state"
 import { commentId, customStatusId, folderId, taskId, userId } from "../../src/domain/ids"
 import { DEFAULT_SPECS, NOBODY } from "../../src/domain/list"
+import { DEFAULT_SETTINGS } from "../../src/domain/settings"
 import type { Workflow } from "../../src/domain/model"
 import type { Favorite } from "../../src/domain/workspace"
 import {
@@ -78,9 +79,15 @@ describe("startup", () => {
       { kind: "load-inbox", request: 1, includeRead: false },
       { kind: "load-tasks", request: 1, key: key("todo"), source: { kind: "mine", user: ME }, completed: false, pageToken: null },
       { kind: "load-spaces", request: 1, cached: true },
+      { kind: "check-update" },
     ])
     expect(state.inbox.state).toBe("loading")
     expect(state.spaces.state).toBe("loading")
+  })
+
+  test("updateCheck off in config.json asks nothing about releases", () => {
+    const [, effects] = start(initialState(profile, clock, boot({ settings: { ...DEFAULT_SETTINGS, updateCheck: false } })))
+    expect(effects).not.toContainEqual({ kind: "check-update" })
   })
 
   test("a response to a superseded request is dropped", () => {
@@ -370,7 +377,7 @@ describe("shaping", () => {
   })
 
   test("a new scope starts from the config defaults", () => {
-    const settings = { theme: "dark", navWidth: 30, completed: true, history: true, lists: { folder: { group: "none" } } } as const
+    const settings = { theme: "dark", navWidth: 30, completed: true, history: true, updateCheck: true, lists: { folder: { group: "none" } } } as const
     const scoped = play(withTree(loaded({ settings })), "j", "enter")
     expect(scoped.effects[0]).toMatchObject({ completed: true })
     expect(currentView(scoped.state).spec).toEqual({ ...DEFAULT_SPECS.folder, group: "none", completed: true })
@@ -840,5 +847,24 @@ describe("panes", () => {
       { kind: "scroll", pane: "details", to: "down" },
       { kind: "scroll", pane: "details", to: "bottom" },
     ])
+  })
+})
+
+describe("the update notice", () => {
+  const notice = { tone: "info", text: "wrike-tui 0.3.0 is out. Run wrike-tui update." } as const
+
+  test("a newer release is said once in the status bar, and the next key clears it", () => {
+    const { state } = play(loaded(), { type: "update-available", version: "0.3.0" })
+    expect(state.flash).toEqual(notice)
+    expect(play(state, "j").state.flash).toBeNull()
+  })
+
+  test("a flash already showing is not covered. The notice shows when that one clears", () => {
+    const failure = { tone: "error", text: "Could not read config.json. Kept as config.json.bad, using the defaults." } as const
+    const { state } = play(loaded({ flash: failure }), { type: "update-available", version: "0.3.0" })
+    expect(state.flash).toEqual(failure)
+    const next = play(state, "j").state
+    expect(next.flash).toEqual(notice)
+    expect(play(next, "j").state.flash).toBeNull()
   })
 })
