@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { SHARED_APP } from "./auth/shared-app"
 import { clientSecretStore, keyringStore } from "./auth/token"
 import { run } from "./cli/run"
 import { readLine, readSecret } from "./cli/secret"
@@ -18,5 +19,6 @@ const code = await run(process.argv.slice(2), {
     openUrl: (url) => openInBrowser(process.env, url),
     interactive: process.stdin.isTTY === true,
   },
+  sharedApp: SHARED_APP,
 })
 process.exit(code)

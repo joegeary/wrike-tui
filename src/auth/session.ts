@@ -4,13 +4,13 @@ import { createTransport, fixedToken, type Fetch, type TokenProvider } from "../
 import { candidateBases, endpointsFor, type Endpoints, type Env } from "./config"
 import { oauthProvider, type OAuthApp } from "./oauth"
 import { readProfile, type Profile } from "./profile"
-import { resolveToken, type ResolvedToken, type TokenStore } from "./token"
+import { resolveToken, type LoginApp, type ResolvedToken, type TokenStore } from "./token"
 
 /** `auth` is what REST and MCP ask for the token, so an OAuth login renews itself under them. */
 export type Session = { token: ResolvedToken; auth: TokenProvider; profile: Profile; endpoints: Endpoints }
 
-/** What an OAuth login needs to renew itself: the keyring entry it lives in and the app's credentials. */
-export type Renewal = { store: TokenStore; app(): Promise<OAuthApp | null> }
+/** What an OAuth login needs to renew itself: the keyring entry it lives in and the credentials of the app it signed in through. */
+export type Renewal = { store: TokenStore; app(which: LoginApp): Promise<OAuthApp | null> }
 
 export function tokenProvider(token: ResolvedToken, renewal: Renewal, fetch?: Fetch): TokenProvider {
   if (token.kind === "permanent") return fixedToken(token.token)
