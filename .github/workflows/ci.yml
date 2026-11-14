@@ -32,6 +32,34 @@ jobs:
       - run: bun run typecheck
       - run: bun test ./test
 
+  # The release builds Windows too. This proves a branch still builds and starts there before a tag finds out.
+  # The tests and the tmux e2e stay on Linux.
+  windows:
+    name: Windows ${{ matrix.arch }} build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest }
+          - { arch: arm64, runner: windows-11-arm }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - name: Build
+        run: WRIKE_TUI_VERSION=0.0.0-ci bun run build
+      - name: Smoke run
+        run: |
+          said="$(./dist/wrike-tui.exe --version)"
+          echo "$said"
+          test "$said" = "wrike-tui 0.0.0-ci"
+
   e2e:
     name: End to end in tmux
     runs-on: ubuntu-24.04
