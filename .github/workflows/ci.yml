@@ -1,7 +1,10 @@
 name: CI
 
 on:
+  # Branches are checked through their pull request, which covers forks too. Run any other branch by hand.
   push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
