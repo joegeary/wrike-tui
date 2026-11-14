@@ -269,6 +269,24 @@ describe("Comments", () => {
   })
 })
 
+describe("Description wrapping", () => {
+  test("punctuation after a link or a closing parenthesis never wraps onto a line of its own", async () => {
+    app = await openApp({ width: 120, height: 45 })
+    const sso = app.fake.data.tasks.find((task) => task.id === TASK.sso)!
+    sso.description = 'The full model is in the <a href="https://example.test/finance/model">pricing sheet</a>. Dealers keep a margin (at least 35 percent).'
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("pricing sheet")
+    for (let width = 120; width <= 150; width++) {
+      app.resize(width, 45)
+      const frame = await app.see(new RegExp(`^.{${width}}$`, "m"), "percent).")
+      const details = frame.split("\n").map((line) => line.split("│").at(-2) ?? "")
+      expect(details.filter((line) => /^ *[.,;:!?)\]]+ *$/.test(line))).toEqual([])
+      expect(frame).toContain("model).")
+    }
+  })
+})
+
 describe("Writing below the fold", () => {
   test("c brings the newest comment into view above the box, and the mention list does not hide it", async () => {
     app = await openApp({ width: 160, height: 30 })

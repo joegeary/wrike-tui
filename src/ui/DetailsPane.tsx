@@ -13,6 +13,7 @@ import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
 import { Attachments } from "./Attachments"
 import { Comments, ComposeBox, itemAnchor, streamTitle } from "./Comments"
+import { Description } from "./Description"
 import { shortDay, truncate } from "./format"
 import { Pane } from "./Pane"
 import { scrollBox } from "./scroll"
@@ -199,7 +200,7 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
       <Fields state={state} task={task} active={activeField} onDraft={onDraft} />
 
       <Section title="Description" />
-      {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
+      {markdown === "" ? <text fg={theme.dim}>No description.</text> : <Description markdown={markdown} style={style} />}
 
       {attachmentsError ? (
         <>
