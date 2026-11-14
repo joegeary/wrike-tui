@@ -136,31 +136,45 @@ describe("auth login --oauth", () => {
   })
 })
 
-describe("the login menu", () => {
-  test("with the shared app the browser comes first and the token second", async () => {
-    expect(await run(["auth", "login"], io({ answers: ["2", "good-token"] }))).toBe(0)
-    expect(lines.out.slice(0, 3)).toEqual([
-      "How do you want to log in?",
-      "  1. Sign in through the browser",
-      "  2. A permanent access token (Wrike: profile icon, Apps & Integrations, API tab)",
-    ])
+describe("plain auth login", () => {
+  test("signs in through the browser with the shared app, asking nothing", async () => {
+    expect(await run(["auth", "login"], io())).toBe(0)
+    expect(opened.at(-1)?.searchParams.get("client_id")).toBe("shared-id")
+    expect(decodeLogin(stored!)?.app).toBe("shared")
+  })
+
+  test("--token stores a permanent token instead", async () => {
+    expect(await run(["auth", "login", "--token"], io({ answers: ["good-token"] }))).toBe(0)
+    expect(opened).toEqual([])
     expect(stored).toBe("good-token")
   })
 
-  test("without the shared app the token comes first and the browser needs an app", async () => {
-    expect(await run(["auth", "login"], io({ sharedApp: null, answers: ["1", "good-token"] }))).toBe(0)
-    expect(lines.out.slice(1, 3)).toEqual([
-      "  1. A permanent access token (Wrike: profile icon, Apps & Integrations, API tab)",
-      "  2. OAuth through the browser (needs an app from Wrike's App Console)",
-    ])
+  test("without the shared app it signs in with the user's own app when config.json names one", async () => {
+    await ownAppInConfig("own-id")
+    expect(await run(["auth", "login"], io({ sharedApp: null, answers: ["own-secret"] }))).toBe(0)
+    expect(opened.at(-1)?.searchParams.get("client_id")).toBe("own-id")
+    expect(decodeLogin(stored!)?.app).toBe("own")
+  })
+
+  test("without any app it asks for a token", async () => {
+    expect(await run(["auth", "login"], io({ sharedApp: null, answers: ["good-token"] }))).toBe(0)
+    expect(opened).toEqual([])
     expect(stored).toBe("good-token")
   })
 
-  test("the usage asks for an App Console app only in a build without the shared app", async () => {
+  test("piped input reads a token even with the shared app", async () => {
+    const piped = io({ answers: ["good-token"] })
+    expect(await run(["auth", "login"], { ...piped, oauth: { ...piped.oauth!, interactive: false } })).toBe(0)
+    expect(opened).toEqual([])
+    expect(stored).toBe("good-token")
+  })
+
+  test("the usage names the browser as the default only in a build with the shared app", async () => {
     await run(["--help"], io())
     await run(["--help"], io({ sharedApp: null }))
     const [shared, own] = lines.out
-    expect(shared).toContain("auth login --oauth  Sign in through the browser\n")
+    expect(shared).toContain("auth login          Sign in through the browser\n")
+    expect(shared).toContain("auth login --token  Store a Wrike permanent access token in the OS keyring instead")
     expect(shared).not.toContain("App Console")
     expect(own).toContain("auth login --oauth  Sign in through the browser with an app from Wrike's App Console")
   })

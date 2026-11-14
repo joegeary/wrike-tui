@@ -187,16 +187,17 @@ and a new build.
 wrike-tui auth login
 ```
 
-At a terminal, plain `auth login` asks whether you want to sign in through the
-browser or paste a token. A release binary offers the browser first.
-`auth login --token` and `auth login --oauth` skip the question.
+`auth login` signs in through the browser. `auth login --token` stores a
+permanent access token instead. A build from source carries no app of its own,
+so there plain `auth login` signs in with your own app when `config.json` names
+one, and asks for a token otherwise. Piped input always reads a token.
 
 | Command | What it does |
 | --- | --- |
 | `wrike-tui` | Opens the client. |
-| `wrike-tui auth login` | Asks whether to sign in through the browser or with a token. |
-| `wrike-tui auth login --token` | Stores a token. |
-| `wrike-tui auth login --oauth` | Signs in through the browser with OAuth. |
+| `wrike-tui auth login` | Signs in through the browser. |
+| `wrike-tui auth login --token` | Stores a permanent access token instead. |
+| `wrike-tui auth login --oauth` | Signs in through the browser, also in a build from source. |
 | `wrike-tui auth status` | Shows who is logged in, how, and when an OAuth access token expires. |
 | `wrike-tui auth logout` | Removes the stored login, the client secret of your own OAuth app and the profile. |
 | `wrike-tui keys` | Lists every command with its keys. See [keys.md](keys.md#change-the-keys). |
@@ -224,7 +225,7 @@ OAuth signs in through the browser and renews its access token by itself.
 `WRIKE_TOKEN` still wins over it when set.
 
 A release binary carries a Wrike app of its own. Run
-`wrike-tui auth login --oauth`, sign in to Wrike in the browser that opens, and
+`wrike-tui auth login`, sign in to Wrike in the browser that opens, and
 select **Allow**. There is no app to register and no secret to paste. The
 tokens pass only between your machine and Wrike, and they stay in the keyring
 of your operating system.

@@ -4,6 +4,7 @@ import { oauthProvider, type OAuthApp } from "../auth/oauth"
 import { deleteProfile, readProfile, writeProfile } from "../auth/profile"
 import { loadSession, oauthHost, probe, type Session } from "../auth/session"
 import { resolveToken, type TokenStore } from "../auth/token"
+import { loadOAuthSettings } from "../persist/oauth"
 import { createPersistence, persistencePaths } from "../persist/persistence"
 import { VERSION } from "../version"
 import { describeError, toWrikeError } from "../wrike/errors"
@@ -32,9 +33,15 @@ A keyboard-first terminal client for Wrike.
 
 Usage:
   wrike-tui                     Open the client
-  wrike-tui auth login          Ask which way to log in, then log in
+${
+  shared
+    ? `  wrike-tui auth login          Sign in through the browser
+  wrike-tui auth login --token  Store a Wrike permanent access token in the OS keyring instead`
+    : `  wrike-tui auth login          Store a Wrike permanent access token in the OS keyring,
+                                or sign in with your own app when config.json names one
   wrike-tui auth login --token  Store a Wrike permanent access token in the OS keyring
-  wrike-tui auth login --oauth  Sign in through the browser${shared ? "" : " with an app from Wrike's App Console"}
+  wrike-tui auth login --oauth  Sign in through the browser with an app from Wrike's App Console`
+}
   wrike-tui auth status         Show who is logged in and where the token comes from
   wrike-tui auth logout         Remove the stored login, client secret and profile
   wrike-tui keys                List every command with its keys, as config.json sets them
@@ -60,10 +67,9 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return update(sub === "--check", io)
   }
   if (command === "auth" && sub === "login" && rest.length <= 1) {
-    const way = rest[0] === "--token" ? "token" : rest[0] === "--oauth" ? "oauth" : rest[0] === undefined ? await pickLogin(io) : undefined
+    const way = rest[0] === "--token" ? "token" : rest[0] === "--oauth" ? "oauth" : rest[0] === undefined ? await defaultLogin(io) : undefined
     if (way === "token") return login(io)
     if (way === "oauth") return io.oauth ? oauthLogin(io, io.oauth) : (io.err("OAuth login is not available here."), 1)
-    if (way === null) return io.err("No way to log in picked. Nothing was stored."), 1
   }
   if (command === "auth" && rest.length === 0) {
     if (sub === "status") return status(io)
@@ -86,28 +92,14 @@ async function open(io: Io): Promise<number> {
   }
 }
 
-type LoginWay = "token" | "oauth"
-
-const TOKEN_CHOICE = "A permanent access token (Wrike: profile icon, Apps & Integrations, API tab)"
-
-/** With the shared app the browser needs no setup, so it comes first. Without it the token does. */
-function loginMenu(shared: boolean): [string, LoginWay][] {
-  if (shared) return [["Sign in through the browser", "oauth"], [TOKEN_CHOICE, "token"]]
-  return [[TOKEN_CHOICE, "token"], ["OAuth through the browser (needs an app from Wrike's App Console)", "oauth"]]
-}
-
-/** Asks at a terminal. Piped input has no one to ask, so it reads a token as before. */
-async function pickLogin(io: Io): Promise<LoginWay | null> {
+/**
+ * The browser, whenever there is an app to sign in with: the shared one, or the user's own named in config.json.
+ * Otherwise a token. Piped input has no one to click Allow, so it reads a token as before.
+ */
+async function defaultLogin(io: Io): Promise<"token" | "oauth"> {
   if (!io.oauth?.interactive) return "token"
-  const menu = loginMenu(io.sharedApp !== null)
-  io.out("How do you want to log in?")
-  menu.forEach(([label], index) => io.out(`  ${index + 1}. ${label}`))
-  for (;;) {
-    const answer = await io.oauth.readLine("Pick 1 or 2: ")
-    if (answer === null) return null
-    const picked = answer === "1" ? menu[0] : answer === "2" ? menu[1] : undefined
-    if (picked) return picked[1]
-  }
+  if (io.sharedApp) return "oauth"
+  return (await loadOAuthSettings(io.env)).clientId ? "oauth" : "token"
 }
 
 async function login(io: Io): Promise<number> {

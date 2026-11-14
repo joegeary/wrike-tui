@@ -60,10 +60,10 @@ wrike-tui auth login
 wrike-tui
 ```
 
-`auth login` asks whether you want to sign in through the browser or paste a
-Wrike permanent access token. A release binary needs nothing set up for the
-browser. You sign in to Wrike and allow access.
-[docs/install.md](docs/install.md#log-in) says where to get a token.
+`auth login` opens Wrike in your browser. Sign in and select **Allow**. There is
+no app to register and no secret to paste. `auth login --token` stores a Wrike
+permanent access token instead, and
+[docs/install.md](docs/install.md#log-in) says where to get one.
 
 Three keys carry most of it. `?` lists the keys that work where you are. `:`
 opens the command palette, which lists only the commands that apply there. `e`
