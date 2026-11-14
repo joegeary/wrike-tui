@@ -1,10 +1,10 @@
-import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Env } from "../auth/config"
 import type { CustomField } from "../domain/fields"
 import type { SpaceId } from "../domain/ids"
 import { DEFAULT_SETTINGS, type Settings } from "../domain/settings"
 import type { Favorite, Space, SpaceTree } from "../domain/workspace"
+import { appDirs } from "./dirs"
 import { readJson, readObject, writeJson, type Loaded } from "./files"
 import { ConfigSchema, FavoritesSchema, FieldsCacheSchema, SessionSchema, SpacesCacheSchema, TreeCacheSchema, type SessionFile } from "./schemas"
 
@@ -27,14 +27,14 @@ export type Persistence = {
 
 export type PersistencePaths = { config: string; session: string; favorites: string; spaces: string; fields: string; tree(space: SpaceId): string }
 
-export const configPath = (env: Env) => join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "wrike-tui", "config.json")
+export const configPath = (env: Env) => join(appDirs(env).config, "config.json")
 
 /** Config is shared by every account. Session, favorites and cache are kept per account. */
 export function persistencePaths(env: Env, accountId: string): PersistencePaths {
-  const home = homedir()
+  const dirs = appDirs(env)
   const account = accountId || "default"
-  const state = join(env.XDG_STATE_HOME || join(home, ".local", "state"), "wrike-tui", account)
-  const cache = join(env.XDG_CACHE_HOME || join(home, ".cache"), "wrike-tui", account)
+  const state = join(dirs.state, account)
+  const cache = join(dirs.cache, account)
   return {
     config: configPath(env),
     session: join(state, "session.json"),
