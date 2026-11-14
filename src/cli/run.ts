@@ -44,7 +44,7 @@ Environment:
   WRIKE_HOST    Use this Wrike host instead of the stored one
 
 Get a token in Wrike: profile icon, Apps & Integrations, API tab.
-For --oauth, register an app in Wrike's App Console; the README says how.
+For --oauth, register an app in Wrike's App Console; docs/install.md says how.
 Press ? inside the client for the keys.`
 
 const NOT_LOGGED_IN = "Not logged in. Run `wrike-tui auth login`, or set WRIKE_TOKEN."
