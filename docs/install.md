@@ -135,7 +135,8 @@ These variables are for development and tests:
 | `WRIKE_TUI_VERSION` | The version `bun run build` writes into the binary. |
 
 GitHub Actions runs the typecheck, `bun test ./test` and `bun run e2e` on every
-push. When the e2e job fails, its screen captures are attached to the run as
+push to main and every pull request. Run it on another branch from the
+Actions tab or with `gh workflow run ci.yml --ref <branch>`. When the e2e job fails, its screen captures are attached to the run as
 the `e2e-captures` artifact.
 
 ### How a release is built
