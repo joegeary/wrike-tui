@@ -22,7 +22,7 @@ jobs:
     name: Typecheck and tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
@@ -50,7 +50,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
@@ -67,7 +67,7 @@ jobs:
     name: End to end in tmux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
@@ -83,7 +83,7 @@ jobs:
         run: dbus-run-session -- sh -c 'printf ci | gnome-keyring-daemon --unlock --components=secrets > /dev/null && bun run e2e'
       - name: Keep the screens of a failed run
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-captures
           path: ${{ runner.temp }}/captures
