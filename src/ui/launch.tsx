@@ -9,6 +9,8 @@ import { createStore } from "../app/store"
 import { keepClock } from "../app/ticker"
 import { localDay } from "../domain/dates"
 import { createPersistence, persistencePaths } from "../persist/persistence"
+import { newerRelease, updateCachePath } from "../update/notice"
+import { VERSION } from "../version"
 import { createWrikeClient } from "../wrike/client"
 import { createMcpClient } from "../wrike/mcp"
 import { createTransport } from "../wrike/transport"
@@ -51,6 +53,8 @@ export async function launch(session: Session, env: Env): Promise<void> {
     scroll: (pane, to) => bridge.scrollers[pane]?.(to),
     persistence,
     quit: () => renderer.destroy(),
+    // Against the fake server there is no release to tell anyone about.
+    ...(env.WRIKE_BASE_URL ? {} : { newerRelease: () => newerRelease({ current: VERSION, cachePath: updateCachePath(env), fetch }) }),
   }
   const store = createStore(initialState(session.profile, systemClock(), boot), deps)
   const timed: typeof store = frameLog

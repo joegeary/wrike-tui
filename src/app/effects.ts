@@ -15,6 +15,8 @@ export type EffectDeps = {
   scroll(pane: "details" | "help", to: ScrollTo): void
   persistence: Persistence
   quit(): void
+  /** The newer release's version, or null. Absent where no check is wanted: a local build, or the fake server. */
+  newerRelease?(): Promise<string | null>
   /** Waits between polls and while typing pauses. Real time unless a caller passes its own. */
   sleep?(ms: number): Promise<void>
 }
@@ -242,6 +244,11 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       return deps.persistence.saveTree(effect.space, effect.tree).catch(() => {})
     case "cache-fields":
       return deps.persistence.saveFields(effect.fields).catch(() => {})
+    case "check-update": {
+      const version = await deps.newerRelease?.()
+      if (version) dispatch({ type: "update-available", version })
+      return
+    }
     case "quit":
       return deps.quit()
   }

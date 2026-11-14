@@ -228,6 +228,8 @@ export type State = {
   spaceWorkflows: "unloaded" | "loading" | "loaded"
   mode: Mode
   flash: Flash | null
+  /** A flash that arrived while another one showed. It shows when that one clears. */
+  heldFlash: Flash | null
   /** The folder the last task of this session was created in, which the folder picker offers first. */
   lastFolder: FolderRef | null
   /** A task command pressed on a list row, held until that task's details arrive. */
@@ -291,6 +293,8 @@ export type Effect =
   | { kind: "cache-spaces"; spaces: Space[] }
   | { kind: "cache-tree"; space: SpaceId; tree: SpaceTree }
   | { kind: "cache-fields"; fields: CustomField[] }
+  /** Asks once, in the background, whether a newer release is out. */
+  | { kind: "check-update" }
   | { kind: "quit" }
 
 export type SpecChange =
@@ -361,6 +365,8 @@ export type Action =
   | { type: "key"; key: string }
   | { type: "draft"; text: string }
   | { type: "flash"; flash: Flash }
+  /** The startup check found a release newer than this one. */
+  | { type: "update-available"; version: string }
   | { type: "clock"; clock: Clock }
   /** The text the editor gave back for the comment box, or null when the file came back unchanged. */
   | { type: "composed"; text: string | null }
@@ -454,6 +460,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     spaceWorkflows: "unloaded",
     mode: { kind: "browse" },
     flash: boot.flash && keysFlash ? { tone: "error", text: `${boot.flash.text} ${keysFlash.text}` } : (boot.flash ?? keysFlash),
+    heldFlash: null,
     lastFolder: null,
     afterOpen: null,
     requests: new Map(),

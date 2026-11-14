@@ -81,6 +81,10 @@ function step(state: State, action: Action): Update {
 
     case "flash":
       return [{ ...state, flash: action.flash }, []]
+    case "update-available": {
+      const notice = info(`wrike-tui ${action.version} is out. Run wrike-tui update.`)
+      return [state.flash ? { ...state, heldFlash: notice } : { ...state, flash: notice }, []]
+    }
 
     case "clock":
       return [{ ...state, clock: action.clock }, []]
@@ -260,10 +264,10 @@ function step(state: State, action: Action): Update {
 function onKey(state: State, key: string): Update {
   const command = resolveKey(state, key)
   if (command) {
-    const cleared = { ...state, flash: null }
+    const cleared = { ...state, flash: state.heldFlash, heldFlash: null }
     return step(cleared, command.run(cleared))
   }
-  if (state.mode.kind === "confirm") return keep({ ...state, flash: null })
+  if (state.mode.kind === "confirm") return keep({ ...state, flash: state.heldFlash, heldFlash: null })
   // Typing in a picker or the palette filters it. Every other text is typed into an input, which reports through "draft".
   const text = key === "space" ? " " : key
   if ((state.mode.kind === "picker" || state.mode.kind === "palette") && [...text].length === 1) {
