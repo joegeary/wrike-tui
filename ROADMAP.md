@@ -4,12 +4,6 @@ What wrike-tui does not do yet, and the release each item is expected in.
 Versions are a best guess and move as the work does. What has shipped is in
 the [README](README.md) and the [guide](docs/guide.md).
 
-## 0.4.0
-
-- Hand a task to a coding agent, with its comments and screenshots. The agent
-  starts in a new Herdr tab, or takes over the terminal the way `$EDITOR`
-  does.
-
 ## 0.5.0
 
 - Dependencies between tasks.

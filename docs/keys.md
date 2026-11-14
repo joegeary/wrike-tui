@@ -50,6 +50,7 @@ defaults, and [Change the keys](#change-the-keys) says how to change them.
 | | `n` | New task, in the folder the list shows or in one you pick |
 | | `N` | New subtask of the task |
 | | `L` | File the task in another folder or project |
+| | `w` | Hand the task to a coding agent. See [agents.md](agents.md). |
 | | `D` | Delete the task to the Recycle Bin. Only `y` confirms. |
 | Edit mode | `j` `k` | Next or previous field |
 | | `Enter` | Edit the field |
