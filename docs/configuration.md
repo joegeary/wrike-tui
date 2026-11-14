@@ -8,8 +8,8 @@ missing part takes its default.
 
 wrike-tui writes to the file too. "Save as default" in the `:` palette writes
 the theme, the field history setting and a list's shaping, and
-`auth login --oauth` writes the OAuth client ID. Both keep every other key in
-the file.
+`auth login --oauth` writes the client ID of your own OAuth app when it asks
+for one. Both keep every other key in the file.
 
 ## An example
 
@@ -44,7 +44,7 @@ the file.
 | `updateCheck` | `true` | Whether a release binary asks GitHub once a day for a newer release and says so in the status bar. See [install.md](install.md#update). |
 | `lists` | none | The shaping each kind of list starts with. See [Lists](#lists). |
 | `keys` | none | Keys that replace the defaults. See [keys.md](keys.md#change-the-keys). |
-| `oauth` | none | The OAuth app for `auth login --oauth`. See [OAuth](#oauth). |
+| `oauth` | none | Your own OAuth app for `auth login --oauth`. See [OAuth](#oauth). |
 
 ### Lists
 
@@ -71,11 +71,17 @@ importance, then due date, then title.
 
 ### OAuth
 
-`oauth` holds `clientId`, `port` (default 8765) and `redirectUri` (default
-`http://localhost:<port>/callback`) for `auth login --oauth`. When only
-`redirectUri` is set, its port is the one wrike-tui listens on. A value that
-cannot be read falls back to its default. [install.md](install.md#with-oauth)
-walks through the login.
+`oauth` names your own Wrike app for `auth login --oauth`. It holds
+`clientId`, `port` (default 8765) and `redirectUri` (default
+`http://localhost:<port>/callback`). When only `redirectUri` is set, its port
+is the one wrike-tui listens on. A value that cannot be read falls back to its
+default.
+
+A release binary signs in through the app it carries unless `clientId` is set.
+When `clientId` is set, your own app wins. `port` and `redirectUri` apply only
+to your own app. The app a release binary carries always comes back to
+`http://127.0.0.1:8765/callback`. [install.md](install.md#with-oauth) walks
+through both.
 
 The client secret is never in this file. It is in the keyring.
 
@@ -102,7 +108,7 @@ and not empty.
 
 | File | Holds |
 | --- | --- |
-| Config `config.json` | The theme, the width of the navigation pane, whether field history is shown, whether to check for a newer release, the default shaping of lists, your keys, and the OAuth app's client ID |
+| Config `config.json` | The theme, the width of the navigation pane, whether field history is shown, whether to check for a newer release, the default shaping of lists, your keys, and the client ID of your own OAuth app |
 | Config `profile.json` | Your name and Wrike host, written by `auth login` and removed by `auth logout` |
 | State `<account>/session.json` | Where you were, restored at the next start |
 | State `<account>/favorites.json` | Your favorites |
@@ -114,5 +120,6 @@ A file that cannot be read is renamed to `<name>.bad` and the defaults load.
 The config is shared by every account. The session, the favorites and the
 cache are kept per account.
 
-The token, an OAuth login and the OAuth client secret are not in any file.
+The token, an OAuth login and the client secret of your own OAuth app are not
+in any file.
 They are in the keyring of your operating system.

@@ -6,10 +6,6 @@ the [README](README.md) and the [guide](docs/guide.md).
 
 ## 0.4.0
 
-- Log in through the browser without registering your own app in Wrike's App
-  Console. wrike-tui carries a shared app's client ID and secret, and signs in
-  with PKCE over a loopback redirect, so tokens pass only between your machine
-  and Wrike.
 - Hand a task to a coding agent, with its comments and screenshots. The agent
   starts in a new Herdr tab, or takes over the terminal the way `$EDITOR`
   does.

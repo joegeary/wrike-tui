@@ -187,17 +187,18 @@ and a new build.
 wrike-tui auth login
 ```
 
-At a terminal, plain `auth login` asks whether you want a token or OAuth.
+At a terminal, plain `auth login` asks whether you want to sign in through the
+browser or paste a token. A release binary offers the browser first.
 `auth login --token` and `auth login --oauth` skip the question.
 
 | Command | What it does |
 | --- | --- |
 | `wrike-tui` | Opens the client. |
-| `wrike-tui auth login` | Asks whether to log in with a token or with OAuth. |
+| `wrike-tui auth login` | Asks whether to sign in through the browser or with a token. |
 | `wrike-tui auth login --token` | Stores a token. |
 | `wrike-tui auth login --oauth` | Signs in through the browser with OAuth. |
 | `wrike-tui auth status` | Shows who is logged in, how, and when an OAuth access token expires. |
-| `wrike-tui auth logout` | Removes the stored login, the OAuth client secret and the profile. |
+| `wrike-tui auth logout` | Removes the stored login, the client secret of your own OAuth app and the profile. |
 | `wrike-tui keys` | Lists every command with its keys. See [keys.md](keys.md#change-the-keys). |
 | `wrike-tui update` | Replaces a release binary with the newest release. On Windows it runs `install.ps1`. `--check` only reports. |
 | `wrike-tui --version` | Shows the version. |
@@ -219,24 +220,46 @@ and `%APPDATA%\wrike-tui` on Windows. See
 
 ### With OAuth
 
-OAuth signs in through the browser with an app you register, and renews its
-access token by itself. `WRIKE_TOKEN` still wins over it when set.
+OAuth signs in through the browser and renews its access token by itself.
+`WRIKE_TOKEN` still wins over it when set.
+
+A release binary carries a Wrike app of its own. Run
+`wrike-tui auth login --oauth`, sign in to Wrike in the browser that opens, and
+select **Allow**. There is no app to register and no secret to paste. The
+tokens pass only between your machine and Wrike, and they stay in the keyring
+of your operating system.
+
+Wrike sends the browser back to `http://127.0.0.1:8765/callback`, the one
+address registered for that app. When another program holds port 8765,
+`auth login` says so and stops. Close that program and run it again.
+
+When no browser opens, open the printed address yourself. When the browser
+cannot reach wrike-tui after you sign in, paste the address it landed on at the
+prompt.
+
+An OAuth login reaches the Inbox and field history too. Wrike's MCP server, which
+serves them, takes the same access token as the REST API.
+
+#### With your own app
+
+A build from source carries no app, so it signs in through one you register. A
+release binary uses yours too when `config.json` names its client ID.
 
 1. Open Wrike's [App Console](https://www.wrike.com/appconsole.htm?#/api) and
    create an app.
 2. Add the redirect URI `http://localhost:8765/callback`.
-3. Run `wrike-tui auth login --oauth`. It asks for the client ID, which goes to
-   `config.json`, and the client secret, which goes to the keyring without
-   echo. Sign in in the browser that opens.
+3. In a release binary, set the app's client ID as `oauth.clientId` in
+   `config.json`. A build from source asks for it when it is not there, and
+   saves it there.
+4. Run `wrike-tui auth login --oauth`. It asks for the client secret, which
+   goes to the keyring without echo. Sign in in the browser that opens.
 
-When no browser opens, open the printed address yourself. When the browser
-cannot reach wrike-tui after you sign in, paste the address it landed on at the
-prompt. A different port goes in `config.json` as `oauth.port`, and the
-redirect URI must name the same port.
-[configuration.md](configuration.md#oauth) lists the `oauth` keys.
+A different port goes in `config.json` as `oauth.port`, and the redirect URI
+must name the same port. [configuration.md](configuration.md#oauth) lists the
+`oauth` keys.
 
-An OAuth login reaches the Inbox and field history too. Wrike's MCP server, which
-serves them, takes the same access token as the REST API.
+A login keeps the app it signed in through. It renews through that app even
+when `config.json` changes later.
 
 ## Environment variables
 
