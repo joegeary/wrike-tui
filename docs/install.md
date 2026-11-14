@@ -237,12 +237,8 @@ register `https://localhost:8765/callback`, set it as `oauth.redirectUri`, and
 paste the address the browser lands on.
 [configuration.md](configuration.md#oauth) lists the `oauth` keys.
 
-Two things are not confirmed yet. Wrike's docs ask for an HTTPS redirect URI,
-so it may refuse the plain `http://localhost` one. And Wrike's MCP server, which
-serves the Inbox and field history, is expected to take an OAuth access token,
-since it names the same login server wrike-tui signs in with. That is not yet
-tested against a live login. If it refuses one, those panes say so, and a
-permanent token is the way to have them.
+An OAuth login reaches the Inbox and field history too. Wrike's MCP server, which
+serves them, takes the same access token as the REST API.
 
 ## Environment variables
 

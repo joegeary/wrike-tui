@@ -7,11 +7,8 @@ the [README](README.md) and the [guide](docs/guide.md).
 ## 0.4.0
 
 - Log in through the browser without registering your own app in Wrike's App
-  Console. This is being researched.
-- Confirm that Wrike's MCP server, which serves the Inbox and field history,
-  takes an OAuth access token. It names the same login server that
-  wrike-tui's OAuth login uses, so a token is expected to work. It is not yet
-  tested against a live login.
+  Console. Wrike requires a client secret to sign in and to renew, so a small
+  login service holds the secret of one shared app.
 - Hand a task to a coding agent, with its comments and screenshots. The agent
   starts in a new Herdr tab, or takes over the terminal the way `$EDITOR`
   does.
