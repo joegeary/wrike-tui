@@ -18,6 +18,10 @@ if ((clientId === undefined) !== (clientSecret === undefined)) {
   console.error(`${missing} is not set. Set both WRIKE_OAUTH_CLIENT_ID and WRIKE_OAUTH_CLIENT_SECRET to build in the shared Wrike app, or neither.`)
   process.exit(2)
 }
+if (process.env.WRIKE_TUI_REQUIRE_SHARED_APP === "1" && clientId === undefined) {
+  console.error("A release build needs WRIKE_OAUTH_CLIENT_ID and WRIKE_OAUTH_CLIENT_SECRET. Check the repository's Actions secrets.")
+  process.exit(2)
+}
 const sharedApp =
   clientId !== undefined && clientSecret !== undefined
     ? ["--define", `WRIKE_OAUTH_CLIENT_ID=${JSON.stringify(clientId)}`, "--define", `WRIKE_OAUTH_CLIENT_SECRET=${JSON.stringify(clientSecret)}`]

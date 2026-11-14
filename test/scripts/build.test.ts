@@ -20,3 +20,9 @@ test.each([
   expect(said).not.toContain(ID)
   expect(said).not.toContain(SECRET)
 })
+
+test("a release build without the shared app fails before compiling", () => {
+  const result = build({ WRIKE_TUI_REQUIRE_SHARED_APP: "1" })
+  expect(result.exitCode).not.toBe(0)
+  expect(`${result.stderr}`).toStartWith("A release build needs WRIKE_OAUTH_CLIENT_ID and WRIKE_OAUTH_CLIENT_SECRET.")
+})
