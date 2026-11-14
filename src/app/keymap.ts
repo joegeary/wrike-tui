@@ -74,6 +74,7 @@ export const KEYMAP: Keymap = [
   ...bind("task", "task.subtask", "N"),
   ...bind("task", "task.delete", "D"),
   ...bind("task", "task.file", "L"),
+  ...bind("task", "task.agent", "w"),
 
   ...bind("edit", "edit.down", "j", "down"),
   ...bind("edit", "edit.up", "k", "up"),

@@ -10,7 +10,7 @@ import { initialState, type State } from "../../src/app/state"
 import { folderId } from "../../src/domain/ids"
 import { DEFAULT_SETTINGS } from "../../src/domain/settings"
 import { createPersistence, persistencePaths, type Persistence, type PersistencePaths } from "../../src/persist/persistence"
-import { boot, clock, ENG, engTree, inTodo, key, later, loaded, OPS, overdue, play, profile, showing, spaces, tasksLoaded, undated, withTree } from "../support/app"
+import { boot, clock, ENG, engTree, inTodo, key, later, loaded, OPS, overdue, PLACES, play, profile, showing, spaces, tasksLoaded, undated, withTree } from "../support/app"
 
 /** Platform scoped from the tree, grouped by due date, a group closed, the cursor on a task, that task open, the details zoomed. */
 function busy(): State {
@@ -118,14 +118,14 @@ describe("what a launch reads from disk", () => {
   }
 
   test("nothing on disk is a fresh start", async () => {
-    expect(await loadBoot(persistence, { readOnly: false, restore: true })).toEqual({
-      settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, session: null, spaces: null, fields: null, trees: new Map(), flash: null,
+    expect(await loadBoot(persistence, { readOnly: false, restore: true, places: PLACES })).toEqual({
+      settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, session: null, spaces: null, fields: null, trees: new Map(), places: PLACES, flash: null,
     })
   })
 
   test("the session, the favorites, the spaces and only the trees the session has open", async () => {
     await seed()
-    const read = await loadBoot(persistence, { readOnly: true, restore: true })
+    const read = await loadBoot(persistence, { readOnly: true, restore: true, places: PLACES })
     expect(read.session?.nav.expanded).toEqual(["space:ENG"])
     expect(read.spaces).toEqual(spaces)
     expect([...read.trees.keys()]).toEqual([ENG])
@@ -138,7 +138,7 @@ describe("what a launch reads from disk", () => {
     await seed()
     expect(skipsRestore({ WRIKE_TUI_NO_RESTORE: "1" })).toBe(true)
     expect(skipsRestore({})).toBe(false)
-    const read = await loadBoot(persistence, { readOnly: false, restore: false })
+    const read = await loadBoot(persistence, { readOnly: false, restore: false, places: PLACES })
     expect(read.session).toBeNull()
     expect(read.trees.size).toBe(0)
     expect(read.spaces).toEqual(spaces)
@@ -152,10 +152,10 @@ describe("what a launch reads from disk", () => {
       await mkdir(dirname(path), { recursive: true })
       await Bun.write(path, "{ nope")
     }
-    const read = await loadBoot(persistence, { readOnly: false, restore: true })
+    const read = await loadBoot(persistence, { readOnly: false, restore: true, places: PLACES })
     expect(read.flash).toEqual({ tone: "error", text: "Could not read config.json, session.json. Kept as config.json.bad, session.json.bad, using the defaults." })
     expect(read.session).toBeNull()
-    expect((await loadBoot(persistence, { readOnly: false, restore: true })).flash).toBeNull()
+    expect((await loadBoot(persistence, { readOnly: false, restore: true, places: PLACES })).flash).toBeNull()
     expect(movedAsideFlash([null, null])).toBeNull()
   })
 

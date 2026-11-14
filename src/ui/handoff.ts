@@ -57,6 +57,43 @@ export async function editInEditor(
 }
 
 /**
+ * Runs a program in `cwd` with the terminal while the renderer is suspended,
+ * the way the editor runs, and resolves once it exits, whatever its exit code.
+ */
+export async function runInTerminal(renderer: Suspendable, argv: string[], cwd: string, env: Env): Promise<void> {
+  await renderer.suspend()
+  try {
+    const child = Bun.spawn(argv, { cwd, env, stdin: "inherit", stdout: "inherit", stderr: "inherit" })
+    await child.exited
+  } finally {
+    await renderer.resume()
+  }
+}
+
+/**
+ * Runs `herdr-app do ...` found on the PATH of `env` and reads its answer:
+ * the IDs it created, or `{ "error": ... }` with exit code 1. Resolves to
+ * Herdr's error text, or null when the tab opened.
+ */
+export async function runHerdr(argv: string[], env: Env): Promise<string | null> {
+  const [program, ...rest] = argv
+  const found = program ? Bun.which(program, { PATH: env.PATH ?? "" }) : null
+  if (!found) return `${program} is not on your PATH`
+  const child = Bun.spawn([found, ...rest], { env, stdin: "ignore", stdout: "pipe", stderr: "pipe" })
+  const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+  let answer: unknown = null
+  try {
+    answer = JSON.parse(out)
+  } catch {
+    // Not JSON: the exit code and stderr say what happened.
+  }
+  const error = typeof answer === "object" && answer !== null && "error" in answer ? String(answer.error) : null
+  if (error !== null) return error
+  if (code !== 0) return err.trim() || out.trim() || `herdr-app exited with code ${code}`
+  return null
+}
+
+/**
  * The command that takes a URL as its last argument. On Windows it is the URL
  * handler rundll32 runs, which takes the link as a plain argument. `cmd /c start`
  * would split a signed link at its `&`.

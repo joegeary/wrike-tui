@@ -1,5 +1,6 @@
 import { basename } from "node:path"
 import type { Env } from "../auth/config"
+import type { Places } from "../domain/agent"
 import type { SpaceId, TaskId } from "../domain/ids"
 import type { ScopeKey } from "../domain/scope"
 import type { SpaceTree } from "../domain/workspace"
@@ -66,7 +67,7 @@ export function movedAsideFlash(paths: (string | null)[]): Flash | null {
  * session, the cached custom fields, and the cached spaces and trees the
  * session has open, so the first frame already shows the workspace.
  */
-export async function loadBoot(persistence: Persistence, options: { readOnly: boolean; restore: boolean }): Promise<Boot> {
+export async function loadBoot(persistence: Persistence, options: { readOnly: boolean; restore: boolean; places: Places }): Promise<Boot> {
   const [config, favorites, session, spaces, fields] = await Promise.all([
     persistence.loadConfig(),
     persistence.loadFavorites(),
@@ -88,6 +89,7 @@ export async function loadBoot(persistence: Persistence, options: { readOnly: bo
     spaces: spaces.value?.value ?? null,
     fields: fields.value?.value ?? null,
     trees,
+    places: options.places,
     flash: movedAsideFlash([config.movedAside, favorites.movedAside, session.movedAside, spaces.movedAside, fields.movedAside, ...cached.map(([, tree]) => tree.movedAside)]),
   }
 }

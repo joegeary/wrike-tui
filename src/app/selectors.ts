@@ -1,3 +1,4 @@
+import { agentSettings, tildePath, workspaceChoices } from "../domain/agent"
 import { editWindowLeft, mentionMatches, typedMention } from "../domain/comment"
 import { choicesOf, fieldText, isWritable, kindLabel, type CustomField } from "../domain/fields"
 import { formSteps, type FormStep } from "../domain/forms"
@@ -534,5 +535,14 @@ export function pickerOptions(state: State, mode: PickerMode): PickerOption[] {
       return settableFields(state, mode, matches)
     case "custom":
       return fieldOptions(state, mode, matches)
+    case "agent-prompt":
+      // The ID is the prompt's place in the list, since two prompts may share a name.
+      return agentSettings(state.settings.agent)
+        .prompts.map((prompt, at): PickerOption => ({ id: String(at), label: prompt.name, detail: prompt.prompt.replace(/\s+/g, " ").trim() }))
+        .filter((option) => matches(option.label))
+    case "agent-workspace":
+      return workspaceChoices(agentSettings(state.settings.agent), state.places)
+        .map((choice): PickerOption => ({ id: choice.path, label: tildePath(choice.path, state.places.home), detail: choice.why }))
+        .filter((option) => matches(option.label) || matches(option.detail ?? ""))
   }
 }

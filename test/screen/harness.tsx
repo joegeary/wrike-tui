@@ -1,5 +1,5 @@
 import { testRender } from "@opentui/react/test-utils"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { EffectDeps } from "../../src/app/effects"
@@ -33,6 +33,8 @@ export type AppOptions = {
   readOnly?: boolean
   /** False starts the way `WRIKE_TUI_NO_RESTORE=1` does. */
   restore?: boolean
+  /** The environment a handoff to an agent sees. Empty by default, so it is never inside Herdr. */
+  env?: Record<string, string>
 }
 
 /** The whole app in a test renderer, wired to the real client over an in-process fake Wrike. */
@@ -49,7 +51,15 @@ export async function openApp(size: { width: number; height: number } = { width:
     mcp,
   )
   const bridge = createBridge()
-  const outside = { opened: [] as string[], copied: [] as string[], quit: false, editor: ((initial) => initial) as Editor, edited: [] as { initial: string; extension: string }[] }
+  const outside = {
+    opened: [] as string[],
+    copied: [] as string[],
+    quit: false,
+    editor: ((initial) => initial) as Editor,
+    edited: [] as { initial: string; extension: string }[],
+    /** Every agent started, in this terminal or through Herdr. Nothing is ever run. */
+    agents: [] as { kind: "terminal" | "herdr"; argv: string[]; cwd?: string }[],
+  }
   const deps: EffectDeps = {
     client,
     clock: () => clock,
@@ -63,9 +73,18 @@ export async function openApp(size: { width: number; height: number } = { width:
     scroll: (pane, to) => bridge.scrollers[pane]?.(to),
     persistence,
     quit: () => void (outside.quit = true),
+    agent: {
+      dir: join(home, "state", "wrike-tui", "agent"),
+      env: options.env ?? {},
+      home,
+      onPath: () => true,
+      isDirectory: (path) => stat(path).then((found) => found.isDirectory(), () => false),
+      terminal: async (argv, cwd) => void outside.agents.push({ kind: "terminal", argv, cwd }),
+      herdr: async (argv) => (outside.agents.push({ kind: "herdr", argv }), null),
+    },
   }
   const profile = { host: "fake.test", accountId: "IEAAAAAA", userId: userId(ME), name: "Sam Sample" }
-  const boot = await loadBoot(persistence, { readOnly: options.readOnly ?? false, restore: options.restore ?? true })
+  const boot = await loadBoot(persistence, { readOnly: options.readOnly ?? false, restore: options.restore ?? true, places: { home, cwd: home } })
   const store = createStore(initialState(profile, CLOCK, boot), deps)
   const saveSession = sessionSaver(store.getState, persistence)
   const screen = await testRender(<App store={store} bridge={bridge} />, size)

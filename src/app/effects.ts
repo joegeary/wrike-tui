@@ -2,6 +2,7 @@ import { descriptionFromEdit, editableDescription } from "../domain/description"
 import type { Persistence } from "../persist/persistence"
 import type { TaskPage, WrikeClient } from "../wrike/client"
 import { describeError, toWrikeError, WrikeFailure } from "../wrike/errors"
+import { handToAgent, type AgentDeps } from "./agent"
 import { HISTORY_PAGE, type Action, type BulkJob, type BulkOutcome, type Clock, type Details, type Effect, type OpenTarget, type Result, type ScrollTo, type TaskSource } from "./state"
 
 export type EffectDeps = {
@@ -19,6 +20,8 @@ export type EffectDeps = {
   newerRelease?(): Promise<string | null>
   /** Waits between polls and while typing pauses. Real time unless a caller passes its own. */
   sleep?(ms: number): Promise<void>
+  /** Where a handoff writes the task, and how it starts the agent. */
+  agent: AgentDeps
 }
 
 /** How long typing must pause before the form search runs. */
@@ -249,6 +252,8 @@ export async function runEffect(effect: Effect, deps: EffectDeps, dispatch: (act
       if (version) dispatch({ type: "update-available", version })
       return
     }
+    case "hand-to-agent":
+      return handToAgent(client, deps.agent, effect.handoff, dispatch)
     case "quit":
       return deps.quit()
   }

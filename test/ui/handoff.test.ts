@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { chmod, mkdtemp, readdir, rm } from "node:fs/promises"
+import { chmod, mkdtemp, readdir, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { browserCommand, copyText, editInEditor, editorCommand } from "../../src/ui/handoff"
+import { dirname, join } from "node:path"
+import { browserCommand, copyText, editInEditor, editorCommand, runHerdr, runInTerminal } from "../../src/ui/handoff"
 
 let scripts: string
 
@@ -98,5 +98,69 @@ describe("copyText", () => {
     expect(copyText(terminal, {}, "4598459101", (sequence) => void written.push(sequence))).toBe(false)
     expect(copied).toEqual(["4598459101"])
     expect(written).toEqual([])
+  })
+})
+
+/** A program written in TypeScript and run by Bun, as the fake agent and the fake herdr-app are. */
+async function bunScript(name: string, body: string): Promise<string> {
+  const path = join(scripts, name)
+  await Bun.write(path, `#!/usr/bin/env bun\n${body}\n`)
+  await chmod(path, 0o755)
+  return path
+}
+
+describe("runInTerminal", () => {
+  test("suspends the renderer, runs the program in the folder with its arguments, waits for it, and resumes", async () => {
+    const record = join(scripts, "agent-run.json")
+    const agent = await bunScript("agent", `await Bun.write(${JSON.stringify(record)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }))`)
+    const screen = renderer()
+    await runInTerminal(screen, [agent, "--flag", "the message\nwith two lines"], scripts, process.env)
+    expect(screen.calls).toEqual(["suspend", "resume"])
+    expect(await Bun.file(record).json()).toEqual({ argv: ["--flag", "the message\nwith two lines"], cwd: await realpath(scripts) })
+  })
+
+  test("an agent that exits with an error still gives the terminal back", async () => {
+    const screen = renderer()
+    await runInTerminal(screen, [await bunScript("failing-agent", "process.exit(3)")], scripts, process.env)
+    expect(screen.calls).toEqual(["suspend", "resume"])
+  })
+
+  test("a program that cannot start fails, and the renderer still resumes", async () => {
+    const screen = renderer()
+    await expect(runInTerminal(screen, [join(scripts, "no-such-agent")], scripts, process.env)).rejects.toThrow()
+    expect(screen.calls).toEqual(["suspend", "resume"])
+  })
+})
+
+describe("runHerdr", () => {
+  /** A PATH with the fake herdr-app first, and Bun's own folder so the fake can run. The real herdr-app is never reached. */
+  async function fakeHerdr(answer: string, code: number): Promise<{ env: Record<string, string>; calls: string }> {
+    const folder = await mkdtemp(join(scripts, "herdr-"))
+    const calls = join(folder, "calls.json")
+    await Bun.write(
+      join(folder, "herdr-app"),
+      `#!/usr/bin/env bun\nawait Bun.write(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)))\nconsole.log(${JSON.stringify(answer)})\nprocess.exit(${code})\n`,
+    )
+    await chmod(join(folder, "herdr-app"), 0o755)
+    return { env: { PATH: `${folder}:${dirname(process.execPath)}` }, calls }
+  }
+
+  const ARGV = ["herdr-app", "do", "tab.new", "--name", "Fix login", "--folder", "/home/sam/dev/api", "--argv", JSON.stringify(["claude", "Plan it."])]
+
+  test("passes the arguments to the herdr-app on the PATH, and an answer with IDs is success", async () => {
+    const herdr = await fakeHerdr('{ "pane": "p1", "terminal": "t9" }', 0)
+    expect(await runHerdr(ARGV, herdr.env)).toBeNull()
+    expect(await Bun.file(herdr.calls).json()).toEqual(ARGV.slice(1))
+  })
+
+  test("Herdr's error comes back as its text", async () => {
+    const herdr = await fakeHerdr('{ "error": "no window is open" }', 1)
+    expect(await runHerdr(ARGV, herdr.env)).toBe("no window is open")
+  })
+
+  test("a failure that is not JSON is told by its output, and a missing herdr-app by its name", async () => {
+    const herdr = await fakeHerdr("socket refused", 2)
+    expect(await runHerdr(ARGV, herdr.env)).toBe("socket refused")
+    expect(await runHerdr(ARGV, { PATH: scripts })).toBe("herdr-app is not on your PATH")
   })
 })

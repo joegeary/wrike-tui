@@ -27,6 +27,8 @@ const BULK_TITLES: Record<BulkPicker, string> = { status: "Status of", importanc
 function title(state: State, mode: PickerMode): string {
   if (mode.field === "bulk") return `${BULK_TITLES[mode.change]} ${mode.tasks.length} marked ${mode.tasks.length === 1 ? "task" : "tasks"}`
   if (mode.field === "request-form") return "Submit a request form"
+  if (mode.field === "agent-prompt") return "Hand to an agent"
+  if (mode.field === "agent-workspace") return `${mode.prompt.name}: run the agent in`
   if (mode.field === "set-field") return mode.taskIds.length > 1 ? `Set a field on ${mode.taskIds.length} tasks` : "Set a field"
   return mode.field === "custom" ? (fieldDefs(state.customFields).get(mode.edit.id)?.title ?? "Field") : TITLES[mode.field]
 }

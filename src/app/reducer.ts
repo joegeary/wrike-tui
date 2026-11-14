@@ -33,6 +33,7 @@ import {
   submitCompose,
   toggleHistory,
 } from "./reduce/comments"
+import { agentReturned, submitAgentPicker } from "./reduce/agent"
 import { openAttachment, previewLoaded } from "./reduce/attachments"
 import { bulkDone, confirmBulk, submitBulkPicker } from "./reduce/bulk"
 import { closeForm, formBack, formBrowser, formChoiceMove, formChoiceToggle, formDraft, formLoaded, formNext, formsDue, formsLoaded, formsQuery, formSubmitted, openForms, pickForm } from "./reduce/forms"
@@ -148,6 +149,9 @@ function step(state: State, action: Action): Update {
 
     case "comment-deleted":
       return commentDeleted(state, action)
+
+    case "agent-returned":
+      return agentReturned(state)
 
     case "focus":
       return focusPane(state, action.pane === "left" ? PANES.indexOf(state.focus) - 1 : action.pane === "right" ? PANES.indexOf(state.focus) + 1 : PANES.indexOf(action.pane))
@@ -313,6 +317,7 @@ function submit(state: State): Update {
     case "picker": {
       if (mode.field === "bulk") return submitBulkPicker(state, mode)
       if (mode.field === "request-form") return pickForm(state, mode)
+      if (mode.field === "agent-prompt" || mode.field === "agent-workspace") return submitAgentPicker(state, mode)
       const { field } = mode
       if (isWorkPicker(field)) return submitWorkPicker(state, mode, field)
       if (field !== "status" && field !== "importance" && field !== "assignees" && field !== "set-field" && field !== "custom") return submitListPicker(state, mode, field)
