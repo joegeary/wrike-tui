@@ -152,7 +152,8 @@ describe("Editing a task", () => {
     await app.see("Comments (3)")
     await app.press("A")
     const picker = await app.see("─ Assignees ─")
-    expect(picker).toMatch(/\[x\] Pat Example\s+pat\.example@example\.test/)
+    // A blank column keeps the email off the right border, as on the left.
+    expect(picker).toMatch(/│ {3}\[x\] Pat Example\s+pat\.example@example\.test │/)
     expect(picker).toMatch(/\[ \] Riley Demo/)
     expect(picker).not.toContain("Former Colleague")
     await app.type("ril")
