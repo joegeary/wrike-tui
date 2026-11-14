@@ -13,9 +13,11 @@ export type OAuthApp = { clientId: string; clientSecret: string }
 /** Renewing a minute early keeps a request from starting with a token that runs out on the way. */
 const EARLY_MS = 60_000
 
-/** No `scope` is sent, so Wrike grants `Default`, which covers what the client reads and writes. */
+/** `Default` covers the REST API. Wrike's MCP server, which serves the Inbox and field history, asks for `wsReadWrite`. */
+const SCOPE = "Default,wsReadWrite"
+
 export function authorizeUrl(clientId: string, redirectUri: string, state: string): string {
-  const params = new URLSearchParams({ client_id: clientId, response_type: "code", redirect_uri: redirectUri, state })
+  const params = new URLSearchParams({ client_id: clientId, response_type: "code", redirect_uri: redirectUri, state, scope: SCOPE })
   return `${AUTHORIZE_URL}?${params}`
 }
 
