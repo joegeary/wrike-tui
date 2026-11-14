@@ -232,9 +232,7 @@ access token by itself. `WRIKE_TOKEN` still wins over it when set.
 When no browser opens, open the printed address yourself. When the browser
 cannot reach wrike-tui after you sign in, paste the address it landed on at the
 prompt. A different port goes in `config.json` as `oauth.port`, and the
-redirect URI must name the same port. If Wrike accepts only an HTTPS redirect,
-register `https://localhost:8765/callback`, set it as `oauth.redirectUri`, and
-paste the address the browser lands on.
+redirect URI must name the same port.
 [configuration.md](configuration.md#oauth) lists the `oauth` keys.
 
 An OAuth login reaches the Inbox and field history too. Wrike's MCP server, which
