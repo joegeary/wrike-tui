@@ -1,8 +1,9 @@
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 
-// The tmux server hands its environment to the shell, and a real WRIKE_TOKEN or WRIKE_HOST must never reach the binary under test.
-const CLEAN_ENV = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("WRIKE")))
+// The tmux server hands its environment to the shell. A real WRIKE_TOKEN or WRIKE_HOST must never reach the binary under test,
+// and neither may Herdr's HC_ variables, which would send a handoff to the person's own Herdr window.
+const CLEAN_ENV = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("WRIKE") && !name.startsWith("HC_")))
 
 /**
  * One detached tmux session on a private server socket, so the run never
