@@ -30,6 +30,7 @@ export const ConfigSchema = z
     navWidth: z.number().int().min(NAV_WIDTH.min).max(NAV_WIDTH.max).default(DEFAULT_SETTINGS.navWidth),
     completed: z.boolean().default(DEFAULT_SETTINGS.completed),
     history: z.boolean().default(DEFAULT_SETTINGS.history),
+    updateCheck: z.boolean().default(DEFAULT_SETTINGS.updateCheck),
     lists: z.partialRecord(z.enum(TASK_SCOPE_KINDS), ListSpecSchema.partial()).default({}),
     keys: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
   })

@@ -23,11 +23,19 @@ export const keyringStore = (env: Env) => keyringEntry(env, "token")
 /** The OAuth app's client secret, kept apart from the login so a new login can reuse it. */
 export const clientSecretStore = (env: Env) => keyringEntry(env, "oauth-client-secret")
 
-/** `expiresAt` is an ISO time. Wrike may hand out a new refresh token on every refresh. */
-export type OAuthLogin = { kind: "oauth"; accessToken: string; refreshToken: string; expiresAt: string; host: string }
+/** Which app a login signed in through: the one built into release builds, or one the user registered in Wrike's App Console. */
+export type LoginApp = "shared" | "own"
+
+/**
+ * `expiresAt` is an ISO time. Wrike may hand out a new refresh token on every
+ * refresh. `app` decides which credentials renew the login.
+ */
+export type OAuthLogin = { kind: "oauth"; app: LoginApp; accessToken: string; refreshToken: string; expiresAt: string; host: string }
 
 const OAuthLoginSchema = z.object({
   kind: z.literal("oauth"),
+  // 0.2.0 had only the user's own app and stored no `app`.
+  app: z.enum(["shared", "own"]).default("own"),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1),
   expiresAt: z.string(),

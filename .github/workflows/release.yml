@@ -26,28 +26,45 @@ jobs:
           - { os: linux, arch: arm64, runner: ubuntu-24.04-arm }
           - { os: darwin, arch: arm64, runner: macos-15 }
           - { os: darwin, arch: x64, runner: macos-15-intel }
+          - { os: windows, arch: x64, runner: windows-latest, exe: .exe }
+          - { os: windows, arch: arm64, runner: windows-11-arm, exe: .exe }
     runs-on: ${{ matrix.runner }}
+    # Git Bash on the Windows runners, so every step reads the same.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
+      # Only this step sees the shared app's credentials. CI builds go without, and so have no shared app.
       - name: Build
+        env:
+          WRIKE_OAUTH_CLIENT_ID: ${{ secrets.WRIKE_OAUTH_CLIENT_ID }}
+          WRIKE_OAUTH_CLIENT_SECRET: ${{ secrets.WRIKE_OAUTH_CLIENT_SECRET }}
+          WRIKE_TUI_REQUIRE_SHARED_APP: "1"
         run: |
           echo "WRIKE_TUI_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           WRIKE_TUI_VERSION="${GITHUB_REF_NAME#v}" bun run build
       - name: Smoke run
         run: |
-          said="$(./dist/wrike-tui --version)"
+          said="$(./dist/wrike-tui${{ matrix.exe }} --version)"
           echo "$said"
           test "$said" = "wrike-tui ${WRIKE_TUI_VERSION}"
+      # A tarball for Linux and macOS and a zip for Windows, each what that platform opens without reaching for anything.
       - name: Pack
+        if: matrix.os != 'windows'
         run: tar -czf "wrike-tui-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" -C dist wrike-tui
+      - name: Pack
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/wrike-tui.exe -DestinationPath "wrike-tui-${{ matrix.os }}-${{ matrix.arch }}.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: wrike-tui-${{ matrix.os }}-${{ matrix.arch }}
-          path: wrike-tui-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          path: wrike-tui-${{ matrix.os }}-${{ matrix.arch }}.${{ matrix.os == 'windows' && 'zip' || 'tar.gz' }}
           if-no-files-found: error
 
   release:
@@ -64,9 +81,14 @@ jobs:
       - name: Write SHA256SUMS
         working-directory: assets
         run: |
-          sha256sum wrike-tui-*.tar.gz > SHA256SUMS
+          sha256sum wrike-tui-*.tar.gz wrike-tui-*.zip > SHA256SUMS
           cat SHA256SUMS
+      # A tag with a suffix (v0.3.0-rc.1) is a pre-release, which the releases/latest lookup in install.sh,
+      # install.ps1 and wrike-tui update never returns.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME" assets/*
+        run: |
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME" "${prerelease[@]}" assets/*

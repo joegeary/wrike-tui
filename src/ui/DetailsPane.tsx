@@ -13,6 +13,7 @@ import { retryText } from "../wrike/errors"
 import type { UiBridge } from "./bridge"
 import { Attachments } from "./Attachments"
 import { Comments, ComposeBox, itemAnchor, streamTitle } from "./Comments"
+import { Description } from "./Description"
 import { shortDay, truncate } from "./format"
 import { Pane } from "./Pane"
 import { scrollBox } from "./scroll"
@@ -199,7 +200,7 @@ function Body({ state, details, width, onDraft }: { state: State; details: Detai
       <Fields state={state} task={task} active={activeField} onDraft={onDraft} />
 
       <Section title="Description" />
-      {markdown === "" ? <text fg={theme.dim}>No description.</text> : <markdown syntaxStyle={style} content={markdown} />}
+      {markdown === "" ? <text fg={theme.dim}>No description.</text> : <Description markdown={markdown} style={style} />}
 
       {attachmentsError ? (
         <>
@@ -247,6 +248,12 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
     if (walkedField) scroll.current?.scrollChildIntoView(fieldAnchor(walkedField))
   }, [walkedField])
 
+  // A new comment is written under the newest ones, so the stream stays on its last line while the box and the mention list take rows from it.
+  const composingNew = state.mode.kind === "compose" && state.mode.editing === null
+  useEffect(() => {
+    if (composingNew) scrollBox(scroll.current, "bottom")
+  }, [composingNew])
+
   const shownDetails = details.state === "ready" ? details.value : details.state === "loading" ? details.previous : undefined
   const title = details.state === "loading" && shownDetails ? "Details (refreshing)" : "Details"
 
@@ -258,7 +265,7 @@ export function DetailsPane(props: { state: State; width: number; bridge: UiBrid
         <text fg={theme.error} wrapMode="word">{retryText(details.error, retryHint(state.keymap))}</text>
       ) : null}
       {shownDetails ? (
-        <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY>
+        <scrollbox ref={scroll} flexGrow={1} flexShrink={1} paddingLeft={1} paddingRight={1} scrollY stickyScroll={composingNew} stickyStart="bottom">
           <Body state={state} details={shownDetails} width={props.width} onDraft={props.onDraft} />
         </scrollbox>
       ) : null}

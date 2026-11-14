@@ -1,15 +1,16 @@
 import { buildKeymap } from "../app/keymap"
 import type { Env } from "../auth/config"
-import { oauthProvider } from "../auth/oauth"
+import { oauthProvider, type OAuthApp } from "../auth/oauth"
 import { deleteProfile, readProfile, writeProfile } from "../auth/profile"
 import { loadSession, oauthHost, probe, type Session } from "../auth/session"
 import { resolveToken, type TokenStore } from "../auth/token"
+import { loadOAuthSettings } from "../persist/oauth"
 import { createPersistence, persistencePaths } from "../persist/persistence"
 import { VERSION } from "../version"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Fetch } from "../wrike/transport"
 import { keyLines } from "./keys"
-import { oauthLogin, storedApp, type OAuthIo } from "./oauth"
+import { oauthLogin, renewalApp, type OAuthIo } from "./oauth"
 import { update } from "./update"
 
 export type Io = {
@@ -22,16 +23,25 @@ export type Io = {
   fetch?: Fetch
   /** What OAuth needs. Without it `auth login --oauth` is refused and an OAuth login cannot renew itself. */
   oauth?: OAuthIo
+  /** The Wrike app built into release builds. Null in a build without one. */
+  sharedApp: OAuthApp | null
 }
 
-const USAGE = `wrike-tui ${VERSION}
+/** A build with the shared app needs nothing from Wrike's App Console to sign in through the browser. */
+const usage = (shared: boolean) => `wrike-tui ${VERSION}
 A keyboard-first terminal client for Wrike.
 
 Usage:
   wrike-tui                     Open the client
-  wrike-tui auth login          Ask which way to log in, then log in
+${
+  shared
+    ? `  wrike-tui auth login          Sign in through the browser
+  wrike-tui auth login --token  Store a Wrike permanent access token in the OS keyring instead`
+    : `  wrike-tui auth login          Store a Wrike permanent access token in the OS keyring,
+                                or sign in with your own app when config.json names one
   wrike-tui auth login --token  Store a Wrike permanent access token in the OS keyring
-  wrike-tui auth login --oauth  Sign in through the browser with an app from Wrike's App Console
+  wrike-tui auth login --oauth  Sign in through the browser with an app from Wrike's App Console`
+}
   wrike-tui auth status         Show who is logged in and where the token comes from
   wrike-tui auth logout         Remove the stored login, client secret and profile
   wrike-tui keys                List every command with its keys, as config.json sets them
@@ -43,8 +53,7 @@ Environment:
   WRIKE_TOKEN   Use this token instead of the keyring
   WRIKE_HOST    Use this Wrike host instead of the stored one
 
-Get a token in Wrike: profile icon, Apps & Integrations, API tab.
-For --oauth, register an app in Wrike's App Console; the README says how.
+Get a token in Wrike: profile icon, Apps & Integrations, API tab.${shared ? "" : "\nFor --oauth, register an app in Wrike's App Console; docs/install.md says how."}
 Press ? inside the client for the keys.`
 
 const NOT_LOGGED_IN = "Not logged in. Run `wrike-tui auth login`, or set WRIKE_TOKEN."
@@ -52,29 +61,28 @@ const NOT_LOGGED_IN = "Not logged in. Run `wrike-tui auth login`, or set WRIKE_T
 export async function run(argv: string[], io: Io): Promise<number> {
   const [command, sub, ...rest] = argv
   if (command === undefined) return open(io)
-  if (command === "--help" || command === "-h" || command === "help") return io.out(USAGE), 0
+  if (command === "--help" || command === "-h" || command === "help") return io.out(usage(io.sharedApp !== null)), 0
   if (command === "--version" || command === "-v") return io.out(`wrike-tui ${VERSION}`), 0
   if (command === "update" && rest.length === 0 && (sub === undefined || sub === "--check")) {
     return update(sub === "--check", io)
   }
   if (command === "auth" && sub === "login" && rest.length <= 1) {
-    const way = rest[0] === "--token" ? "token" : rest[0] === "--oauth" ? "oauth" : rest[0] === undefined ? await pickLogin(io) : undefined
+    const way = rest[0] === "--token" ? "token" : rest[0] === "--oauth" ? "oauth" : rest[0] === undefined ? await defaultLogin(io) : undefined
     if (way === "token") return login(io)
     if (way === "oauth") return io.oauth ? oauthLogin(io, io.oauth) : (io.err("OAuth login is not available here."), 1)
-    if (way === null) return io.err("No way to log in picked. Nothing was stored."), 1
   }
   if (command === "auth" && rest.length === 0) {
     if (sub === "status") return status(io)
     if (sub === "logout") return logout(io)
   }
   if (command === "keys" && sub === undefined) return keys(io)
-  io.err(`Unknown command: ${argv.join(" ")}\n\n${USAGE}`)
+  io.err(`Unknown command: ${argv.join(" ")}\n\n${usage(io.sharedApp !== null)}`)
   return 2
 }
 
 async function open(io: Io): Promise<number> {
   try {
-    const session = await loadSession(io.env, io.tokens, io.fetch, () => storedApp(io))
+    const session = await loadSession(io.env, io.tokens, io.fetch, renewalApp(io))
     if (!session) return io.err(NOT_LOGGED_IN), 1
     await io.launch(session)
     return 0
@@ -84,20 +92,14 @@ async function open(io: Io): Promise<number> {
   }
 }
 
-const LOGIN_MENU = `How do you want to log in?
-  1. A permanent access token (Wrike: profile icon, Apps & Integrations, API tab)
-  2. OAuth through the browser (needs an app from Wrike's App Console)`
-
-/** Asks at a terminal. Piped input has no one to ask, so it reads a token as before. */
-async function pickLogin(io: Io): Promise<"token" | "oauth" | null> {
+/**
+ * The browser, whenever there is an app to sign in with: the shared one, or the user's own named in config.json.
+ * Otherwise a token. Piped input has no one to click Allow, so it reads a token as before.
+ */
+async function defaultLogin(io: Io): Promise<"token" | "oauth"> {
   if (!io.oauth?.interactive) return "token"
-  io.out(LOGIN_MENU)
-  for (;;) {
-    const answer = await io.oauth.readLine("Pick 1 or 2: ")
-    if (answer === null) return null
-    if (answer === "1") return "token"
-    if (answer === "2") return "oauth"
-  }
+  if (io.sharedApp) return "oauth"
+  return (await loadOAuthSettings(io.env)).clientId ? "oauth" : "token"
 }
 
 async function login(io: Io): Promise<number> {
@@ -121,7 +123,7 @@ async function status(io: Io): Promise<number> {
   if (!token) return io.err(NOT_LOGGED_IN), 1
   const source = token.source === "env" ? "WRIKE_TOKEN" : "the OS keyring"
   // Asking an OAuth login for its token renews it first when it ran out.
-  const provider = token.kind === "oauth" ? oauthProvider({ login: token.login, store: io.tokens, app: () => storedApp(io), fetch: io.fetch }) : null
+  const provider = token.kind === "oauth" ? oauthProvider({ login: token.login, store: io.tokens, app: renewalApp(io), fetch: io.fetch }) : null
   try {
     const current = provider ? await provider.current() : token.token
     const profile = await probe(current, oauthHost(io.env, token), io.fetch)

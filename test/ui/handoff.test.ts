@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { chmod, mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { copyText, editInEditor, editorCommand, openInBrowser } from "../../src/ui/handoff"
+import { browserCommand, copyText, editInEditor, editorCommand } from "../../src/ui/handoff"
 
 let scripts: string
 
@@ -64,15 +64,30 @@ describe("editInEditor", () => {
   })
 
   test("VISUAL wins over EDITOR, arguments are kept, and vi is the fallback", () => {
-    expect(editorCommand({ VISUAL: "code --wait", EDITOR: "nano" })).toEqual(["code", "--wait"])
-    expect(editorCommand({ EDITOR: "nano" })).toEqual(["nano"])
-    expect(editorCommand({})).toEqual(["vi"])
+    for (const platform of ["linux", "darwin", "win32"] as const) {
+      expect(editorCommand({ VISUAL: "code --wait", EDITOR: "nano" }, platform)).toEqual(["code", "--wait"])
+      expect(editorCommand({ EDITOR: "nano" }, platform)).toEqual(["nano"])
+    }
+    expect(editorCommand({}, "linux")).toEqual(["vi"])
+    expect(editorCommand({}, "darwin")).toEqual(["vi"])
+  })
+
+  test("on Windows without VISUAL and EDITOR, Microsoft Edit when it is on PATH, and Notepad when it is not", () => {
+    expect(editorCommand({}, "win32", (command) => command === "edit")).toEqual(["edit"])
+    expect(editorCommand({}, "win32", () => false)).toEqual(["notepad"])
   })
 })
 
-test("on Windows without $BROWSER, opening a link fails with a reason instead of passing it through cmd", async () => {
-  const url = "https://storage.example.test/a.png?signature=x&expires=1"
-  await expect(openInBrowser({}, url, "win32")).rejects.toThrow("Set BROWSER to a program that opens a URL given as its argument")
+describe("browserCommand", () => {
+  test("BROWSER wins on every platform, with its arguments", () => {
+    for (const platform of ["linux", "darwin", "win32"] as const) expect(browserCommand({ BROWSER: "firefox --new-tab" }, platform)).toEqual(["firefox", "--new-tab"])
+  })
+
+  test("without BROWSER, xdg-open on Linux, open on macOS, and the URL handler on Windows, which takes the link as one argument", () => {
+    expect(browserCommand({}, "linux")).toEqual(["xdg-open"])
+    expect(browserCommand({}, "darwin")).toEqual(["open"])
+    expect(browserCommand({}, "win32")).toEqual(["rundll32", "url.dll,FileProtocolHandler"])
+  })
 })
 
 describe("copyText", () => {

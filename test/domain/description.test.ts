@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { descriptionFromEdit, displayMarkdown, editableDescription, htmlToMarkdown, markdownToHtml } from "../../src/domain/description"
+import { descriptionFromEdit, displayBlocks, displayMarkdown, editableDescription, htmlToMarkdown, markdownToHtml } from "../../src/domain/description"
 
 describe("htmlToMarkdown", () => {
   test("renders Wrike's tags", () => {
@@ -286,5 +286,23 @@ describe("displayMarkdown", () => {
   })
   test("shows a break in a table cell as a space", () => {
     expect(displayMarkdown("<table><tr><td>a<br />b</td></tr></table>")).toBe("| a b |\n| --- |")
+  })
+})
+
+describe("displayBlocks", () => {
+  const shape = (markdown: string) =>
+    displayBlocks(markdown).map((block) => (block.kind === "paragraph" ? `p:${block.tokens.map((token) => token.raw).join("")}` : block.kind === "gap" ? `gap:${block.lines}` : `md:${block.markdown}`))
+
+  test("draws each paragraph on its own and keeps the blank lines as written", () => {
+    expect(shape("One.\n\nTwo  \nlines.\n- a\n- b\n\n\nThree.")).toEqual(["p:One.", "gap:1", "p:Two  \nlines.", "md:- a\n- b", "gap:2", "p:Three."])
+  })
+
+  test("keeps a table, code or quote one blank line from its neighbors, as the markdown renderer spaces them", () => {
+    expect(shape("Before.\n| A | B |\n| --- | --- |\n\n\nAfter.")).toEqual(["p:Before.", "gap:1", "md:| A | B |\n| --- | --- |", "gap:1", "p:After."])
+    expect(shape("```\nx\n```\n> quoted")).toEqual(["md:```\nx\n```", "gap:1", "md:> quoted"])
+  })
+
+  test("blank lines between markdown blocks stay inside one, and blank lines at the ends go", () => {
+    expect(shape("\n\n## Goal\n\n- a\n\n")).toEqual(["md:## Goal\n\n- a"])
   })
 })

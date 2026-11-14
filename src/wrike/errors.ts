@@ -10,6 +10,8 @@ export type WrikeError =
   | { kind: "unavailable"; message: string }
   /** The OAuth refresh token was refused, so only a new login helps. */
   | { kind: "expired" }
+  /** The login came from the app built into release builds, and this build has none to renew it with. */
+  | { kind: "no_shared_app" }
 
 /** The one exception the wire layer throws. Callers above it read `error`. */
 export class WrikeFailure extends Error {
@@ -44,6 +46,8 @@ export function describeError(error: WrikeError): string {
       return `Wrike could not answer: ${error.message}`
     case "expired":
       return "Your Wrike login expired. Run `wrike-tui auth login --oauth`."
+    case "no_shared_app":
+      return "Your Wrike login came from a release build of wrike-tui, and this build cannot renew it. Run `wrike-tui auth login`."
   }
 }
 

@@ -1,41 +1,43 @@
-import { chmod, realpath, rename, rm } from "node:fs/promises"
+import { chmod, mkdtemp, realpath, rename, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { z } from "zod"
-import { isLocalBuild, VERSION } from "../version"
+import { checksumFor, compareVersions, get, INSTALL_PS1_URL, latestRelease, messageOf, SUMS, tagVersion, UpdateFailure, type Release } from "../update/release"
+import { VERSION } from "../version"
 import type { Fetch } from "../wrike/transport"
 
-const LATEST = "https://api.github.com/repos/joegeary/wrike-tui/releases/latest"
-const SUMS = "SHA256SUMS"
+/** Runs the downloaded install.ps1 with these variables added, and resolves to its exit code. */
+export type RunInstaller = (script: string, env: Record<string, string>) => Promise<number>
 
 export type UpdateIo = {
   out(line: string): void
   err(line: string): void
   fetch?: Fetch
+  /** The running version, the platform and the binary's path. Tests pass their own. */
+  version?: string
+  platform?: NodeJS.Platform
+  arch?: string
+  execPath?: string
+  runInstaller?: RunInstaller
 }
 
-const Release = z.object({
-  tag_name: z.string(),
-  assets: z.array(z.object({ name: z.string(), browser_download_url: z.string() })),
-})
-type Release = z.infer<typeof Release>
-
-class UpdateFailure extends Error {}
-
 export async function update(check: boolean, io: UpdateIo): Promise<number> {
-  if (isLocalBuild) return io.err("This is a local build. Rebuild it from the source instead."), 1
+  const current = io.version ?? VERSION
+  if (current.endsWith("-dev")) return io.err("This is a local build. Rebuild it from the source instead."), 1
   const http = io.fetch ?? fetch
+  const platform = io.platform ?? process.platform
   try {
     const release = await latestRelease(http)
-    const latest = release.tag_name.replace(/^v/, "")
-    if (compareVersions(latest, VERSION) <= 0) return io.out(`wrike-tui ${VERSION} is the newest release.`), 0
+    const latest = tagVersion(release.tag_name)
+    if (compareVersions(latest, current) <= 0) return io.out(`wrike-tui ${current} is the newest release.`), 0
     if (check) {
-      io.out(`wrike-tui ${latest} is out. This is ${VERSION}. Run \`wrike-tui update\` to install it.`)
+      io.out(`wrike-tui ${latest} is out. This is ${current}. Run \`wrike-tui update\` to install it.`)
       return 0
     }
-    const binary = await download(http, release)
-    const target = await realpath(process.execPath)
+    const target = await realpath(io.execPath ?? process.execPath)
+    if (platform === "win32") return await installOnWindows(http, release, target, io)
+    const binary = await download(http, release, platform, io.arch ?? process.arch)
     await replace(target, binary, latest)
-    io.out(`Updated wrike-tui ${VERSION} to ${latest} at ${target}.`)
+    io.out(`Updated wrike-tui ${current} to ${latest} at ${target}.`)
     return 0
   } catch (thrown) {
     io.err(thrown instanceof UpdateFailure ? thrown.message : `Update failed: ${messageOf(thrown)}. Nothing was changed.`)
@@ -43,18 +45,41 @@ export async function update(check: boolean, io: UpdateIo): Promise<number> {
   }
 }
 
-async function latestRelease(http: Fetch): Promise<Release> {
-  const response = await get(http, LATEST, "application/vnd.github+json")
-  const parsed = Release.safeParse(await response.json())
-  if (!parsed.success) throw new UpdateFailure("GitHub answered the release lookup in a shape this version cannot read.")
-  return parsed.data
+/**
+ * A running .exe cannot be overwritten, only renamed aside, and install.ps1
+ * already does that. So Windows updates through the same script a first
+ * install runs, pinned to the release found here and aimed at this binary's folder.
+ */
+async function installOnWindows(http: Fetch, release: Release, target: string, io: UpdateIo): Promise<number> {
+  const script = await (await get(http, INSTALL_PS1_URL, "text/plain")).text()
+  const folder = await mkdtemp(join(tmpdir(), "wrike-tui-update-"))
+  try {
+    // PowerShell refuses -File on a path that does not end in .ps1.
+    const path = join(folder, "install.ps1")
+    await Bun.write(path, script)
+    const code = await (io.runInstaller ?? runPowerShell)(path, { INSTALL_DIR: dirname(target), VERSION: release.tag_name })
+    if (code !== 0) throw new UpdateFailure(`install.ps1 stopped with exit code ${code}. Its message is above.`)
+    return 0
+  } finally {
+    await rm(folder, { recursive: true, force: true })
+  }
+}
+
+const runPowerShell: RunInstaller = async (script, env) => {
+  const child = Bun.spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], {
+    env: { ...process.env, ...env },
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  return child.exited
 }
 
 /** The new binary's bytes, from this platform's tarball, after its checksum matched SHA256SUMS. */
-async function download(http: Fetch, release: Release): Promise<Blob> {
-  const name = `wrike-tui-${process.platform}-${process.arch}.tar.gz`
+async function download(http: Fetch, release: Release, platform: NodeJS.Platform, arch: string): Promise<Blob> {
+  const name = `wrike-tui-${platform}-${arch}.tar.gz`
   const asset = release.assets.find((a) => a.name === name)
-  if (!asset) throw new UpdateFailure(`Release ${release.tag_name} has no build for ${process.platform}-${process.arch}.`)
+  if (!asset) throw new UpdateFailure(`Release ${release.tag_name} has no build for ${platform}-${arch}.`)
   const sums = release.assets.find((a) => a.name === SUMS)
   if (!sums) throw new UpdateFailure(`Release ${release.tag_name} has no ${SUMS} file, so the download cannot be checked.`)
 
@@ -94,55 +119,6 @@ async function replace(target: string, binary: Blob, version: string): Promise<v
   }
 }
 
-async function get(http: Fetch, url: string, accept = "application/octet-stream"): Promise<Response> {
-  let response: Response
-  try {
-    response = await http(url, { headers: { Accept: accept, "User-Agent": `wrike-tui/${VERSION}` } })
-  } catch (thrown) {
-    throw new UpdateFailure(`Could not reach GitHub: ${messageOf(thrown)}`)
-  }
-  if (response.ok) return response
-  if (response.status === 404 && url === LATEST) throw new UpdateFailure("No release of wrike-tui is published yet.")
-  if (response.status === 403 || response.status === 429) {
-    throw new UpdateFailure("GitHub is limiting requests from this address. Try again in an hour.")
-  }
-  throw new UpdateFailure(`GitHub answered ${response.status} for ${url}.`)
-}
-
-/** The hash `sha256sum` wrote for `name`, one `<hash>  <name>` line per file. */
-function checksumFor(sums: string, name: string): string | null {
-  for (const line of sums.split("\n")) {
-    const match = /^([0-9a-f]{64}) [ *]?(.+)$/.exec(line.trim())
-    if (match && match[2] === name) return match[1] ?? null
-  }
-  return null
-}
-
-/** Compares `major.minor.patch` with an optional `-prerelease`, which sorts before the plain version. */
-function compareVersions(a: string, b: string): number {
-  const [aCore = "", aPre] = splitPre(a)
-  const [bCore = "", bPre] = splitPre(b)
-  const aParts = aCore.split(".").map(Number)
-  const bParts = bCore.split(".").map(Number)
-  for (let i = 0; i < 3; i++) {
-    const diff = (aParts[i] ?? 0) - (bParts[i] ?? 0)
-    if (diff !== 0) return Math.sign(diff)
-  }
-  if (aPre === bPre) return 0
-  if (aPre === undefined) return 1
-  if (bPre === undefined) return -1
-  return aPre.localeCompare(bPre, "en", { numeric: true })
-}
-
-function splitPre(version: string): [string, string | undefined] {
-  const dash = version.indexOf("-")
-  return dash === -1 ? [version, undefined] : [version.slice(0, dash), version.slice(dash + 1)]
-}
-
 function isErrno(thrown: unknown, code: string): boolean {
   return typeof thrown === "object" && thrown !== null && "code" in thrown && thrown.code === code
-}
-
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown)
 }

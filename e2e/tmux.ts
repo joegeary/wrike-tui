@@ -64,6 +64,12 @@ export class TmuxSession {
     return this.tmux("capture-pane", "-p", "-e", "-t", "main")
   }
 
+  /** The cursor's cell, and whether the app shows it. */
+  async cursor(): Promise<{ x: number; y: number; visible: boolean }> {
+    const [x, y, flag] = (await this.tmux("display-message", "-p", "-t", "main", "#{cursor_x} #{cursor_y} #{cursor_flag}")).trim().split(" ")
+    return { x: Number(x), y: Number(y), visible: flag === "1" }
+  }
+
   clipboard(): Promise<string> {
     return this.tmux("show-buffer")
   }

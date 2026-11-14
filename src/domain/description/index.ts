@@ -2,7 +2,7 @@ import { sameHtml } from "../html-equivalence"
 import { markdownToHtml } from "./html"
 import { htmlToMarkdown } from "./markdown"
 
-export { displayMarkdown } from "./display"
+export { displayBlocks, displayMarkdown, type DisplayBlock } from "./display"
 export { htmlToMarkdown, markdownToHtml }
 
 export type EditableDescription =

@@ -1,8 +1,9 @@
-import { authorizeUrl, exchangeCode, type OAuthApp } from "../auth/oauth"
+import { authorizeUrl, exchangeCode, newPkce, newState, type OAuthApp } from "../auth/oauth"
 import { writeProfile } from "../auth/profile"
-import { probe } from "../auth/session"
+import { probe, type Renewal } from "../auth/session"
+import { SHARED_REDIRECT } from "../auth/shared-app"
 import { encodeLogin, type TokenStore } from "../auth/token"
-import { loadOAuthSettings, saveOAuthClientId, type OAuthSettings } from "../persist/oauth"
+import { loadOAuthSettings, saveOAuthClientId } from "../persist/oauth"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Io } from "./run"
 
@@ -23,10 +24,36 @@ const DONE_PAGE = `<!doctype html><meta charset="utf-8"><title>wrike-tui</title>
 
 const messageOf = (thrown: unknown) => (thrown instanceof Error ? thrown.message : String(thrown))
 
-/** The client ID and secret a refresh needs, or null when either is missing. */
-export async function storedApp(io: Io): Promise<OAuthApp | null> {
+/** The credentials that renew a login, taken from the app it signed in through and never from what config.json says now. */
+export function renewalApp(io: Io): Renewal["app"] {
+  return async (which) => (which === "shared" ? io.sharedApp : ownApp(io))
+}
+
+/** The user's own app: the client ID from config.json and the secret from the keyring, or null when either is missing. */
+async function ownApp(io: Io): Promise<OAuthApp | null> {
   const [settings, clientSecret] = await Promise.all([loadOAuthSettings(io.env), io.oauth?.clientSecret.get() ?? null])
   return settings.clientId && clientSecret ? { clientId: settings.clientId, clientSecret } : null
+}
+
+type Target = { uri: string; port: number }
+
+/** The app a new login signs in through and where Wrike sends the browser back to. */
+type Chosen =
+  | { which: "shared"; app: OAuthApp; redirect: Target }
+  /** `secretSaved` is whether the secret came from the keyring rather than the prompt. */
+  | { which: "own"; app: OAuthApp; redirect: Target; secretSaved: boolean }
+
+/** `oauth.clientId` in config.json means the user's own app. Without it the shared app, when this build has one. */
+async function chooseApp(io: Io, oauth: OAuthIo): Promise<Chosen | null> {
+  const settings = await loadOAuthSettings(io.env)
+  if (!settings.clientId && io.sharedApp) return { which: "shared", app: io.sharedApp, redirect: SHARED_REDIRECT }
+  const clientId = settings.clientId ?? (await askClientId(io, oauth))
+  if (!clientId) return io.err("No client ID entered. Nothing was stored."), null
+  const savedSecret = await oauth.clientSecret.get()
+  const clientSecret = savedSecret ?? (await io.readSecret("Wrike OAuth client secret: "))
+  if (!clientSecret) return io.err("No client secret entered. Nothing was stored."), null
+  const redirect = { uri: settings.redirectUri, port: settings.port }
+  return { which: "own", app: { clientId, clientSecret }, redirect, secretSaved: savedSecret !== null }
 }
 
 /**
@@ -36,15 +63,13 @@ export async function storedApp(io: Io): Promise<OAuthApp | null> {
  * browser landed on instead.
  */
 export async function oauthLogin(io: Io, oauth: OAuthIo): Promise<number> {
-  const settings = await loadOAuthSettings(io.env)
-  const clientId = settings.clientId ?? (await askClientId(io, oauth))
-  if (!clientId) return io.err("No client ID entered. Nothing was stored."), 1
-  const savedSecret = await oauth.clientSecret.get()
-  const clientSecret = savedSecret ?? (await io.readSecret("Wrike OAuth client secret: "))
-  if (!clientSecret) return io.err("No client secret entered. Nothing was stored."), 1
+  const chosen = await chooseApp(io, oauth)
+  if (!chosen) return 1
 
-  const state = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url")
-  const answer = await waitForRedirect(io, oauth, settings, authorizeUrl(clientId, settings.redirectUri, state))
+  const state = newState()
+  const pkce = newPkce()
+  const answer = await waitForRedirect(io, oauth, chosen, authorizeUrl(chosen.app.clientId, chosen.redirect.uri, state, pkce.challenge))
+  if (answer === "busy") return 1
   if (answer === "cancelled") return io.err("Login cancelled. Nothing was stored."), 1
   if (answer === "timeout") return io.err("No answer from Wrike within ten minutes. Nothing was stored."), 1
   const denied = answer.get("error_description") || answer.get("error")
@@ -54,20 +79,22 @@ export async function oauthLogin(io: Io, oauth: OAuthIo): Promise<number> {
   if (!code) return io.err("The answer from Wrike carried no code. Nothing was stored."), 1
 
   try {
-    const app = { clientId, clientSecret }
-    const tokens = await exchangeCode(app, code, settings.redirectUri, io.fetch)
+    const grant = { app: chosen.app, which: chosen.which, code, redirectUri: chosen.redirect.uri, verifier: pkce.verifier }
+    const tokens = await exchangeCode(grant, io.fetch)
     if (!tokens.ok) {
       // The saved secret may be the part Wrike refused, so the next login asks for it again.
-      if (savedSecret) await oauth.clientSecret.delete()
-      const again = savedSecret ? " The saved client secret was removed, so the next login asks for it." : ""
+      const forget = chosen.which === "own" && chosen.secretSaved
+      if (forget) await oauth.clientSecret.delete()
+      const again = forget ? " The saved client secret was removed, so the next login asks for it." : ""
       return io.err(`Wrike refused the login: ${tokens.refused}. Nothing was stored.${again}`), 1
     }
     const env = tokens.host && !io.env.WRIKE_HOST ? { ...io.env, WRIKE_HOST: tokens.host } : io.env
     const profile = await probe(tokens.login.accessToken, env, io.fetch)
     await io.tokens.set(encodeLogin({ ...tokens.login, host: profile.host }))
-    if (!savedSecret) await oauth.clientSecret.set(clientSecret)
+    if (chosen.which === "own" && !chosen.secretSaved) await oauth.clientSecret.set(chosen.app.clientSecret)
     await writeProfile(io.env, profile)
-    io.out(`Logged in as ${profile.name} on ${profile.host} with OAuth. The tokens and the client secret are in the OS keyring.`)
+    const kept = chosen.which === "shared" ? "The tokens are in the OS keyring." : "The tokens and the client secret are in the OS keyring."
+    io.out(`Logged in as ${profile.name} on ${profile.host} with OAuth. ${kept}`)
     return 0
   } catch (thrown) {
     io.err(`${describeError(toWrikeError(thrown))} Nothing was stored.`)
@@ -82,17 +109,19 @@ async function askClientId(io: Io, oauth: OAuthIo): Promise<string | null> {
   return clientId
 }
 
-type Redirect = URLSearchParams | "cancelled" | "timeout"
+/** `busy` means the shared app's port is taken and the reason is already printed. */
+type Redirect = URLSearchParams | "cancelled" | "timeout" | "busy"
 
 /** The query of the redirect, from the loopback server or from an address the user pasted, whichever comes first. */
-async function waitForRedirect(io: Io, oauth: OAuthIo, settings: OAuthSettings, url: string): Promise<Redirect> {
+async function waitForRedirect(io: Io, oauth: OAuthIo, chosen: Chosen, url: string): Promise<Redirect> {
   const answer = Promise.withResolvers<Redirect>()
-  const callbackPath = new URL(settings.redirectUri).pathname
+  const { port } = chosen.redirect
+  const callbackPath = new URL(chosen.redirect.uri).pathname
   let server: ReturnType<typeof Bun.serve> | null = null
   try {
     server = Bun.serve({
       hostname: "127.0.0.1",
-      port: settings.port,
+      port,
       fetch(request) {
         const query = new URL(request.url)
         if (query.pathname !== callbackPath) return new Response("Not found", { status: 404 })
@@ -101,7 +130,13 @@ async function waitForRedirect(io: Io, oauth: OAuthIo, settings: OAuthSettings, 
       },
     })
   } catch (thrown) {
-    io.err(`Could not listen on 127.0.0.1:${settings.port} (${messageOf(thrown)}). Set oauth.port in config.json to a free port and register its redirect URI.`)
+    const listen = `Could not listen on 127.0.0.1:${port} (${messageOf(thrown)}).`
+    // Wrike sends the browser back to this one address, so another port cannot work.
+    if (chosen.which === "shared") {
+      io.err(`${listen} The browser sign-in needs that port. Close the program using it, often another \`wrike-tui auth login\` still waiting, and try again. Nothing was stored.`)
+      return "busy"
+    }
+    io.err(`${listen} Set oauth.port in config.json to a free port and register its redirect URI.`)
   }
 
   io.out("Opening Wrike in your browser to sign in. If it does not open, visit:")

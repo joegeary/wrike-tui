@@ -8,6 +8,7 @@ import { displayMarkdown } from "../domain/description"
 import { describeChange, type HistoryEntry } from "../domain/history"
 import type { Comment } from "../domain/model"
 import { describeError } from "../wrike/errors"
+import { Description } from "./Description"
 import { countdown, fit, fitAfter, stamp, upperFirst } from "./format"
 import { TextArea } from "./TextArea"
 import { useTheme } from "./theme"
@@ -84,7 +85,7 @@ export function Comments({ state, comments, history, style }: { state: State; co
               </text>
               {selected && left !== null && left > 0 ? <text fg={theme.success} wrapMode="none">{`  editable for ${countdown(left)}`}</text> : null}
             </box>
-            <markdown syntaxStyle={style} content={displayMarkdown(showMentions(comment.text, mentionName(state)))} />
+            <Description markdown={displayMarkdown(showMentions(comment.text, mentionName(state)))} style={style} />
           </box>
         )
       })}

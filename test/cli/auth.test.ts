@@ -38,6 +38,7 @@ function io(overrides: Partial<Io> & { typed?: string | null } = {}): Io {
     readSecret: async () => overrides.typed ?? null,
     launch: async (session) => void launched.push(session),
     fetch: usDataCenterOnly,
+    sharedApp: null,
     ...overrides,
   }
 }

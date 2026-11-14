@@ -446,7 +446,11 @@ function settableFields(state: State, mode: PickerMode & { field: "set-field" },
     })
 }
 
-/** A picker on the marked tasks. A person on some of them, not all, says on how many. */
+/**
+ * A picker on the marked tasks. A person on some of them, not all, says on
+ * how many, and that is all the column says: someone on none or on all shows
+ * nothing there, since the check box tells those apart.
+ */
 function bulkOptions(state: State, mode: PickerMode & { field: "bulk" }, matches: (text: string) => boolean, people: () => PickerOption[]): PickerOption[] {
   const tasks = mode.tasks.flatMap((task) => heldTask(state, task.id) ?? [])
   switch (mode.change) {
@@ -458,7 +462,7 @@ function bulkOptions(state: State, mode: PickerMode & { field: "bulk" }, matches
     case "importance":
       return IMPORTANCES.filter(matches).map((importance) => ({ id: importance, label: importance }))
     case "assignees":
-      return people().map((option) => {
+      return people().map(({ detail: _email, ...option }) => {
         const on = tasks.filter((task) => task.assigneeIds.some((id) => id === option.id)).length
         return on > 0 && on < tasks.length ? { ...option, detail: `on ${on} of ${tasks.length}` } : option
       })

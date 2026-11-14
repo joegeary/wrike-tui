@@ -15,6 +15,8 @@ export type Settings = {
   /** Whether field history is drawn among the comments. */
   history: boolean
   lists: Partial<Record<TaskScopeKind, Partial<ListSpec>>>
+  /** Whether a release build asks GitHub once a day for a newer release, and says so in the status bar. */
+  updateCheck: boolean
   /** Keys that replace the defaults, by command ID. Absent from a file that changes none. */
   keys?: KeyOverrides
 }
@@ -22,7 +24,7 @@ export type Settings = {
 /** A command ID to the key, or the list of keys, that replace its default keys. An empty list unbinds the command. */
 export type KeyOverrides = Readonly<Record<string, string | readonly string[]>>
 
-export const DEFAULT_SETTINGS: Settings = { theme: "terminal", navWidth: NAV_WIDTH.default, completed: false, history: true, lists: {} }
+export const DEFAULT_SETTINGS: Settings = { theme: "terminal", navWidth: NAV_WIDTH.default, completed: false, history: true, updateCheck: true, lists: {} }
 
 /** The shaping a scope of this kind starts with. Search keeps finding closed tasks unless its own default says otherwise. */
 export function defaultSpec(settings: Settings, kind: TaskScopeKind): ListSpec {
