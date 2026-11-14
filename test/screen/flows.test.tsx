@@ -152,7 +152,8 @@ describe("Editing a task", () => {
     await app.see("Comments (3)")
     await app.press("A")
     const picker = await app.see("─ Assignees ─")
-    expect(picker).toMatch(/\[x\] Pat Example\s+pat\.example@example\.test/)
+    // A blank column keeps the email off the right border, as on the left.
+    expect(picker).toMatch(/│ {3}\[x\] Pat Example\s+pat\.example@example\.test │/)
     expect(picker).toMatch(/\[ \] Riley Demo/)
     expect(picker).not.toContain("Former Colleague")
     await app.type("ril")
@@ -265,6 +266,42 @@ describe("Comments", () => {
     expect(app.fake.writes).toEqual([
       { method: "POST", path: `/tasks/${TASK.sso}/comments`, params: { text: "Yes, the sandbox is ready for trainings.", plainText: "true" } },
     ])
+  })
+})
+
+describe("Description wrapping", () => {
+  test("punctuation after a link or a closing parenthesis never wraps onto a line of its own", async () => {
+    app = await openApp({ width: 120, height: 45 })
+    const sso = app.fake.data.tasks.find((task) => task.id === TASK.sso)!
+    sso.description = 'The full model is in the <a href="https://example.test/finance/model">pricing sheet</a>. Dealers keep a margin (at least 35 percent).'
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    await app.see("pricing sheet")
+    for (let width = 120; width <= 150; width++) {
+      app.resize(width, 45)
+      const frame = await app.see(new RegExp(`^.{${width}}$`, "m"), "percent).")
+      const details = frame.split("\n").map((line) => line.split("│").at(-2) ?? "")
+      expect(details.filter((line) => /^ *[.,;:!?)\]]+ *$/.test(line))).toEqual([])
+      expect(frame).toContain("model).")
+    }
+  })
+})
+
+describe("Writing below the fold", () => {
+  test("c brings the newest comment into view above the box, and the mention list does not hide it", async () => {
+    app = await openApp({ width: 160, height: 30 })
+    const sso = app.fake.data.tasks.find((task) => task.id === TASK.sso)!
+    sso.description += Array.from({ length: 30 }, (_, i) => `<br />Step ${i + 1}`).join("")
+    await app.see("Enable SSO on sandbox")
+    await app.press("enter")
+    const opened = await app.see("Step 1")
+    // The comment as the details stream draws it, not the Inbox row that quotes it.
+    const newest = /│ +@Sam Sample can we run trainings in the sandbox\? +[█▄▀]?│/
+    expect(opened).not.toMatch(newest)
+    await app.press("c")
+    await app.see("─ New comment ─", newest)
+    await app.type("Thanks @ri")
+    await app.see("─ Mention ─", "Riley Demo", newest)
   })
 })
 

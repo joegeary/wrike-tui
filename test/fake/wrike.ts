@@ -1,6 +1,7 @@
 import type { Fetch } from "../../src/wrike/transport"
 import { ACCOUNT, ME, permalink, PREVIEW_PNG, STATUS, seed, type FakeData, type FakeTask } from "./data"
 import { seedForms, type FakeForm } from "./forms"
+import { showcaseSeed } from "./showcase"
 
 export type RecordedWrite = { method: string; path: string; params: Record<string, string> }
 type Failure = { method?: string; path: string; status: number; times: number; retryAfter?: string }
@@ -47,6 +48,8 @@ export type FakeOptions = {
   now: string
   /** The time a new comment is stamped with. Real time unless a test sets a clock of its own. */
   stamp?: () => string
+  /** `showcase` serves the made-up company the README's screenshots show, in place of the data the tests assert on. */
+  dataset?: "test" | "showcase"
 }
 
 /** Where Wrike puts a task whose last folder was removed: the account root, which answers 200. */
@@ -59,7 +62,7 @@ const realTime = () => new Date().toISOString().replace(/\.\d+Z$/, "Z")
 const commentNotFound = () => wrikeError(404, "resource_not_found", "Comment not found or access denied")
 
 export function createFakeWrike(options: FakeOptions): FakeWrike {
-  const data = seed(options.today, options.now)
+  const data = (options.dataset === "showcase" ? showcaseSeed : seed)(options.today, options.now)
   const writes: RecordedWrite[] = []
   const requests: string[] = []
   const toolCalls: FakeWrike["toolCalls"] = []

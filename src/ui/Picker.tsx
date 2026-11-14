@@ -70,14 +70,15 @@ export function Picker({ state, mode, screen }: { state: State; mode: PickerMode
         const box = multi ? (mode.chosen.includes(option.id) ? "[x] " : "[ ] ") : ""
         const dot = dotted ? "● " : ""
         const detail = option.detail ?? ""
-        const labelWidth = Math.max(0, inner - 3 - box.length - dot.length - (detail ? Math.min(Bun.stringWidth(detail), 28) + 2 : 0))
+        // One blank column on each side, as the palette keeps.
+        const labelWidth = Math.max(0, inner - 4 - box.length - dot.length - (detail ? Math.min(Bun.stringWidth(detail), 28) + 2 : 0))
         return (
           <text key={option.id} wrapMode="none" bg={selected ? theme.selection : undefined}>
             <span fg={theme.accent}>{selected ? " ▸ " : "   "}</span>
             <span fg={theme.text}>{box}</span>
             <span fg={statusColor(theme, option.color)}>{dot}</span>
             <span fg={theme.text}>{fit(option.label, labelWidth)}</span>
-            <span fg={selected ? theme.selectedDim : theme.dim}>{detail ? `  ${fit(detail, Math.min(Bun.stringWidth(detail), 28))}` : ""}</span>
+            <span fg={selected ? theme.selectedDim : theme.dim}>{detail ? `  ${fit(detail, Math.min(Bun.stringWidth(detail), 28))} ` : " "}</span>
           </text>
         )
       })}

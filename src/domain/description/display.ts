@@ -1,4 +1,5 @@
 import { createDocument } from "@mixmark-io/domino"
+import { Lexer, type Token } from "marked"
 import { htmlToMarkdown } from "./markdown"
 
 /**
@@ -41,4 +42,93 @@ function unwrap(element: Element) {
   const parent = element.parentNode!
   while (element.firstChild) parent.insertBefore(element.firstChild, element)
   parent.removeChild(element)
+}
+
+/**
+ * A description split for drawing: each top-level paragraph on its own, so
+ * the pane can wrap it, and the lists, tables, headings and code around them
+ * as markdown. A gap is that many blank lines.
+ */
+export type DisplayBlock = { kind: "paragraph"; tokens: Token[] } | { kind: "markdown"; markdown: string } | { kind: "gap"; lines: number }
+
+/** Blocks the markdown renderer draws on their own, with a blank line on each side. */
+const SEPARATE = new Set(["code", "table", "blockquote", "hr"])
+
+/**
+ * Splits display markdown into blocks that draw the same lines OpenTUI's
+ * markdown renderer drew for the whole: a table, code block, quote or rule
+ * alone with a blank line on each side, and the rest line for line as it is
+ * written, blank lines included, except that blank lines at the start are
+ * dropped and those at the end of a run count as one.
+ */
+export function displayBlocks(markdown: string): DisplayBlock[] {
+  const tokens = new Lexer({ gfm: true }).lex(markdown)
+  const units: ({ separate: Token } | { run: Token[] })[] = []
+  let run: Token[] = []
+  const flush = () => {
+    if (run.length > 0) units.push({ run })
+    run = []
+  }
+  tokens.forEach((token, index) => {
+    if (token.type === "space") {
+      const next = tokens.slice(index + 1).find((later) => later.type !== "space")
+      if (run.length > 0 && next && !SEPARATE.has(next.type)) run.push(token)
+    } else if (SEPARATE.has(token.type)) {
+      flush()
+      units.push({ separate: token })
+    } else run.push(token)
+  })
+  flush()
+
+  const blocks: DisplayBlock[] = []
+  const gap = (lines: number) => {
+    const last = blocks.at(-1)
+    if (lines <= 0 || !last) return
+    if (last.kind === "gap") last.lines += lines
+    else blocks.push({ kind: "gap", lines })
+  }
+  units.forEach((unit, index) => {
+    if ("separate" in unit) {
+      if (blocks.at(-1)?.kind !== "gap") gap(1)
+      blocks.push({ kind: "markdown", markdown: unit.separate.raw.replace(/(?:\r?\n)+$/, "") })
+      if (index < units.length - 1) gap(1)
+      return
+    }
+    let offset = 0
+    const owners = unit.run.map((token) => {
+      const owner = { token, start: offset }
+      offset += token.raw.length
+      return owner
+    })
+    const raw = unit.run.map((token) => token.raw).join("").replace(/(?:\r?\n){2,}$/, "\n")
+    let start = 0
+    let blank = 0
+    let paragraph: Token | null = null
+    for (const text of raw.split("\n")) {
+      const owner = owners.findLast((candidate) => candidate.start <= start)!.token
+      start += text.length + 1
+      if (text.trim() === "") {
+        blank += 1
+        paragraph = null
+        continue
+      }
+      const last = blocks.at(-1)
+      if (owner.type === "paragraph") {
+        if (owner !== paragraph) {
+          gap(blank)
+          blocks.push({ kind: "paragraph", tokens: "tokens" in owner && owner.tokens ? owner.tokens : [] })
+        }
+        paragraph = owner
+      } else if (last?.kind === "markdown" && paragraph === null) {
+        last.markdown += "\n".repeat(blank + 1) + text
+      } else {
+        gap(blank)
+        blocks.push({ kind: "markdown", markdown: text })
+        paragraph = null
+      }
+      blank = 0
+    }
+    gap(blank)
+  })
+  return blocks
 }
