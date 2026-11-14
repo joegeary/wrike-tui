@@ -310,3 +310,23 @@ describe("Folders", () => {
     expect(frame).not.toContain("File in another folder")
   })
 })
+
+describe("Marked tasks", () => {
+  test("the assignee picker says on how many marked tasks each person is, and nothing for someone on none", async () => {
+    await inPlatform()
+    await app.press("M", "M", "M")
+    await app.see("3 marked")
+    await app.press("A")
+    const picker = await app.see("─ Assignees of 3 marked tasks ─")
+    expect(picker).toMatch(/\[ \] Sam Sample\s+on 2 of 3 │/)
+    expect(picker).toMatch(/\[ \] Riley Demo\s+on 1 of 3 │/)
+    // The column says only how many marked tasks a person is on, so someone on none shows nothing there.
+    expect(picker).toMatch(/\[ \] Pat Example\s+│/)
+    expect(picker).not.toContain("@example.test")
+    await app.press("esc", "esc", "g")
+    await app.see(/^(?![\s\S]*marked)/)
+    await app.press("j", "M", "M", "A")
+    const all = await app.see("─ Assignees of 2 marked tasks ─")
+    expect(all).toMatch(/\[x\] Sam Sample\s+│/)
+  })
+})
