@@ -66,6 +66,8 @@ export type WrikeClient = {
   attachmentPreview(id: AttachmentId): Promise<Uint8Array>
   /** A temporary signed link to the file, which opens without the token. */
   attachmentUrl(id: AttachmentId): Promise<string>
+  /** The whole file, held in memory. Null when it is over `limit` bytes, found out without reading the rest. */
+  attachmentFile(id: AttachmentId, limit: number): Promise<Uint8Array | null>
   inbox(options: { includeRead: boolean }): Promise<InboxEntry[]>
   /** One page of an item's field history, newest first. */
   history(item: LegacyItemId, page: { pageSize: number; pageToken?: string }): Promise<HistoryPage>
@@ -282,6 +284,8 @@ export function createWrikeClient(transport: Transport, mcp: McpClient): WrikeCl
     async attachmentUrl(id) {
       return one(parseAll(AttachmentUrlSchema, await transport.request("GET", `/attachments/${id}/url`), "attachment link")).url
     },
+
+    attachmentFile: (id, limit) => transport.bytes(`/attachments/${id}/download`, limit),
 
     inbox: (options) => mcp.inbox(options),
     history: (item, page) => mcp.history(item, page),

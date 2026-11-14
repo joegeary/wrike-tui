@@ -39,6 +39,10 @@ const DROPPED_WHERE_NOT_APPLYING = new Set(["Checkbox", "Currency", "Duration"])
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 const wrikeError = (status: number, error: string, errorDescription: string) => json({ error, errorDescription }, status)
+
+/** A stored file's content: a real PNG for a PNG, and a line naming the file for anything else. */
+const fileBytes = (attachment: { name: string; contentType?: string }) =>
+  attachment.contentType === "image/png" ? PREVIEW_PNG : Buffer.from(`The content of ${attachment.name}\n`)
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 export type FakeOptions = {
@@ -387,10 +391,14 @@ export function createFakeWrike(options: FakeOptions): FakeWrike {
         }
       }
     }
-    const attachmentPath = /^\/attachments\/([^/]+)\/(preview|url)$/.exec(path)
+    const attachmentPath = /^\/attachments\/([^/]+)\/(preview|url|download)$/.exec(path)
     if (attachmentPath && method === "GET") {
       const attachment = data.attachments.find((candidate) => candidate.id === attachmentPath[1])
       if (!attachment) return wrikeError(404, "resource_not_found", "Attachment not found")
+      if (attachmentPath[2] === "download") {
+        if (attachment.type !== "Wrike") return wrikeError(400, "invalid_request", "A linked file cannot be downloaded")
+        return new Response(fileBytes(attachment), { headers: { "Content-Type": attachment.contentType ?? "application/octet-stream" } })
+      }
       if (attachmentPath[2] === "url") {
         const url = attachment.link ?? `https://storage.example.test/attachments/${attachment.id}/${encodeURIComponent(attachment.name)}?signature=fake-${attachment.version}`
         return json({ kind: "url", data: [{ url }] })
