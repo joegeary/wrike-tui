@@ -22,7 +22,7 @@ file a task in more folders, cancel it or delete it. Mark a few tasks in a list
 and one key changes all of them. Request forms are filled in a field at a
 time.
 
-Press `w` to hand a task to a coding agent such as Claude Code, with its
+Press `a` to hand a task to a coding agent such as Claude Code, with its
 comments and screenshots. See [docs/agents.md](docs/agents.md).
 
 It comes back where you left it. The next start restores the list, the open

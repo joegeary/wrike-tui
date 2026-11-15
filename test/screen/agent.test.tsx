@@ -24,7 +24,7 @@ describe("Hand to an agent", () => {
   test("w on a list row opens the task, offers the prompts, then the folders, and the agent takes the terminal there", async () => {
     app = await openApp(WIDE)
     await app.see("Fix login redirect loop")
-    await app.press("j", "j", "w")
+    await app.press("j", "j", "a")
     const prompts = await app.see("─ Hand to an agent ─", "▸ Implement", "Plan", "Investigate", "Context only")
     expect(prompts).toMatch(/  Plan +Make a plan for this Wrike/)
     await app.press("down", "enter")
@@ -53,7 +53,7 @@ describe("Hand to an agent", () => {
     await mkdir(join(home, "dev", "platform"), { recursive: true })
     app = await openApp(WIDE, { home, env: { HC_TERMINAL_ID: "t2" } })
     await app.see("Fix login redirect loop")
-    await app.press("j", "j", "enter", "w")
+    await app.press("j", "j", "enter", "a")
     await app.see("─ Hand to an agent ─")
     await app.press("enter")
     await app.see("Claude started in a new Herdr tab")
@@ -65,7 +65,7 @@ describe("Hand to an agent", () => {
   test("Esc closes the prompts and starts nothing, and the palette finds the command", async () => {
     app = await openApp(WIDE)
     await app.see("Fix login redirect loop")
-    await app.press("j", "j", "w")
+    await app.press("j", "j", "a")
     await app.see("─ Hand to an agent ─")
     await app.press("esc")
     expect(await app.frame()).not.toContain("─ Hand to an agent ─")

@@ -1,6 +1,6 @@
 # Hand a task to a coding agent
 
-Press `w` on a task and pick what you want done. A coding agent starts in the
+Press `a` on a task and pick what you want done. A coding agent starts in the
 right folder with the task, its comments and its screenshots already in hand.
 You land in an interactive session with it, the same as if you had started it
 yourself.
@@ -13,7 +13,7 @@ anywhere is up to the agent and how you set it up.
 ## Start one
 
 1. Select a task in the list, or open it in the details pane.
-2. Press `w`, or run "Hand to an agent" from the `:` palette.
+2. Press `a`, or run "Hand to an agent" from the `:` palette.
 3. Pick a prompt and press `Enter`. `Esc` cancels.
 4. When the config does not say where the agent runs, pick a folder from the
    second list. It offers the folder you started wrike-tui in and every path
@@ -75,7 +75,7 @@ handoff with a message in the status bar.
 
 ## Configure it
 
-Everything is optional. With no `agent` block at all, `w` runs `claude`, picks
+Everything is optional. With no `agent` block at all, `a` runs `claude`, picks
 Herdr or the terminal by itself, and asks for the folder.
 
 ```json

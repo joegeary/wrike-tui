@@ -45,7 +45,7 @@ export const KEYMAP: Keymap = [
   ...bind("list", "list.toggle", "space"),
   ...bind("list", "list.completed", "x"),
   ...bind("list", "list.filter.text", "f"),
-  ...bind("list", "inbox.read", "a"),
+  ...bind("list", "inbox.read", "x"),
   ...bind("list", "list.mark", "M"),
   ...bind("list", "list.clear-marks", "esc"),
 
@@ -74,7 +74,7 @@ export const KEYMAP: Keymap = [
   ...bind("task", "task.subtask", "N"),
   ...bind("task", "task.delete", "D"),
   ...bind("task", "task.file", "L"),
-  ...bind("task", "task.agent", "w"),
+  ...bind("task", "task.agent", "a"),
 
   ...bind("edit", "edit.down", "j", "down"),
   ...bind("edit", "edit.up", "k", "up"),

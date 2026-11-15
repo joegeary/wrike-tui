@@ -5,7 +5,7 @@ import { shown, type AgentPicker, type Details, type PickerMode, type State, typ
 import { info } from "./core"
 import { refresh } from "./load"
 
-/** `w` on a task: pick what the agent is asked to do. */
+/** `a` on a task: pick what the agent is asked to do. */
 export function agentCommand(state: State): Update {
   return [{ ...state, mode: { kind: "picker", field: "agent-prompt", query: "", cursor: 0, chosen: [], origin: "browse" } }, []]
 }

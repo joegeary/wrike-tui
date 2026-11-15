@@ -48,7 +48,7 @@ for one. Both keep every other key in the file.
 | `updateCheck` | `true` | Whether a release binary asks GitHub once a day for a newer release and says so in the status bar. See [install.md](install.md#update). |
 | `lists` | none | The shaping each kind of list starts with. See [Lists](#lists). |
 | `keys` | none | Keys that replace the defaults. See [keys.md](keys.md#change-the-keys). |
-| `agent` | none | How `w` hands a task to a coding agent: the command, Herdr or the terminal, the folder it runs in, and the prompts. See [agents.md](agents.md#configure-it). |
+| `agent` | none | How `a` hands a task to a coding agent: the command, Herdr or the terminal, the folder it runs in, and the prompts. See [agents.md](agents.md#configure-it). |
 | `oauth` | none | Your own OAuth app for `auth login --oauth`. See [OAuth](#oauth). |
 
 ### Lists
@@ -117,7 +117,7 @@ and not empty.
 | Config `profile.json` | Your name and Wrike host, written by `auth login` and removed by `auth logout` |
 | State `<account>/session.json` | Where you were, restored at the next start |
 | State `<account>/favorites.json` | Your favorites |
-| State `agent/<task ID>/` | The task and its screenshots, written for a coding agent each time you press `w` on it. See [agents.md](agents.md#what-is-written-to-disk). |
+| State `agent/<task ID>/` | The task and its screenshots, written for a coding agent each time you press `a` on it. See [agents.md](agents.md#what-is-written-to-disk). |
 | Cache `<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
 | Cache `update-check.json` | When GitHub was last asked for a newer release, and its answer |
 

@@ -7,7 +7,7 @@ import type { TmuxSession } from "./tmux"
 
 /**
  * Hands a task to a fake coding agent through the compiled binary in a
- * detached tmux session: `w`, a prompt, and the agent takes the terminal in
+ * detached tmux session: `a`, a prompt, and the agent takes the terminal in
  * the configured workspace, then gives it back. The fake agent is TypeScript
  * run by Bun. It records its arguments and folder and exits. Herdr is never
  * reached: the harness drops its variables, and the config says terminal.
@@ -41,7 +41,7 @@ describe("hand to an agent", () => {
   test("w and a prompt give the terminal to the agent in the workspace, with the task written for it, and the app comes back", async () => {
     await tmux.run(BINARY)
     await tmux.see("inbox", "Fix login redirect loop")
-    await tmux.keys("j", "j", "w")
+    await tmux.keys("j", "j", "a")
     await tmux.see("prompts", "─ Hand to an agent ─", "▸ Implement", "Context only")
     await tmux.keys("Down", "Enter")
     await tmux.see("back", "3 Details", "The session cookie is dropped", "Comments (1)")

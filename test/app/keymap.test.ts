@@ -45,10 +45,15 @@ describe("the command registry and the keymap", () => {
     }
   })
 
-  test("no key is bound twice in one context", () => {
+  test("a key bound twice in one context runs commands that are never offered together", () => {
     for (const context of contexts) {
-      const keys = KEYMAP.filter((binding) => binding.context === context).map((binding) => binding.key)
-      expect(keys, context).toEqual([...new Set(keys)])
+      const bindings = KEYMAP.filter((binding) => binding.context === context)
+      for (const [index, first] of bindings.entries()) {
+        for (const second of bindings.slice(index + 1).filter((binding) => binding.key === first.key)) {
+          const together = situations.filter((situation) => isOffered(commandById(first.command), situation) && isOffered(commandById(second.command), situation))
+          expect(together.length, `${first.key} in ${context}: ${first.command} and ${second.command}`).toBe(0)
+        }
+      }
     }
   })
 
@@ -94,9 +99,7 @@ describe("the command registry and the keymap", () => {
     expect(resolveKey(state, "j")?.id).toBe("list.down")
     expect(resolveKey({ ...state, focus: "details" }, "j")?.id).toBe("details.down")
     expect(resolveKey({ ...state, focus: "nav" }, "j")?.id).toBe("nav.down")
-    expect(resolveKey(state, "a")?.id).toBe("inbox.read")
-    expect(resolveKey(inTodo(), "a")).toBeNull()
-    expect(resolveKey(state, "x")).toBeNull()
+    expect(resolveKey(state, "x")?.id).toBe("inbox.read")
     expect(resolveKey(inTodo(), "x")?.id).toBe("list.completed")
     expect(resolveKey({ ...state, focus: "nav" }, "J")).toBeNull()
     expect(resolveKey({ ...state, mode: { kind: "help" } }, "i")).toBeNull()
