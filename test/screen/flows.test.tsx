@@ -44,10 +44,10 @@ describe("Inbox", () => {
     expect(app.store.getState().focus).toBe("details")
   })
 
-  test("a shows read notifications too", async () => {
+  test("x shows read notifications too", async () => {
     app = await openApp(WIDE)
     await app.see("Enable SSO on sandbox")
-    await app.press("a")
+    await app.press("x")
     const frame = await app.see("Added the escalation matrix", "2 Inbox (with read)")
     expect(frame).toMatch(/○ Comment\s+Write onboarding guide for new support agents/)
   })

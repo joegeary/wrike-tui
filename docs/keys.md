@@ -26,9 +26,8 @@ defaults, and [Change the keys](#change-the-keys) says how to change them.
 | | `g` `G` | Jump to the top or the bottom |
 | | `Enter` | Open the task. A folder or project notification opens in the browser. |
 | | `Space` | Open or close the subtasks of a task, or a group |
-| | `x` | Show or hide completed, cancelled and deferred tasks |
+| | `x` | Show or hide completed, cancelled and deferred tasks. In the Inbox, show or hide read notifications. |
 | | `f` | Filter by title. An empty filter clears it. |
-| | `a` | Show or hide read notifications (Inbox) |
 | | `M` | Mark the task, or unmark it, and move to the next task |
 | | `Esc` | Clear the marks |
 | Details pane | `j` `k` `g` `G` | Scroll |
@@ -50,6 +49,7 @@ defaults, and [Change the keys](#change-the-keys) says how to change them.
 | | `n` | New task, in the folder the list shows or in one you pick |
 | | `N` | New subtask of the task |
 | | `L` | File the task in another folder or project |
+| | `a` | Hand the task to a coding agent. See [agents.md](agents.md). |
 | | `D` | Delete the task to the Recycle Bin. Only `y` confirms. |
 | Edit mode | `j` `k` | Next or previous field |
 | | `Enter` | Edit the field |

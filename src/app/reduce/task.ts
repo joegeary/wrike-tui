@@ -7,6 +7,7 @@ import { favoriteKey } from "../../domain/workspace"
 import { describeError } from "../../wrike/errors"
 import { bulkTargets, editRows, isMultiPicker, openTask, pickerOptions, selectedAttachment, selectedEntry, selectedTask } from "../selectors"
 import { type Action, type EditTextMode, type Flash, type Mode, type OpenTarget, type Origin, type PickerMode, type State, type TaskCommand, type TaskPicker, type TextField, type Update } from "../state"
+import { agentCommand } from "./agent"
 import { closeEditor, openFieldEditor, submitFieldPicker, submitFieldText, submitSetField } from "./fields"
 import { withPreview } from "./attachments"
 import { actsOnMarks, onMarks } from "./bulk"
@@ -128,6 +129,8 @@ function taskCommand(state: State, command: TaskCommand, task: Task, origin: Ori
     case "unfile":
     case "cancel":
       return workCommand(state, command, task)
+    case "agent":
+      return agentCommand(state)
   }
 }
 

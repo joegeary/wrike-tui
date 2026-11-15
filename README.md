@@ -22,6 +22,9 @@ file a task in more folders, cancel it or delete it. Mark a few tasks in a list
 and one key changes all of them. Request forms are filled in a field at a
 time.
 
+Press `a` to hand a task to a coding agent such as Claude Code, with its
+comments and screenshots. See [docs/agents.md](docs/agents.md).
+
 It comes back where you left it. The next start restores the list, the open
 folders and the open task, and the tree draws from a cache before Wrike
 answers.
@@ -105,6 +108,8 @@ changed.
   source, updating, logging in, the environment variables
 - [Guide](docs/guide.md): the panes, shaping a list, editing a task, comments,
   bulk edit, request forms, what is kept between runs, the Wrike API limits
+- [Coding agents](docs/agents.md): hand a task to an agent, the prompts, where
+  it runs, and what is written to disk
 - [Keys](docs/keys.md): every key by where you are, and how to change them
 - [Configuration](docs/configuration.md): `config.json`, themes, the files
   wrike-tui writes

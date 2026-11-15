@@ -162,6 +162,9 @@ export const COMMANDS: Command[] = [
   command("task.file", "File in another folder", "Task", ["task"], () => ({ type: "task", command: "file" }), { keywords: ["folder", "project", "add", "parent", "tag"] }),
   command("task.unfile", "Take out of a folder", "Task", ["task"], () => ({ type: "task", command: "unfile" }), { keywords: ["folder", "project", "remove", "parent", "untag"] }),
   command("task.request-form", "Submit a request form", "Task", ["global"], () => ({ type: "request-form" }), { keywords: ["request", "form", "intake", "ticket"] }),
+  command("task.agent", "Hand to an agent", "Task", ["task"], () => ({ type: "task", command: "agent" }), {
+    keywords: ["coding agent", "claude", "codex", "cursor", "ai", "implement", "plan", "herdr"],
+  }),
   command("task.browser", "Open in the browser", "Task", ["task"], () => ({ type: "link", act: "browser" })),
   command("task.copy-url", "Copy the URL", "Task", ["task"], () => ({ type: "link", act: "copy-url" }), { keywords: ["permalink", "link"] }),
   command("task.copy-id", "Copy the ID", "Task", ["task"], () => ({ type: "link", act: "copy-id" })),

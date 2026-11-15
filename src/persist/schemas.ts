@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { AGENT_OPENS, type AgentConfig } from "../domain/agent"
 import type { CustomField, FieldKind } from "../domain/fields"
 import { customFieldId, customStatusId, folderId, spaceId, taskId, userId } from "../domain/ids"
 import { COLUMN_KEYS, DUE_RANGES, GROUP_KEYS, SORT_KEYS, type Filter, type ListSpec } from "../domain/list"
@@ -24,6 +25,15 @@ const ListSpecSchema = z.object({
   columns: z.array(z.enum(COLUMN_KEYS)),
 }) satisfies z.ZodType<ListSpec>
 
+/** Kept as written: the defaults are filled in where the block is read, so saving the config writes it back unchanged. */
+const AgentSchema = z.object({
+  command: z.array(z.string()).optional(),
+  open: z.enum(AGENT_OPENS).optional(),
+  workspace: z.string().optional(),
+  folders: z.record(z.string(), z.string()).optional(),
+  prompts: z.array(z.object({ name: z.string(), prompt: z.string() })).optional(),
+}) satisfies z.ZodType<AgentConfig>
+
 export const ConfigSchema = z
   .object({
     theme: z.enum(THEME_NAMES).default(DEFAULT_SETTINGS.theme),
@@ -33,6 +43,7 @@ export const ConfigSchema = z
     updateCheck: z.boolean().default(DEFAULT_SETTINGS.updateCheck),
     lists: z.partialRecord(z.enum(TASK_SCOPE_KINDS), ListSpecSchema.partial()).default({}),
     keys: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+    agent: AgentSchema.optional(),
   })
   .transform((file): Settings => file as Settings)
 

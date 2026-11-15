@@ -1,4 +1,7 @@
 import { createCliRenderer } from "@opentui/core"
+import { stat } from "node:fs/promises"
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { createRoot } from "@opentui/react"
 import { isReadOnly, type Env } from "../auth/config"
 import type { Session } from "../auth/session"
@@ -8,6 +11,7 @@ import { initialState, type Clock } from "../app/state"
 import { createStore } from "../app/store"
 import { keepClock } from "../app/ticker"
 import { localDay } from "../domain/dates"
+import { appDirs } from "../persist/dirs"
 import { createPersistence, persistencePaths } from "../persist/persistence"
 import { newerRelease, updateCachePath } from "../update/notice"
 import { VERSION } from "../version"
@@ -17,7 +21,7 @@ import { createTransport } from "../wrike/transport"
 import { App } from "./App"
 import { createBridge } from "./bridge"
 import { createFrameLog } from "./frameLog"
-import { copyText, editInEditor, openInBrowser } from "./handoff"
+import { copyText, editInEditor, openInBrowser, runHerdr, runInTerminal } from "./handoff"
 import { THEMES } from "./theme"
 
 const CLOSE_TIMEOUT_MS = 500
@@ -33,7 +37,8 @@ export async function launch(session: Session, env: Env): Promise<void> {
   const mcp = createMcpClient({ url: session.endpoints.mcpUrl, token, readOnly, oauth: session.token.kind === "oauth" })
   const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token, readOnly }), mcp)
   const persistence = createPersistence(persistencePaths(env, session.profile.accountId))
-  const boot = await loadBoot(persistence, { readOnly, restore: !skipsRestore(env) })
+  const home = homedir()
+  const boot = await loadBoot(persistence, { readOnly, restore: !skipsRestore(env), places: { home, cwd: process.cwd() } })
 
   const closed = Promise.withResolvers<void>()
   const frameLog = env.WRIKE_TUI_FRAME_LOG ? createFrameLog(env.WRIKE_TUI_FRAME_LOG) : null
@@ -53,6 +58,15 @@ export async function launch(session: Session, env: Env): Promise<void> {
     scroll: (pane, to) => bridge.scrollers[pane]?.(to),
     persistence,
     quit: () => renderer.destroy(),
+    agent: {
+      dir: join(appDirs(env).state, "agent"),
+      env,
+      home,
+      onPath: (program) => Bun.which(program, { PATH: env.PATH ?? "" }) !== null,
+      isDirectory: (path) => stat(path).then((found) => found.isDirectory(), () => false),
+      terminal: (argv, cwd) => runInTerminal(renderer, argv, cwd, env),
+      herdr: (argv) => runHerdr(argv, env),
+    },
     // Against the fake server there is no release to tell anyone about.
     ...(env.WRIKE_BASE_URL ? {} : { newerRelease: () => newerRelease({ current: VERSION, cachePath: updateCachePath(env), fetch }) }),
   }

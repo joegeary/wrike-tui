@@ -27,6 +27,10 @@ for one. Both keep every other key in the file.
   "keys": {
     "task.status": "S"
   },
+  "agent": {
+    "command": ["claude"],
+    "folders": { "Mobile app": "~/dev/mobile" }
+  },
   "oauth": {
     "clientId": "your-app-client-id"
   }
@@ -44,6 +48,7 @@ for one. Both keep every other key in the file.
 | `updateCheck` | `true` | Whether a release binary asks GitHub once a day for a newer release and says so in the status bar. See [install.md](install.md#update). |
 | `lists` | none | The shaping each kind of list starts with. See [Lists](#lists). |
 | `keys` | none | Keys that replace the defaults. See [keys.md](keys.md#change-the-keys). |
+| `agent` | none | How `a` hands a task to a coding agent: the command, Herdr or the terminal, the folder it runs in, and the prompts. See [agents.md](agents.md#configure-it). |
 | `oauth` | none | Your own OAuth app for `auth login --oauth`. See [OAuth](#oauth). |
 
 ### Lists
@@ -108,10 +113,11 @@ and not empty.
 
 | File | Holds |
 | --- | --- |
-| Config `config.json` | The theme, the width of the navigation pane, whether field history is shown, whether to check for a newer release, the default shaping of lists, your keys, and the client ID of your own OAuth app |
+| Config `config.json` | The theme, the width of the navigation pane, whether field history is shown, whether to check for a newer release, the default shaping of lists, your keys, how tasks go to a coding agent, and the client ID of your own OAuth app |
 | Config `profile.json` | Your name and Wrike host, written by `auth login` and removed by `auth logout` |
 | State `<account>/session.json` | Where you were, restored at the next start |
 | State `<account>/favorites.json` | Your favorites |
+| State `agent/<task ID>/` | The task and its screenshots, written for a coding agent each time you press `a` on it. See [agents.md](agents.md#what-is-written-to-disk). |
 | Cache `<account>/` | The spaces, the folder trees and the custom field definitions, so the first screen draws at once |
 | Cache `update-check.json` | When GitHub was last asked for a newer release, and its answer |
 

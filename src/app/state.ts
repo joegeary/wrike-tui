@@ -1,4 +1,5 @@
 import type { Profile } from "../auth/profile"
+import type { AgentPrompt, AgentSettings, Places } from "../domain/agent"
 import type { CommentBody, Mention } from "../domain/comment"
 import type { CustomField, FieldWrite } from "../domain/fields"
 import type { Answers, FormAnswer, FormDefinition, FormSummary, Submission } from "../domain/forms"
@@ -63,7 +64,9 @@ export type WorkPicker = (typeof WORK_PICKERS)[number]
 /** Changes picked once for every marked task. */
 export const BULK_PICKERS = ["status", "importance", "assignees", "cancel"] as const
 export type BulkPicker = (typeof BULK_PICKERS)[number]
-export type PickerField = TaskPicker | ListPicker | WorkPicker | "set-field" | "custom" | "bulk" | "request-form"
+/** The two pickers of a handoff to a coding agent: what to ask, then where it runs when the config does not say. */
+export type AgentPicker = "agent-prompt" | "agent-workspace"
+export type PickerField = TaskPicker | ListPicker | WorkPicker | AgentPicker | "set-field" | "custom" | "bulk" | "request-form"
 
 /**
  * A custom field being changed and the tasks the value goes to. The details
@@ -89,9 +92,12 @@ export type PickerMode = Picking &
     | { field: "custom"; edit: FieldEdit }
     /** A status, importance, assignees or Cancelled status for every marked task. `assigned` holds who was on all of them when it opened. */
     | { field: "bulk"; change: BulkPicker; tasks: BulkTask[]; assigned: UserId[] }
+    | { field: "agent-prompt" }
+    /** The prompt already picked rides along to the launch. */
+    | { field: "agent-workspace"; prompt: AgentPrompt }
   )
 
-export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "set-field", "subtask", "delete", "file", "unfile", "cancel"] as const
+export const TASK_COMMANDS = ["edit", "status", "importance", "assignees", "assign-me", "comment", "description", "set-field", "subtask", "delete", "file", "unfile", "cancel", "agent"] as const
 /** What can be done to a task. On a list row the task is opened first, then the command runs. */
 export type TaskCommand = (typeof TASK_COMMANDS)[number]
 
@@ -240,6 +246,8 @@ export type State = {
   marks: ReadonlySet<TaskId>
   /** What Wrike's form search found for the text typed into the form picker. */
   forms: Loadable<FormSummary[]>
+  /** The home folder and the folder wrike-tui started in, which an agent's workspace is resolved against. */
+  places: Places
 }
 
 export const LIST_LIMIT = 8
@@ -295,6 +303,8 @@ export type Effect =
   | { kind: "cache-fields"; fields: CustomField[] }
   /** Asks once, in the background, whether a newer release is out. */
   | { kind: "check-update" }
+  /** Writes the task for a coding agent and starts the agent, in a Herdr tab or in this terminal. */
+  | { kind: "hand-to-agent"; handoff: AgentHandoff }
   | { kind: "quit" }
 
 export type SpecChange =
@@ -392,8 +402,22 @@ export type Action =
   | { type: "form-submitted"; request: number; result: Result<Submission | { kind: "waiting" }> }
   | { type: "comment-saved"; taskId: TaskId; editing: CommentId | null; result: Result<Comment> }
   | { type: "comment-deleted"; taskId: TaskId; id: CommentId; result: Result<null> }
+  /** An agent that had the terminal exited, and the app draws again. */
+  | { type: "agent-returned" }
 
 export type Update = [State, Effect[]]
+
+/** Everything a handoff writes for the agent and how it starts. The names, statuses and fields are what task.md spells out. */
+export type AgentHandoff = {
+  details: Details
+  prompt: AgentPrompt
+  /** The folder the agent runs in, absolute. */
+  workspace: string
+  settings: AgentSettings
+  contacts: ReadonlyMap<UserId, Contact>
+  workflows: readonly Workflow[]
+  fields: ReadonlyMap<CustomFieldId, CustomField>
+}
 
 /** A custom field write to look for in Wrike's answer, since Wrike answers 200 and drops a field that does not apply to the task. */
 export type FieldCheck = { id: CustomFieldId; title: string; value: FieldWrite }
@@ -424,6 +448,7 @@ export type Boot = {
   /** The cached custom field definitions. */
   fields: CustomField[] | null
   trees: ReadonlyMap<SpaceId, SpaceTree>
+  places: Places
 }
 
 export function initialState(profile: Profile, clock: Clock, boot: Boot): State {
@@ -466,6 +491,7 @@ export function initialState(profile: Profile, clock: Clock, boot: Boot): State 
     requests: new Map(),
     marks: new Set(),
     forms: { state: "idle" },
+    places: boot.places,
   }
   return boot.session ? restoreSession(fresh, boot.session) : fresh
 }

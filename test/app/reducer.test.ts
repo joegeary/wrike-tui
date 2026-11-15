@@ -163,12 +163,12 @@ describe("lists", () => {
     expect(state.flash?.text).toBe("This notification has nothing to open")
   })
 
-  test("a toggles read notifications and reloads from the top, and only works in the Inbox", () => {
-    const { state, effects } = play(loaded(), "G", "a")
+  test("x toggles read notifications and reloads from the top, and only works in the Inbox", () => {
+    const { state, effects } = play(loaded(), "G", "x")
     expect(effects).toEqual([{ kind: "load-inbox", request: 2, includeRead: true }])
     expect(state.includeRead).toBe(true)
     expect(listCursor(state)).toBe(0)
-    expect(play(inTodo(), "a")).toMatchObject({ effects: [], state: { includeRead: false } })
+    expect(play(inTodo(), "x")).toMatchObject({ state: { includeRead: false } })
   })
 
   test("a flash lasts until the next key", () => {

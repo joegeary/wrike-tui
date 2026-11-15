@@ -88,7 +88,10 @@ export function tree(space: string, shape: Record<string, string[]>, projects: s
 /** Platform (A) holds Launch (B, a project) and C. B also sits directly under the space. */
 export const engTree = tree("ENG", { ENG: ["A", "B"], A: ["B", "C"], B: [], C: [] }, ["B"])
 
-export const boot = (extra: Partial<Boot> = {}): Boot => ({ settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, flash: null, session: null, spaces: null, fields: null, trees: new Map(), ...extra })
+/** The home folder and the folder the app starts in, in every test. */
+export const PLACES = { home: "/home/sam", cwd: "/home/sam/dev/site" }
+
+export const boot = (extra: Partial<Boot> = {}): Boot => ({ settings: DEFAULT_SETTINGS, favorites: [], readOnly: false, flash: null, session: null, spaces: null, fields: null, trees: new Map(), places: PLACES, ...extra })
 
 /** Applies actions in order and collects every effect. A string is a key press. */
 export function play(state: State, ...actions: (Action | string)[]): { state: State; effects: Effect[] } {

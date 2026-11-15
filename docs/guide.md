@@ -32,7 +32,7 @@ tree.
 
 The Inbox lists your unread notifications, newest first: mentions,
 assignments, status changes and comments, with the task, the author and the
-first line of a comment. `a` shows or hides the read ones. `Enter` opens the
+first line of a comment. `x` shows or hides the read ones. `Enter` opens the
 task. A notification on a folder or a project opens in the browser.
 
 The Inbox is read-only. See [Limits](#limits).
