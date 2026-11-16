@@ -2,13 +2,14 @@ import { buildKeymap } from "../app/keymap"
 import type { Env } from "../auth/config"
 import { oauthProvider, type OAuthApp } from "../auth/oauth"
 import { deleteProfile, readProfile, writeProfile } from "../auth/profile"
-import { loadSession, oauthHost, probe, type Session } from "../auth/session"
+import { loadSession, oauthHost, probe, sessionClient, type Session } from "../auth/session"
 import { resolveToken, type TokenStore } from "../auth/token"
 import { loadOAuthSettings } from "../persist/oauth"
 import { createPersistence, persistencePaths } from "../persist/persistence"
 import { VERSION } from "../version"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Fetch } from "../wrike/transport"
+import { parseHeadless, runHeadless } from "./headless"
 import { keyLines } from "./keys"
 import { oauthLogin, renewalApp, type OAuthIo } from "./oauth"
 import { update } from "./update"
@@ -45,6 +46,11 @@ ${
   wrike-tui auth status         Show who is logged in and where the token comes from
   wrike-tui auth logout         Remove the stored login, client secret and profile
   wrike-tui keys                List every command with its keys, as config.json sets them
+  wrike-tui tasks --mine --json
+                                Print your active tasks as JSON Lines, latest change first
+  wrike-tui inbox --json        Print the Inbox as JSON Lines, newest first
+  wrike-tui export <task>       Write a task and its screenshots for an agent and print
+                                the path of its task.md. <task> is its ID or permalink
   wrike-tui update              Replace this binary with the newest release
                                 (--check only says whether one is out)
   wrike-tui --version
@@ -76,16 +82,30 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (sub === "logout") return logout(io)
   }
   if (command === "keys" && sub === undefined) return keys(io)
+  const headless = parseHeadless(argv)
+  if (headless && "error" in headless) return io.err(headless.error), 2
+  if (headless) {
+    return withSession(io, async (session) => {
+      const { client, close } = sessionClient(session, io.env, io.fetch)
+      try {
+        return await runHeadless(headless, session, client, io)
+      } finally {
+        await close()
+      }
+    })
+  }
   io.err(`Unknown command: ${argv.join(" ")}\n\n${usage(io.sharedApp !== null)}`)
   return 2
 }
 
-async function open(io: Io): Promise<number> {
+const open = (io: Io) => withSession(io, async (session) => (await io.launch(session), 0))
+
+/** Runs `work` with the login, and reports a missing login or a Wrike failure in one line. */
+async function withSession(io: Io, work: (session: Session) => Promise<number>): Promise<number> {
   try {
     const session = await loadSession(io.env, io.tokens, io.fetch, renewalApp(io))
     if (!session) return io.err(NOT_LOGGED_IN), 1
-    await io.launch(session)
-    return 0
+    return await work(session)
   } catch (thrown) {
     io.err(describeError(toWrikeError(thrown)))
     return 1
