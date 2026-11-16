@@ -4,7 +4,7 @@ What wrike-tui does not do yet, and the release each item is expected in.
 Versions are a best guess and move as the work does. What has shipped is in
 the [README](README.md) and the [guide](docs/guide.md).
 
-## 0.5.0
+## 0.6.0
 
 - Dependencies between tasks.
 - Effort.
@@ -13,7 +13,7 @@ the [README](README.md) and the [guide](docs/guide.md).
 - Filter the navigation tree by name.
 - Show the total a list will reach beside how much of it is loaded.
 
-## 0.6.0
+## 0.7.0
 
 - Custom item types.
 - Time logs and a timesheet.
