@@ -102,6 +102,17 @@ changed.
 
 ![A list with several tasks marked for a bulk edit](docs/images/bulk.png)
 
+## Use it from scripts
+
+```sh
+wrike-tui tasks --mine --json    # your active tasks, one JSON object a line
+wrike-tui inbox --json           # the Inbox, newest first
+wrike-tui export 4598459107      # write task.md and its screenshots, print its path
+```
+
+These never open the client. [docs/cli.md](docs/cli.md) lists every field and
+exit code.
+
 ## Documentation
 
 - [Install](docs/install.md): requirements, the installers, building from
@@ -111,6 +122,8 @@ changed.
 - [Coding agents](docs/agents.md): hand a task to an agent, the prompts, where
   it runs, and what is written to disk
 - [Keys](docs/keys.md): every key by where you are, and how to change them
+- [Scripts](docs/cli.md): the commands that print JSON or write a task for
+  other tools
 - [Configuration](docs/configuration.md): `config.json`, themes, the files
   wrike-tui writes
 - [Roadmap](ROADMAP.md): what is not done yet

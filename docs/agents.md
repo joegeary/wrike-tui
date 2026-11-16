@@ -112,7 +112,8 @@ defaults load.
 
 ## What is written to disk
 
-Each handoff writes a folder for the task in the state folder:
+Each handoff, and each `wrike-tui export` (see [Scripts](cli.md#export)),
+writes a folder for the task in the state folder:
 `~/.local/state/wrike-tui/agent/<task ID>/` on Linux and macOS, and
 `%LOCALAPPDATA%\wrike-tui\state\agent\<task ID>\` on Windows.
 `XDG_STATE_HOME` moves it on every platform. The folder is emptied and
