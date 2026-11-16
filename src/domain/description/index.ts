@@ -4,6 +4,7 @@ import { htmlToMarkdown } from "./markdown"
 
 export { displayBlocks, displayMarkdown, type DisplayBlock } from "./display"
 export { htmlToMarkdown, markdownToHtml }
+export { htmlToText } from "./text"
 
 export type EditableDescription =
   | { format: "markdown"; text: string; padding: Padding }
