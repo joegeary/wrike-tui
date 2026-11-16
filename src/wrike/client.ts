@@ -83,6 +83,8 @@ export type WrikeClient = {
 
 export type TaskQuery =
   | { kind: "mine"; user: UserId }
+  /** The user's tasks without their subtasks, latest change first: what `wrike-tui tasks --mine` prints. */
+  | { kind: "assigned"; user: UserId }
   | { kind: "title"; text: string }
   | { kind: "space"; id: SpaceId }
   | { kind: "folder"; id: FolderId }
@@ -108,6 +110,8 @@ function listCall(query: TaskQuery): { path: string; params: Params } {
   switch (query.kind) {
     case "mine":
       return { path: "/tasks", params: { responsibles: [query.user], subTasks: true, sortField: "DueDate" } }
+    case "assigned":
+      return { path: "/tasks", params: { responsibles: [query.user], sortField: "UpdatedDate", sortOrder: "Desc" } }
     case "title":
       return { path: "/tasks", params: { title: query.text, sortField: "UpdatedDate", sortOrder: "Desc" } }
     case "space":

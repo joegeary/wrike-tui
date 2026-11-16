@@ -38,7 +38,7 @@ async function attempt<T>(work: () => Promise<T>): Promise<Result<T>> {
   }
 }
 
-async function loadDetails(client: WrikeClient, target: OpenTarget): Promise<Details> {
+export async function loadDetails(client: WrikeClient, target: OpenTarget): Promise<Details> {
   const id = target.kind === "task" ? target.id : await client.taskIdFromLegacy(target.id)
   if (!id) throw new WrikeFailure({ kind: "not_found" })
   // Attachments and folder titles are decoration: neither failing must hide the task. A failed attachments call is drawn as a notice.

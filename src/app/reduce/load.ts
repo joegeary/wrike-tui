@@ -1,6 +1,6 @@
 import type { HistoryEntry } from "../../domain/history"
 import { legacyItemId, type SpaceId, type TaskId } from "../../domain/ids"
-import { permalinkId, type Task, type Workflow } from "../../domain/model"
+import { mergeWorkflows, permalinkId, type Task } from "../../domain/model"
 import { scopeKey, type Scope, type ScopeKey, type TaskScope } from "../../domain/scope"
 import { classifyQuery } from "../../domain/search"
 import { favoriteKey, type SpaceTree } from "../../domain/workspace"
@@ -36,12 +36,6 @@ export function request(state: State, key: RequestKey): [State, number] {
 }
 
 export const isCurrent = (state: State, key: RequestKey, number: number) => state.requests.get(key) === number
-
-/** Fresh workflows replace the ones held under the same ID, and the rest are kept after them. */
-export function mergeWorkflows(first: Workflow[], rest: Workflow[]): Workflow[] {
-  const ids = new Set(first.map((workflow) => workflow.id))
-  return [...first, ...rest.filter((workflow) => !ids.has(workflow.id))]
-}
 
 export function sameTree(a: SpaceTree, b: SpaceTree): boolean {
   if (a.size !== b.size) return false

@@ -104,6 +104,12 @@ export function findStatus(workflows: Workflow[], id: CustomStatusId): CustomSta
   return null
 }
 
+/** Fresh workflows replace the ones held under the same ID, and the rest are kept after them. */
+export function mergeWorkflows(first: Workflow[], rest: Workflow[]): Workflow[] {
+  const ids = new Set(first.map((workflow) => workflow.id))
+  return [...first, ...rest.filter((workflow) => !ids.has(workflow.id))]
+}
+
 /** The visible statuses a task can move to: those of the workflow that owns its current status. */
 export function statusChoices(workflows: Workflow[], current: CustomStatusId): CustomStatus[] {
   const workflow = workflows.find((w) => w.statuses.some((s) => s.id === current))

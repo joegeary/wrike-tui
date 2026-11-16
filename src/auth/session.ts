@@ -1,7 +1,8 @@
-import { fetchMe } from "../wrike/client"
+import { createWrikeClient, fetchMe, type McpClient, type WrikeClient } from "../wrike/client"
 import { toWrikeError, WrikeFailure, type WrikeError } from "../wrike/errors"
+import { createMcpClient } from "../wrike/mcp"
 import { createTransport, fixedToken, type Fetch, type TokenProvider } from "../wrike/transport"
-import { candidateBases, endpointsFor, type Endpoints, type Env } from "./config"
+import { candidateBases, endpointsFor, isReadOnly, type Endpoints, type Env } from "./config"
 import { oauthProvider, type OAuthApp } from "./oauth"
 import { readProfile, type Profile } from "./profile"
 import { resolveToken, type LoginApp, type ResolvedToken, type TokenStore } from "./token"
@@ -50,4 +51,16 @@ export async function loadSession(env: Env, store: TokenStore, fetch?: Fetch, ap
 /** An OAuth login knows its data center, so the probe goes straight there. */
 export function oauthHost(env: Env, token: ResolvedToken): Env {
   return token.kind === "oauth" && !env.WRIKE_HOST ? { ...env, WRIKE_HOST: token.login.host } : env
+}
+
+const CLOSE_TIMEOUT_MS = 500
+
+/** The client a session talks to Wrike through. `close` ends the MCP session, if one was opened. */
+export function sessionClient(session: Session, env: Env, fetch?: Fetch): { client: WrikeClient; close(): Promise<void> } {
+  const readOnly = isReadOnly(env)
+  const mcp: McpClient = createMcpClient({ url: session.endpoints.mcpUrl, token: session.auth, readOnly, oauth: session.token.kind === "oauth", fetch })
+  const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token: session.auth, readOnly, fetch }), mcp)
+  // Ending the MCP session is a courtesy, and an unreachable server must not hold the exit.
+  const close = () => Promise.race([mcp.close(), new Promise<void>((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS))])
+  return { client, close }
 }
