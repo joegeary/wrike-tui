@@ -1,30 +1,24 @@
 import { createCliRenderer } from "@opentui/core"
 import { stat } from "node:fs/promises"
 import { homedir } from "node:os"
-import { join } from "node:path"
 import { createRoot } from "@opentui/react"
 import { isReadOnly, type Env } from "../auth/config"
-import type { Session } from "../auth/session"
+import { sessionClient, type Session } from "../auth/session"
+import { agentDir } from "../app/agent"
 import type { EffectDeps } from "../app/effects"
 import { AUTOSAVE_MS, loadBoot, sessionSaver, skipsRestore } from "../app/session"
 import { initialState, type Clock } from "../app/state"
 import { createStore } from "../app/store"
 import { keepClock } from "../app/ticker"
 import { localDay } from "../domain/dates"
-import { appDirs } from "../persist/dirs"
 import { createPersistence, persistencePaths } from "../persist/persistence"
 import { newerRelease, updateCachePath } from "../update/notice"
 import { VERSION } from "../version"
-import { createWrikeClient } from "../wrike/client"
-import { createMcpClient } from "../wrike/mcp"
-import { createTransport } from "../wrike/transport"
 import { App } from "./App"
 import { createBridge } from "./bridge"
 import { createFrameLog } from "./frameLog"
 import { copyText, editInEditor, openInBrowser, runHerdr, runInTerminal } from "./handoff"
 import { THEMES } from "./theme"
-
-const CLOSE_TIMEOUT_MS = 500
 
 function systemClock(): Clock {
   const now = new Date()
@@ -32,10 +26,8 @@ function systemClock(): Clock {
 }
 
 export async function launch(session: Session, env: Env): Promise<void> {
-  const token = session.auth
   const readOnly = isReadOnly(env)
-  const mcp = createMcpClient({ url: session.endpoints.mcpUrl, token, readOnly, oauth: session.token.kind === "oauth" })
-  const client = createWrikeClient(createTransport({ baseUrl: session.endpoints.apiBase, token, readOnly }), mcp)
+  const { client, close } = sessionClient(session, env)
   const persistence = createPersistence(persistencePaths(env, session.profile.accountId))
   const home = homedir()
   const boot = await loadBoot(persistence, { readOnly, restore: !skipsRestore(env), places: { home, cwd: process.cwd() } })
@@ -59,7 +51,7 @@ export async function launch(session: Session, env: Env): Promise<void> {
     persistence,
     quit: () => renderer.destroy(),
     agent: {
-      dir: join(appDirs(env).state, "agent"),
+      dir: agentDir(env),
       env,
       home,
       onPath: (program) => Bun.which(program, { PATH: env.PATH ?? "" }) !== null,
@@ -84,6 +76,5 @@ export async function launch(session: Session, env: Env): Promise<void> {
   clearInterval(autosave)
   stopClock()
   await saveSession().catch(() => {})
-  // Ending the MCP session is a courtesy, and an unreachable server must not hold the exit.
-  await Promise.race([mcp.close(), new Promise((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS))])
+  await close()
 }

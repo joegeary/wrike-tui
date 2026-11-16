@@ -3,6 +3,7 @@ import { join } from "node:path"
 import type { Env } from "../auth/config"
 import { agentMessage, launchPlan, launchRefusal, programName, startedText, type LaunchCheck } from "../domain/agent"
 import { safeFileName, SCREENSHOT_LIMIT, skipReason, TASK_FILE, taskMarkdown, type AttachmentOutcome } from "../domain/agent-context"
+import { appDirs } from "../persist/dirs"
 import type { WrikeClient } from "../wrike/client"
 import { describeError, toWrikeError } from "../wrike/errors"
 import type { Action, AgentHandoff } from "./state"
@@ -22,6 +23,12 @@ export type AgentDeps = {
   herdr(argv: string[]): Promise<string | null>
 }
 
+/** Where a handoff and `wrike-tui export` write a task, one folder per task. */
+export const agentDir = (env: Env) => join(appDirs(env).state, "agent")
+
+/** What task.md is written from. */
+export type TaskContext = Pick<AgentHandoff, "details" | "contacts" | "workflows" | "fields">
+
 const reason = (thrown: unknown) => (thrown instanceof Error ? thrown.message : String(thrown))
 
 /**
@@ -29,8 +36,8 @@ const reason = (thrown: unknown) => (thrown instanceof Error ? thrown.message : 
  * screenshots beside it. A download that fails is listed in task.md and
  * never stops the rest. Resolves to the task file and the screenshots saved.
  */
-export async function writeContext(client: WrikeClient, dir: string, handoff: AgentHandoff): Promise<{ taskFile: string; screenshots: string[] }> {
-  const { task, attachments, comments, folders } = handoff.details
+export async function writeContext(client: WrikeClient, dir: string, context: TaskContext): Promise<{ taskFile: string; screenshots: string[] }> {
+  const { task, attachments, comments, folders } = context.details
   await rm(dir, { recursive: true, force: true })
   await mkdir(dir, { recursive: true })
   const taken = new Set<string>()
@@ -55,7 +62,7 @@ export async function writeContext(client: WrikeClient, dir: string, handoff: Ag
       outcomes.push({ kind: "failed", attachment, why: describeError(toWrikeError(thrown)) })
     }
   }
-  const markdown = taskMarkdown({ task, comments, folders, contacts: handoff.contacts, workflows: handoff.workflows, fields: handoff.fields, attachments: outcomes })
+  const markdown = taskMarkdown({ task, comments, folders, contacts: context.contacts, workflows: context.workflows, fields: context.fields, attachments: outcomes })
   const taskFile = join(dir, TASK_FILE)
   await Bun.write(taskFile, markdown)
   return { taskFile, screenshots: outcomes.flatMap((outcome) => (outcome.kind === "saved" ? [outcome.file] : [])) }
