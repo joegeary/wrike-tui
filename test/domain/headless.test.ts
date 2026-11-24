@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { htmlToText } from "../../src/domain/description"
 import { inboxLines, parseTaskRef, taskLines } from "../../src/domain/headless"
-import { customStatusId, legacyItemId, taskId } from "../../src/domain/ids"
+import type { CustomField } from "../../src/domain/fields"
+import { customFieldId, customStatusId, legacyItemId, taskId } from "../../src/domain/ids"
 import type { InboxEntry } from "../../src/domain/model"
 import { mention, task, workflows } from "../support/app"
 
@@ -11,8 +12,11 @@ const titles = new Map([
   ["F3", "Sprint planning"],
 ])
 
+const labels: CustomField = { id: customFieldId("CF1"), title: "Labels", kind: { type: "Multiple", options: ["auth", "infra"], allowOther: false }, readOnly: false, archived: false }
+const fieldDefs = new Map([[labels.id, labels]])
+
 describe("taskLines", () => {
-  test("maps every field, leaving out sprint folders and folders with no title", () => {
+  test("maps every field, leaving out sprint folders and folders with no title, and naming an undescribed custom field by its ID", () => {
     const [line] = taskLines(
       [
         task("T7", "Fix\tlogin\r\n redirect", { type: "Planned", start: "2026-11-10", due: "2026-11-14" }, {
@@ -22,10 +26,15 @@ describe("taskLines", () => {
           subTaskIds: [taskId("S1"), taskId("S2")],
           descriptionHtml: "<p>Cookie is <b>dropped</b>.</p>",
           updatedDate: "2026-11-11T08:30:00Z",
+          fields: [
+            { id: labels.id, value: '["auth","infra"]' },
+            { id: customFieldId("CF9"), value: "https://github.com/acme/app/pull/12" },
+          ],
         }),
       ],
       workflows,
       titles,
+      fieldDefs,
     )
     expect(line).toEqual({
       id: "7",
@@ -41,11 +50,15 @@ describe("taskLines", () => {
       folders: ["Platform", "Sprint planning"],
       subtasks: 2,
       description: "Cookie is dropped.",
+      fields: [
+        { title: "Labels", value: "auth, infra" },
+        { title: "CF9", value: "https://github.com/acme/app/pull/12" },
+      ],
     })
   })
 
   test("a status in no workflow is Unknown and Gray, and a backlog task has no due day", () => {
-    const [line] = taskLines([task("T1", "Lost", { type: "Backlog" }, { statusId: customStatusId("GONE") })], workflows, titles)
+    const [line] = taskLines([task("T1", "Lost", { type: "Backlog" }, { statusId: customStatusId("GONE") })], workflows, titles, fieldDefs)
     expect(line).toMatchObject({ status: "Unknown", color: "Gray", due: null })
   })
 
@@ -55,7 +68,7 @@ describe("taskLines", () => {
       task("T2", "New", undefined, { updatedDate: "2026-11-12T00:00:00Z" }),
       task("T3", "Middle", undefined, { updatedDate: "2026-11-05T00:00:00Z" }),
     ]
-    expect(taskLines(tasks, workflows, titles).map((line) => line.title)).toEqual(["New", "Middle", "Old"])
+    expect(taskLines(tasks, workflows, titles, fieldDefs).map((line) => line.title)).toEqual(["New", "Middle", "Old"])
   })
 })
 

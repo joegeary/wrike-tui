@@ -1,5 +1,6 @@
 import { htmlToText } from "./description"
-import { legacyItemId, taskId, type LegacyItemId, type TaskId } from "./ids"
+import { fieldText, type CustomField } from "./fields"
+import { legacyItemId, taskId, type CustomFieldId, type LegacyItemId, type TaskId } from "./ids"
 import { dueDay, findStatus, permalinkId, type Importance, type InboxEntry, type InboxItemType, type InboxKind, type StatusGroup, type Task, type Workflow } from "./model"
 
 /** One line of `wrike-tui tasks --mine --json`. */
@@ -19,6 +20,8 @@ export type TaskLine = {
   folders: string[]
   subtasks: number
   description: string
+  /** The custom fields set on the task, in Wrike's order, each value as the details pane shows it. */
+  fields: { title: string; value: string }[]
 }
 
 /** One line of `wrike-tui inbox --json`. */
@@ -42,10 +45,17 @@ const SPRINT_FOLDER = "Sprint:"
 const API_ID = /^[A-Z][A-Za-z0-9]{7,}$/
 
 /**
- * The tasks latest change first, with their status named from `workflows`
- * and their folders from `folderTitles`. A folder with no title there is left out.
+ * The tasks latest change first, with their status named from `workflows`,
+ * their folders from `folderTitles` and their custom fields from `fields`.
+ * A folder with no title there is left out. A field Wrike did not describe
+ * goes by its ID.
  */
-export function taskLines(tasks: readonly Task[], workflows: readonly Workflow[], folderTitles: ReadonlyMap<string, string>): TaskLine[] {
+export function taskLines(
+  tasks: readonly Task[],
+  workflows: readonly Workflow[],
+  folderTitles: ReadonlyMap<string, string>,
+  fields: ReadonlyMap<CustomFieldId, CustomField>,
+): TaskLine[] {
   return tasks
     .toSorted((a, b) => b.updatedDate.localeCompare(a.updatedDate))
     .map((task) => {
@@ -67,6 +77,10 @@ export function taskLines(tasks: readonly Task[], workflows: readonly Workflow[]
         }),
         subtasks: task.subTaskIds.length,
         description: htmlToText(task.descriptionHtml),
+        fields: task.fields.map((set) => {
+          const field = fields.get(set.id)
+          return { title: field?.title ?? set.id, value: fieldText(field?.kind, set.value) }
+        }),
       }
     })
 }

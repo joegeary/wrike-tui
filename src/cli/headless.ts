@@ -64,8 +64,8 @@ export async function runHeadless(command: HeadlessCommand, session: Session, cl
   switch (command.kind) {
     case "tasks": {
       const tasks = await allPages(client, session)
-      const [workflows, titles] = await Promise.all([workflowsFor(client, tasks.map((task) => task.statusId)), folderTitles(client, tasks)])
-      for (const line of taskLines(tasks, workflows, titles)) io.out(JSON.stringify(line))
+      const [workflows, titles, fields] = await Promise.all([workflowsFor(client, tasks.map((task) => task.statusId)), folderTitles(client, tasks), client.customFields()])
+      for (const line of taskLines(tasks, workflows, titles, new Map(fields.map((field) => [field.id, field])))) io.out(JSON.stringify(line))
       return 0
     }
     case "inbox":
