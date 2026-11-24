@@ -46,9 +46,10 @@ returns.
 | `folders` | The titles of the folders and projects the task is in. Folders whose title starts with `Sprint:` are left out. |
 | `subtasks` | How many subtasks it has |
 | `description` | The description as plain text. List items start with `• `. |
+| `fields` | The custom fields set on the task, in Wrike's order, as `{"title", "value"}` objects. The value reads as the details pane shows it, so several choices are joined with `, `. A field Wrike does not describe goes by its ID. |
 
 ```json
-{"id":"4598459101","taskId":"IEAAAAAAKQAAAA01","title":"Enable SSO on sandbox","link":"https://www.wrike.com/open.htm?id=4598459101","importance":"High","status":"In Progress","statusGroup":"Active","color":"Turquoise","due":"2026-11-11","updated":"2026-11-11","folders":["Platform","Q4 Launch"],"subtasks":0,"description":"Register the sandbox as a service provider."}
+{"id":"4598459101","taskId":"IEAAAAAAKQAAAA01","title":"Enable SSO on sandbox","link":"https://www.wrike.com/open.htm?id=4598459101","importance":"High","status":"In Progress","statusGroup":"Active","color":"Turquoise","due":"2026-11-11","updated":"2026-11-11","folders":["Platform","Q4 Launch"],"subtasks":0,"description":"Register the sandbox as a service provider.","fields":[{"title":"Ticket Type","value":"Feature"}]}
 ```
 
 ## inbox --json

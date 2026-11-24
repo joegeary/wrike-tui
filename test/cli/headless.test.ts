@@ -97,7 +97,16 @@ describe("tasks --mine --json", () => {
       subtasks: 0,
       description:
         "Goal\nStaff sign in to the sandbox with the same identity provider as production.\n\nSteps\n• Register the sandbox as a service provider\n• Map the staff and admin groups\n• Test with two pilot accounts\nSee the SSO runbook for the certificate rotation notes.",
+      fields: [],
     })
+  })
+
+  test("names each custom field set on a task and shows its value as the details pane does", async () => {
+    await run(["tasks", "--mine", "--json"], io())
+    const { fields } = printed<TaskLine>().find((task) => task.taskId === TASK.flags)!
+    expect(fields).toContainEqual({ title: "Labels", value: "auth, infra" })
+    expect(fields).toContainEqual({ title: "Time Spent", value: "2h 30m" })
+    expect(fields).toContainEqual({ title: "Customer Facing", value: "yes" })
   })
 
   test("names a status only a space's own workflow has", async () => {
